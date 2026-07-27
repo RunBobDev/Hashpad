@@ -1,0 +1,14 @@
+# Source is LF in the working tree. Without this, git's autocrlf would rewrite
+# line endings on checkout, which matters more here than in most projects:
+# SPEC §6.4 requires Hashpad to detect CRLF vs LF and preserve it, and the
+# Checkpoint B tests for that need fixtures whose bytes survive git verbatim.
+* text=auto eol=lf
+
+# Test fixtures are treated as binary so nothing normalises them. A CRLF fixture
+# that git quietly converted to LF would make the detection tests pass while the
+# behaviour they cover is broken.
+**/testdata/** -text
+*.bin -text
+*.ico -text
+*.png -text
+*.woff2 -text
