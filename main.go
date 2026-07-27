@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"log"
 
 	"hashpad/internal/app"
 
@@ -27,6 +28,9 @@ func main() {
 		Bind:      []interface{}{application},
 	})
 	if err != nil {
-		println("Error:", err.Error())
+		// wails.Run only returns on failure to start (for example, the webview
+		// could not be created). There is no window to show an error in, so
+		// stderr and a non-zero exit are all that is left.
+		log.Fatal("hashpad: ", err)
 	}
 }
