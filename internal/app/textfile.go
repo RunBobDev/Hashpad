@@ -13,6 +13,13 @@ type Encoding string
 const (
 	EncodingUTF8    Encoding = "utf-8"
 	EncodingUTF8BOM Encoding = "utf-8-bom"
+	// EncodingUTF16LE means UTF-16LE *with* a BOM — the Windows/Notepad
+	// convention. BOM-less UTF-16LE is deliberately never detected: the
+	// encoding model above has only these three values, so there is nowhere
+	// to record "UTF-16LE but no BOM". Detecting it on open would force
+	// Encode to invent a BOM on save, silently altering a file that was
+	// never edited. If you're tempted to reinstate a sniffing heuristic
+	// here, don't — see the round-trip test that guards this.
 	EncodingUTF16LE Encoding = "utf-16le"
 )
 
@@ -34,10 +41,6 @@ var (
 // CRLF matches the untitled-document default so a one-line file doesn't change
 // flavour the moment a second line is added. A Linux build should prefer LF.
 const defaultLineEnding = LineEndingCRLF
-
-// utf16SniffBytes is how far into a BOM-less file we look for the alternating
-// NUL pattern of UTF-16LE. Enough to be confident, small enough to stay cheap.
-const utf16SniffBytes = 512
 
 // Decode converts raw file bytes into the LF-normalised UTF-8 string the editor
 // holds, and reports what it found so Encode can put it back.
@@ -82,39 +85,12 @@ func detectEncoding(raw []byte) (Encoding, []byte) {
 		return EncodingUTF8BOM, raw[len(bomUTF8):]
 	case bytes.HasPrefix(raw, bomUTF16LE):
 		return EncodingUTF16LE, raw[len(bomUTF16LE):]
-	case looksLikeUTF16LE(raw):
-		return EncodingUTF16LE, raw
 	default:
 		// Invalid UTF-8 lands here too, and that is deliberate: Go strings carry
 		// invalid bytes intact, so the round trip stays lossless. Guessing at
 		// Windows-1252 would corrupt files we cannot actually identify.
 		return EncodingUTF8, raw
 	}
-}
-
-// looksLikeUTF16LE detects BOM-less UTF-16LE by its giveaway: ASCII text encoded
-// as UTF-16LE puts a NUL in every odd byte position. Valid UTF-8 never contains
-// a NUL at all, so any NUL in a text file is strong evidence.
-func looksLikeUTF16LE(raw []byte) bool {
-	if len(raw) < 2 || len(raw)%2 != 0 {
-		return false
-	}
-
-	limit := min(len(raw), utf16SniffBytes)
-	var oddNULs, pairs int
-	for i := 1; i < limit; i += 2 {
-		pairs++
-		if raw[i] == 0x00 {
-			oddNULs++
-		}
-	}
-
-	// 90% rather than 100%: a UTF-16LE file can still contain a handful of
-	// non-Latin-1 code units (surrogate pairs, symbols) whose odd byte isn't
-	// NUL, so requiring every pair to match would misclassify real UTF-16LE
-	// text as something else. A strong majority is enough to rule out an
-	// ordinary UTF-8 file, which would need multiple stray NULs to reach it.
-	return pairs > 0 && oddNULs*10 >= pairs*9
 }
 
 func decodeUTF16LE(body []byte) string {

@@ -54,9 +54,9 @@ func TestDecode(t *testing.T) {
 			wantText: "a\n", wantEnc: EncodingUTF16LE, wantEnding: LineEndingCRLF,
 		},
 		{
-			name:     "utf-16le without bom detected by null pattern",
+			name:     "bom-less utf-16le is not detected and round-trips as raw bytes",
 			raw:      []byte{'h', 0x00, 'e', 0x00, 'l', 0x00, 'l', 0x00, 'o', 0x00},
-			wantText: "hello", wantEnc: EncodingUTF16LE, wantEnding: LineEndingCRLF,
+			wantText: string([]byte{'h', 0x00, 'e', 0x00, 'l', 0x00, 'l', 0x00, 'o', 0x00}), wantEnc: EncodingUTF8, wantEnding: LineEndingCRLF,
 		},
 		{
 			name:     "mixed endings report the first and set mixed",
@@ -120,6 +120,9 @@ func TestDecodeEncodeRoundTrip(t *testing.T) {
 		[]byte("no trailing newline"),
 		[]byte("héllo — ünïcode\n"),
 		{},
+		{'h', 0x00, 'e', 0x00, 'l', 0x00, 'l', 0x00, 'o', 0x00},
+		{0xFF, 0xFE, 'a', 0x00, '\n', 0x00},
+		append([]byte{0xEF, 0xBB, 0xBF}, []byte("a\nb\n")...),
 	}
 
 	for _, raw := range inputs {
