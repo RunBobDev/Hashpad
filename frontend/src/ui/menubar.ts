@@ -41,9 +41,12 @@ interface Menu {
  * are listed anyway to fix the structure and the shortcut assignments; each
  * later checkpoint flips its own items to enabled.
  *
- * `edit.undo`, `edit.redo`, and `help.about` are disabled for the same reason:
- * there is no editor and no About dialog yet, so leaving them enabled would
- * mean an item that does nothing when activated.
+ * `help.about` is disabled for the same reason: there is no About dialog yet,
+ * so leaving it enabled would mean an item that does nothing when activated.
+ * `edit.undo`/`edit.redo` are enabled: the editor ships `history()` and
+ * `historyKeymap` (see editor/extensions.ts), so Ctrl+Z/Ctrl+Y already work —
+ * the menu items must be reachable too, or the shortcut exists with no menu
+ * path to it.
  */
 const MENUS: Menu[] = [
   {
@@ -59,8 +62,8 @@ const MENUS: Menu[] = [
   {
     label: 'Edit',
     items: [
-      { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: false },
-      { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: false },
+      { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: true },
+      { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: true },
       { id: 'edit.find', label: 'Find…', shortcut: 'Ctrl+F', enabled: false },
       { id: 'edit.replace', label: 'Replace…', shortcut: 'Ctrl+H', enabled: false },
     ],
@@ -178,6 +181,10 @@ export function mountMenuBar(parent: HTMLElement): void {
     const popup = document.createElement('div');
     popup.className = 'menu-popup';
     popup.setAttribute('role', 'menu');
+    // Names the popup after its trigger button (id set where the button is
+    // created, below) so a screen reader announces e.g. "File menu" rather
+    // than an unlabelled generic menu.
+    popup.setAttribute('aria-labelledby', anchor.id);
 
     // A click landing on the popup's own padding (not a button) would
     // otherwise bubble up to the document-level listener that closes on
@@ -293,6 +300,7 @@ export function mountMenuBar(parent: HTMLElement): void {
   for (const [i, menu] of MENUS.entries()) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.id = `menubar-trigger-${menu.label.toLowerCase()}`;
     button.textContent = menu.label;
     button.setAttribute('role', 'menuitem');
     button.setAttribute('aria-haspopup', 'true');

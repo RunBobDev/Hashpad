@@ -26,6 +26,31 @@ interface Subscription<S> {
   last: unknown;
 }
 
+/**
+ * `Object.is` first (cheap, and correct for primitives and stable object
+ * identities); if that fails, fall back to one level of own-enumerable-key
+ * comparison. The one-level depth is deliberate: a selector that builds a
+ * fresh composite object each call (e.g. `{ line, col, words }`) would
+ * otherwise notify on every `setState`, even when every field is identical,
+ * because the object itself is always a new reference. Going any deeper would
+ * let a selector hide unrelated nested state behind the same shallow check,
+ * which defeats the point of selecting a narrow slice in the first place —
+ * so nested objects are still compared by reference.
+ */
+function isEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const aKeys = Object.keys(aRecord);
+  const bKeys = Object.keys(bRecord);
+  if (aKeys.length !== bKeys.length) return false;
+
+  return aKeys.every((key) => Object.is(aRecord[key], bRecord[key]));
+}
+
 export function createStore<S>(initial: S): Store<S> {
   let state = initial;
   const subscriptions = new Set<Subscription<S>>();
@@ -37,7 +62,7 @@ export function createStore<S>(initial: S): Store<S> {
       state = updater(state);
       for (const subscription of subscriptions) {
         const next = subscription.select(state);
-        if (Object.is(next, subscription.last)) continue;
+        if (isEqual(next, subscription.last)) continue;
         subscription.last = next;
         subscription.notify(next);
       }

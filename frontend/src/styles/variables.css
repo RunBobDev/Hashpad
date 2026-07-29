@@ -4,8 +4,12 @@
  * preview styles. The CM6 theme reads these same properties, which is why
  * switching themes needs no editor reconfiguration and produces no flash.
  *
- * Contrast ratios noted below are against --bg-editor and clear WCAG AA for
- * normal text (4.5:1), per SPEC §10.
+ * Contrast ratios noted below are against the worst (lowest-contrast) surface
+ * each token actually lands on in app.css, and clear WCAG AA for normal text
+ * (4.5:1), per SPEC §10. Checking only against --bg-editor let a token pass
+ * review while failing on --bg-elevated/--bg-hover, where it is also used —
+ * always check every surface a token is composited over, not just the one
+ * named in this file.
  */
 
 :root {
@@ -48,7 +52,7 @@
 
   --fg-primary: #1a1a1a;   /* ~17:1  */
   --fg-secondary: #4a4a4a; /* ~9:1   */
-  --fg-muted: #6a6a6a;     /* ~5.4:1 */
+  --fg-muted: #666666;     /* 4.73:1 on --bg-hover (worst surface); 5.74:1 on --bg-editor */
 
   --border: #d4d4d4;
   --border-strong: #b0b0b0;
@@ -97,7 +101,7 @@
 
   --fg-primary: #e8e8e8;   /* ~14:1  */
   --fg-secondary: #b0b0b0; /* ~8:1   */
-  --fg-muted: #8a8a8a;     /* ~5:1   */
+  --fg-muted: #949494;     /* 4.54:1 on --bg-hover (worst surface); 4.93:1 on --bg-elevated */
 
   --border: #333333;
   --border-strong: #4a4a4a;

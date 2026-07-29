@@ -5,6 +5,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Vite's default modulePreload injects a polyfill that calls fetch() to
+    // detect <link rel="modulepreload"> support. It never actually fires here
+    // (single bundle, no cross-chunk preloading), but its mere presence in the
+    // shipped JS is the one thing that stops "grep the bundle for a network
+    // call" from being a clean, provable check — and zero-network-provable is
+    // the whole point (design §2.4). Disabling it removes the call entirely
+    // rather than relying on "it's inert" as the argument.
+    modulePreload: { polyfill: false },
     // WebView2 is evergreen Chromium, but WebKitGTK on Linux trails it. es2022
     // is the newest target both support, so the Linux port needs no build change.
     target: 'es2022',
