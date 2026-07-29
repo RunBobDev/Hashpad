@@ -24,8 +24,18 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup: application.Startup,
-		Bind:      []interface{}{application},
+		// SPEC §6.1 draws the menu bar and window controls on one row, which a
+		// native OS frame/menu cannot do, so the window is frameless and the
+		// chrome is HTML (frontend/src/ui/menubar.ts).
+		Frameless: true,
+		MinWidth:  480,
+		MinHeight: 320,
+		// Opaque white so the window does not flash a dark frame before CSS
+		// applies. Go cannot read CSS, so this is the single sanctioned
+		// exception to "colours only live in variables.css".
+		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 255},
+		OnStartup:        application.Startup,
+		Bind:             []interface{}{application},
 	})
 	if err != nil {
 		// wails.Run only returns on failure to start (for example, the webview
