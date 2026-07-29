@@ -101,6 +101,9 @@ body {
 }
 
 .menu-popup {
+  /* If the popup is ever rendered inside .menubar, it would inherit `drag` and
+     every item would become an unclickable window-drag handle. */
+  --wails-draggable: no-drag;
   position: absolute;
   z-index: 100;
   min-width: 220px;

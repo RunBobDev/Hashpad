@@ -53,8 +53,11 @@
   --border: #d4d4d4;
   --border-strong: #b0b0b0;
 
-  /* ~4.5:1 on white — clears AA for normal text, but only just. The accent
-     picker in Checkpoint H must guard against darker custom choices. */
+  /* 4.5:1 on white — clears AA for normal text, but only just. Contrast against
+     a light surface rises as a colour darkens, so it is *lighter, paler* accent
+     choices that fall below AA here; the dark theme has the mirror problem,
+     since it lightens the base rather than darkening it, and so is at risk from
+     very dark choices. Checkpoint H's picker must guard both ends. */
   --accent: var(--accent-base);
   --accent-fg: #ffffff;
   --accent-subtle: color-mix(in oklab, var(--accent-base) 14%, transparent);
@@ -62,13 +65,16 @@
 
   /* Windows' standard close red. Deliberately identical in both themes — it is
      the one colour users read as "this closes the window", so it should not
-     shift with the theme. White on it scores ~5.9:1. */
+     shift with the theme. White on it scores 5.7:1. */
   --bg-danger: #c42b1c;
   --fg-on-danger: #ffffff;
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 18%);
 
   --syn-heading: #1a1a1a;
-  --syn-marker: #9a9a9a;
+  /* Markers (#, *, >) are readable characters in source mode, not decoration,
+     so they are bound by the AA floor. Dimmer than --fg-muted, but only as dim
+     as 4.5:1 allows. */
+  --syn-marker: #767676;   /* 4.5:1 */
   --syn-code-fg: #a3204f;
   --syn-code-bg: #f0f0f0;
   --syn-link: var(--accent);
@@ -86,14 +92,15 @@
   --bg-active: #383838;
 
   --fg-primary: #e8e8e8;   /* ~14:1  */
-  --fg-secondary: #b0b0b0; /* ~7.8:1 */
+  --fg-secondary: #b0b0b0; /* ~8:1   */
   --fg-muted: #8a8a8a;     /* ~5:1   */
 
   --border: #333333;
   --border-strong: #4a4a4a;
 
-  /* Hand-tuned, not inverted (SPEC §6.12): the light accent scores ~3.4:1 here,
-     below AA, so lighten toward white until it clears. */
+  /* Hand-tuned, not inverted (SPEC §6.12): the light accent scores 3.8:1 here,
+     below AA, so lighten toward white until it clears. Resolves to ~#86b6eb
+     at 8.2:1. */
   --accent: color-mix(in oklab, var(--accent-base) 55%, #ffffff);
   --accent-fg: #1a1a1a;
   --accent-subtle: color-mix(in oklab, var(--accent-base) 22%, transparent);
@@ -105,7 +112,8 @@
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 44%);
 
   --syn-heading: #e8e8e8;
-  --syn-marker: #6a6a6a;
+  /* Same reasoning as the light theme: readable text, so bound by AA. */
+  --syn-marker: #838383;   /* 4.6:1 */
   --syn-code-fg: #f0a0c0;
   --syn-code-bg: #262626;
   --syn-link: var(--accent);
