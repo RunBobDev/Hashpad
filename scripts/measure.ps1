@@ -25,13 +25,22 @@
 [CmdletBinding()]
 param(
     [int]$Runs = 5,
-    [string]$ExePath = "$PSScriptRoot\..\build\bin\hashpad.exe"
+    [string]$ExePath
 )
 
 $ErrorActionPreference = 'Stop'
 
+if (-not $ExePath) {
+    # $PSScriptRoot comes back empty under some nested invocations, which turned
+    # a missing path into a confusing "Not found: \..\build\bin" error. Fall back
+    # to the working directory so the script still resolves when run from the
+    # repo root, which is how the Taskfile target will call it.
+    $root = if ($PSScriptRoot) { Join-Path $PSScriptRoot '..' } else { Get-Location }
+    $ExePath = Join-Path $root 'build\bin\hashpad.exe'
+}
+
 if (-not (Test-Path $ExePath)) {
-    throw "Not found: $ExePath. Run 'wails build' first."
+    throw "Not found: $ExePath. Run 'wails build' first, or pass -ExePath explicitly."
 }
 
 $exe = Get-Item $ExePath
