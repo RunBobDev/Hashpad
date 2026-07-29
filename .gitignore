@@ -1,3 +1,11 @@
 build/bin
 node_modules
 frontend/dist
+
+# Wails rewrites this hash on every build, so tracking it makes the working
+# tree dirty after any `wails build` and adds churn to unrelated commits.
+frontend/package.json.md5
+
+# Working notes, task briefs and scratch files,
+# and the progress ledger.
+.superpowers/

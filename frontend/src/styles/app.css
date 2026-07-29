@@ -129,7 +129,10 @@ body {
   cursor: default;
 }
 
-.menu-popup button:hover:not(:disabled) {
+/* Unavailable items use aria-disabled rather than the disabled property, so
+   they stay in the focus order and a screen-reader user can discover them.
+   That means hover must exclude them explicitly — :disabled no longer matches. */
+.menu-popup button:hover:not([aria-disabled='true']) {
   background: var(--bg-hover);
 }
 
