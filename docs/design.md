@@ -201,6 +201,39 @@ SPEC §6.4 does not cover files containing both CRLF and LF. **Decision:** detec
 ending found, preserve it uniformly on save, and surface "mixed" in the status bar tooltip
 so the flattening is visible rather than silent.
 
+### 4.10 The save prompt is an in-app modal, not a native dialog
+
+**Added during Checkpoint B planning. Supersedes the note in §5.1.**
+
+SPEC §6.3 requires a three-button **Save / Don't Save / Cancel** prompt, with Cancel
+aborting an entire quit. §5.1 originally planned to get this from Wails'
+`runtime.MessageDialog`. Reading the Wails v2.13.0 Windows implementation shows that is
+impossible:
+
+```go
+case frontend.QuestionDialog:
+    flags = windows.MB_YESNO      // two buttons; no Cancel
+```
+
+Wails ignores the `Buttons` field entirely on Windows, mapping `DialogType` to fixed Win32
+button sets. `MB_YESNOCANCEL` is never used, so no three-button dialog is reachable — and
+Cancel is the button §6.3 depends on most.
+
+**Decision: build the prompt in the frontend using the native `<dialog>` element.**
+
+- It is the only route to the exact Save / Don't Save / Cancel wording §6.3 names.
+- `<dialog>` supplies real modal semantics, focus trapping, and Escape handling.
+- It styles from `variables.css`, so it matches the theme instead of ignoring it.
+- It is cross-platform by construction and needs **no platform-seam method at all**.
+- The window is already frameless with fully custom chrome, so a system dialog would look
+  more foreign here than a themed one.
+
+Cost: it is not an OS dialog and will not inherit future OS styling changes. Accepted.
+
+The rejected alternative was calling Win32 `MB_YESNOCANCEL` by syscall, which yields
+Yes / No / Cancel — precisely the wording §6.3 avoids — and adds Windows-only code plus a
+Linux equivalent for a dialog the app can render itself.
+
 ### 4.9 GitHub Actions workflow deferred
 
 SPEC §9 asks for a release workflow. There is no repository yet, so this is deferred by
@@ -238,8 +271,10 @@ theme:system-changed
 app:close-requested     // from OnBeforeClose
 ```
 
-`ConfirmClose` uses Wails' native message dialog so the Save / Don't Save / Cancel prompt
-(SPEC §6.3) matches Notepad rather than being an HTML modal.
+**Superseded during Checkpoint B — see §4.10.** This section originally specified a
+`ConfirmClose` bound method using Wails' native message dialog. That is not achievable on
+Wails v2, and the prompt is now built in the frontend instead. `ConfirmClose` is therefore
+**not** part of the bound-method surface.
 
 ### 5.2 Encoding and line endings
 
