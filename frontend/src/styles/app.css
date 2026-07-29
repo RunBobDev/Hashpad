@@ -133,7 +133,7 @@ body {
   background: var(--bg-hover);
 }
 
-.menu-popup button:disabled {
+.menu-popup button[aria-disabled='true'] {
   color: var(--fg-muted);
 }
 
