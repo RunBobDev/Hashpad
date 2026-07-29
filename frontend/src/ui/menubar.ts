@@ -126,8 +126,14 @@ export function mountMenuBar(parent: HTMLElement): void {
    * trigger button *before* the popup is removed from the DOM. Doing it in
    * the other order — remove first — pulls the currently-focused item out
    * from under the focus, and it silently falls back to <body> instead of
-   * anywhere sensible. `focusTrigger: false` is only for the Tab key, which
-   * needs to leave focus alone so the browser's own Tab handling takes over.
+   * anywhere sensible. This default (focusTrigger: true) is also what the
+   * Tab handlers below rely on: moving focus to the trigger first, then
+   * removing the popup, lets the browser's native Tab handling compute
+   * "next after the trigger button" instead of "next after <body>".
+   * `focusTrigger: false` is for the document-level outside-click handler,
+   * where a click has already moved focus to whatever was clicked (e.g. the
+   * maximise button) — forcibly refocusing the trigger would yank focus back
+   * to a place the user didn't click.
    */
   function closePopup(options: { focusTrigger?: boolean } = {}): void {
     const { focusTrigger = true } = options;
@@ -263,9 +269,15 @@ export function mountMenuBar(parent: HTMLElement): void {
           break;
         }
         case 'Tab':
-          // Don't preventDefault — let the browser's default Tab behaviour
-          // proceed; we only need the popup gone first.
-          closePopup({ focusTrigger: false });
+          // Don't preventDefault: Tab's default action (move to the next/
+          // previous focusable element) is resolved from
+          // document.activeElement at dispatch time, so where focus sits
+          // *before* the browser processes this key matters. closePopup()'s
+          // default (focusTrigger: true) moves focus to the trigger button
+          // first and only then removes the popup — removing it first would
+          // pull the currently-focused item out of the DOM and drop focus to
+          // <body>, restarting Tab navigation from the top of the document.
+          closePopup();
           break;
         default:
           break;
@@ -320,11 +332,25 @@ export function mountMenuBar(parent: HTMLElement): void {
         case 'Enter':
         case ' ':
           event.preventDefault();
-          openMenuAt(i, 'first');
+          // If this menu is already open, rebuilding it via openMenuAt would
+          // tear down and recreate an unchanged popup — just move focus to
+          // the first item instead.
+          if (openIndex === i) openPopup?.querySelector<HTMLButtonElement>('button')?.focus();
+          else openMenuAt(i, 'first');
           break;
         case 'ArrowUp':
           event.preventDefault();
           openMenuAt(i, 'last');
+          break;
+        case 'Tab':
+          // A mouse click opens the popup via openMenuAt(i, 'none'), which
+          // leaves focus on this button rather than on a popup item — so
+          // there was previously no handling here at all, and Tab would
+          // leave the popup orphaned in the DOM (still expanded) while focus
+          // moved on natively. Don't preventDefault: we only need the popup
+          // gone before the browser's native Tab handling runs, not to
+          // replace that handling.
+          if (openIndex !== null) closePopup();
           break;
         default:
           break;
@@ -335,7 +361,10 @@ export function mountMenuBar(parent: HTMLElement): void {
     menus.append(button);
   }
 
-  document.addEventListener('click', () => closePopup());
+  // A click outside the bar/popup has already put focus wherever it
+  // landed (e.g. the maximise button); closePopup()'s default would yank
+  // focus back to the trigger, so this path opts out via focusTrigger: false.
+  document.addEventListener('click', () => closePopup({ focusTrigger: false }));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closePopup();
   });
