@@ -48,10 +48,63 @@ func (a *App) ReadFile(path string) (FileContents, error) {
 	}, nil
 }
 
+// WriteFile replaces path's contents atomically. os.WriteFile opens with
+// O_TRUNC, which empties the target before writing the new bytes; if the
+// process dies between that truncate and the close — a crash, power loss, or
+// a forced kill — the old contents are already gone and the new ones are
+// incomplete. That is silent data loss in an editor whose whole promise is
+// that files on disk are safe.
+//
+// Instead we write the new content to a temp file created in the *same*
+// directory as the target (same directory means same volume, which is what
+// makes the rename below atomic — a rename across volumes is not atomic and
+// can fail outright) and then rename it over the target. The rename is a
+// single filesystem operation: the target either still holds the old,
+// complete file or the new, complete one, never a partial write. Do not
+// simplify this back to os.WriteFile.
+//
+// Trade-off, and an acceptable one: replacing by rename swaps the file's
+// inode, so hard links to the old file break, and the new file gets default
+// permissions rather than inheriting the original's. For a markdown editor
+// that matches the behaviour of most other editors.
 func (a *App) WriteFile(path, content string, enc Encoding, ending LineEnding) error {
-	if err := os.WriteFile(path, Encode(content, enc, ending), 0o644); err != nil {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
+	tmpPath := tmp.Name()
+
+	// Match the permissions os.WriteFile used to create files with; CreateTemp
+	// defaults to a much more restrictive 0600.
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+
+	renamed := false
+	defer func() {
+		if !renamed {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(Encode(content, enc, ending)); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+
+	// Close before renaming: Windows refuses to rename a file that is still open.
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	renamed = true
+
 	return nil
 }
 
@@ -64,6 +117,15 @@ func (a *App) ShowOpenDialog() ([]string, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open dialog: %w", err)
+	}
+	// Wails returns a nil slice (not an empty one) when the user cancels, and a
+	// nil []string marshals to JSON null. The generated TypeScript binding
+	// declares Promise<Array<string>>, so a caller doing paths.length on a
+	// cancel — the most common outcome — would hit a runtime TypeError. Keep
+	// the doc comment's promise of "an empty slice" true instead of weakening
+	// it to match the bug.
+	if paths == nil {
+		paths = []string{}
 	}
 	return paths, nil
 }
