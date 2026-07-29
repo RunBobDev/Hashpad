@@ -1,0 +1,114 @@
+/*
+ * The ONLY place colours are defined (SPEC §5.3). Nothing else in the codebase
+ * may hard-code a colour — not a component, not the CodeMirror theme, not the
+ * preview styles. The CM6 theme reads these same properties, which is why
+ * switching themes needs no editor reconfiguration and produces no flash.
+ *
+ * Contrast ratios noted below are against --bg-editor and clear WCAG AA for
+ * normal text (4.5:1), per SPEC §10.
+ */
+
+:root {
+  /* Chrome row heights — SPEC §6.1 */
+  --h-menubar: 28px;
+  --h-tabbar: 34px;
+  --h-toolbar: 34px;
+  --h-statusbar: 24px;
+
+  /* Subtle, not rounded-bubble — SPEC §6.1 */
+  --radius: 4px;
+
+  /* PLATFORM: the one piece of per-OS styling in shared CSS. Segoe UI Variable
+     on Win11, Segoe UI on Win10, system sans on Linux (SPEC §6.1). */
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-editor: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  --size-ui: 14px;
+  --size-editor: 14px;
+  --line-editor: 1.6;
+
+  /* Editor padding — SPEC §6.1 asks for roughly 24px horizontal. */
+  --pad-editor: 24px;
+
+  /* The user's chosen accent (settings.appearance.accentColor). Each theme
+     derives a readable --accent from this rather than reusing it directly: a
+     mid-tone blue that clears AA on white does not clear it on near-black. */
+  --accent-base: #0078d4;
+}
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-app: #f3f3f3;
+  --bg-editor: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e9e9e9;
+  --bg-active: #dedede;
+
+  --fg-primary: #1a1a1a;   /* ~17:1  */
+  --fg-secondary: #4a4a4a; /* ~9:1   */
+  --fg-muted: #6a6a6a;     /* ~5.4:1 */
+
+  --border: #d4d4d4;
+  --border-strong: #b0b0b0;
+
+  /* ~4.5:1 on white — clears AA for normal text, but only just. The accent
+     picker in Checkpoint H must guard against darker custom choices. */
+  --accent: var(--accent-base);
+  --accent-fg: #ffffff;
+  --accent-subtle: color-mix(in oklab, var(--accent-base) 14%, transparent);
+  --selection: color-mix(in oklab, var(--accent-base) 26%, transparent);
+
+  /* Windows' standard close red. Deliberately identical in both themes — it is
+     the one colour users read as "this closes the window", so it should not
+     shift with the theme. White on it scores ~5.9:1. */
+  --bg-danger: #c42b1c;
+  --fg-on-danger: #ffffff;
+  --shadow-popup: 0 8px 16px rgb(0 0 0 / 18%);
+
+  --syn-heading: #1a1a1a;
+  --syn-marker: #9a9a9a;
+  --syn-code-fg: #a3204f;
+  --syn-code-bg: #f0f0f0;
+  --syn-link: var(--accent);
+  --syn-quote-border: #c8c8c8;
+  --syn-quote-fg: #4a4a4a;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-app: #1f1f1f;
+  --bg-editor: #1a1a1a;
+  --bg-elevated: #272727;
+  --bg-hover: #2d2d2d;
+  --bg-active: #383838;
+
+  --fg-primary: #e8e8e8;   /* ~14:1  */
+  --fg-secondary: #b0b0b0; /* ~7.8:1 */
+  --fg-muted: #8a8a8a;     /* ~5:1   */
+
+  --border: #333333;
+  --border-strong: #4a4a4a;
+
+  /* Hand-tuned, not inverted (SPEC §6.12): the light accent scores ~3.4:1 here,
+     below AA, so lighten toward white until it clears. */
+  --accent: color-mix(in oklab, var(--accent-base) 55%, #ffffff);
+  --accent-fg: #1a1a1a;
+  --accent-subtle: color-mix(in oklab, var(--accent-base) 22%, transparent);
+  --selection: color-mix(in oklab, var(--accent-base) 34%, transparent);
+
+  --bg-danger: #c42b1c;
+  --fg-on-danger: #ffffff;
+  /* Deeper than light mode: a shadow at 18% is invisible against dark chrome. */
+  --shadow-popup: 0 8px 16px rgb(0 0 0 / 44%);
+
+  --syn-heading: #e8e8e8;
+  --syn-marker: #6a6a6a;
+  --syn-code-fg: #f0a0c0;
+  --syn-code-bg: #262626;
+  --syn-link: var(--accent);
+  --syn-quote-border: #3d3d3d;
+  --syn-quote-fg: #b0b0b0;
+}

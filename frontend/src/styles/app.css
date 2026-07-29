@@ -1,0 +1,147 @@
+@import './variables.css';
+
+/*
+ * Chrome layout for SPEC §6.1. Rows are fixed height; the editor area takes the
+ * remainder. Backgrounds are flat and opaque — no Mica, no acrylic, no
+ * translucency (SPEC §6.1, §8).
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  font-size: var(--size-ui);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Visible focus indicators everywhere (SPEC §10). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.menubar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--h-menubar);
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border);
+  /* Wails reads this property to decide what drags the frameless window. The
+     interactive children below opt out, or the menus would be undismissable. */
+  --wails-draggable: drag;
+}
+
+.menubar__menus {
+  display: flex;
+  height: 100%;
+}
+
+.menubar__spacer {
+  flex: 1 1 auto;
+}
+
+.menubar button {
+  --wails-draggable: no-drag;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  cursor: default;
+}
+
+.menubar button:hover {
+  background: var(--bg-hover);
+}
+
+.menubar button[aria-expanded='true'] {
+  background: var(--bg-active);
+}
+
+.window-controls {
+  display: flex;
+  height: 100%;
+}
+
+.window-controls button {
+  --wails-draggable: no-drag;
+  width: 46px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg-primary);
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.window-controls button:hover {
+  background: var(--bg-hover);
+}
+
+.window-controls button[data-action='close']:hover {
+  background: var(--bg-danger);
+  color: var(--fg-on-danger);
+}
+
+.menu-popup {
+  position: absolute;
+  z-index: 100;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popup);
+}
+
+.menu-popup button {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.menu-popup button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.menu-popup button:disabled {
+  color: var(--fg-muted);
+}
+
+/* Every shortcut is displayed beside its menu item (SPEC §6.14). */
+.menu-popup kbd {
+  color: var(--fg-muted);
+  font: inherit;
+}
+
+.editor-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--bg-editor);
+}

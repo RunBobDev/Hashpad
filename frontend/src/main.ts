@@ -1,5 +1,4 @@
-import './style.css';
-import './app.css';
+import './styles/app.css';
 
 import logo from './assets/images/logo-universal.png';
 
