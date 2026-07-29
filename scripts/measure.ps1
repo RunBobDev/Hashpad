@@ -10,10 +10,17 @@
   budget refers to is a conversation to have with real numbers in hand rather
   than an assumption to bake in.
 
+  The tree is scoped by walking Win32_Process parent links transitively from the
+  PID this script launched, not by matching on process name -- name matching also
+  catches unrelated WebView2 hosts on the machine (e.g. Windows' own Widgets Board),
+  which has no relationship to Hashpad's memory footprint.
+
   Cold start here is process-start to main-window-visible, which includes
   WebView2 initialisation. It is measured on whatever machine runs it — on a VM
   with a virtual GPU expect figures materially worse than the "mid-range machine"
-  the budget refers to.
+  the budget refers to. WaitForInputIdle is a known-weak proxy for that (see the
+  note printed with the cold-start figures), so the distribution is reported in
+  full and the verdict is provisional.
 #>
 [CmdletBinding()]
 param(
@@ -41,8 +48,11 @@ foreach ($i in 1..$Runs) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $proc = Start-Process -FilePath $exe.FullName -PassThru
 
-    # WaitForInputIdle returns once the process has a message loop pumping,
-    # which is the closest available proxy for "the window is usable".
+    # WaitForInputIdle returns once the process has a message loop pumping, which
+    # can happen well before WebView2 has actually rendered anything (or, less
+    # often, may not return until its own timeout). It's a weak proxy for "the
+    # window is usable" -- kept because it needs no changes to the app, but read
+    # the distribution below rather than trusting any single number from it.
     [void]$proc.WaitForInputIdle(20000)
     $sw.Stop()
     $startupTimes += $sw.Elapsed.TotalMilliseconds
@@ -51,14 +61,56 @@ foreach ($i in 1..$Runs) {
         # Let the last run settle, then sample memory across the whole tree.
         Start-Sleep -Milliseconds 2500
 
-        $tree = @(Get-Process -Name 'hashpad' -ErrorAction SilentlyContinue)
-        $tree += @(Get-Process -Name 'msedgewebview2' -ErrorAction SilentlyContinue)
+        $rootId = [uint32]$proc.Id
 
-        $ownWorkingSet = ($tree | Where-Object { $_.Name -eq 'hashpad' } |
+        # Matching by process name (the previous approach) also catches unrelated
+        # WebView2 hosts on the machine -- e.g. Windows' own Widgets Board, which
+        # runs msedgewebview2.exe too. The only way to scope this to processes that
+        # are actually ours is to walk process ancestry from the PID we launched.
+        #
+        # A single-level parent check (direct children of hashpad.exe) is not
+        # enough either: hashpad.exe starts one WebView2 browser process, and that
+        # browser process is what spawns the renderer, GPU, and utility processes --
+        # so most of the tree we care about are grandchildren or deeper. We snapshot
+        # the whole machine's parent/child links once and walk them breadth-first
+        # from our root PID to any depth, which finds all of them and can never
+        # match a same-named process from a different lineage.
+        $processTable = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name
+        $childrenOf = @{}
+        foreach ($p in $processTable) {
+            $parentId = [uint32]$p.ParentProcessId
+            if (-not $childrenOf.ContainsKey($parentId)) {
+                $childrenOf[$parentId] = [System.Collections.Generic.List[uint32]]::new()
+            }
+            $childrenOf[$parentId].Add([uint32]$p.ProcessId)
+        }
+
+        $descendantIds = [System.Collections.Generic.List[uint32]]::new()
+        $queue = [System.Collections.Generic.Queue[uint32]]::new()
+        $queue.Enqueue($rootId)
+        while ($queue.Count -gt 0) {
+            $current = $queue.Dequeue()
+            if ($childrenOf.ContainsKey($current)) {
+                foreach ($childId in $childrenOf[$current]) {
+                    $descendantIds.Add($childId)
+                    $queue.Enqueue($childId)
+                }
+            }
+        }
+
+        $treeIds = @($rootId) + @($descendantIds)
+        $tree = @(Get-Process -Id $treeIds -ErrorAction SilentlyContinue)
+
+        $ownWorkingSet = ($tree | Where-Object { $_.Id -eq $rootId } |
             Measure-Object -Property WorkingSet64 -Sum).Sum
         $treeWorkingSet = ($tree | Measure-Object -Property WorkingSet64 -Sum).Sum
         $treeCommit = ($tree | Measure-Object -Property PrivateMemorySize64 -Sum).Sum
-        $procCount = $tree.Count
+        $descendantCount = $descendantIds.Count
+
+        # Auditable trail: what did "the tree" actually resolve to, so a future
+        # reader (or a future checkpoint's diff) can tell what was measured.
+        $treeByName = @($tree | Group-Object -Property ProcessName | ForEach-Object { "{0} x{1}" -f $_.Name, $_.Count })
+        $treeByNameSummary = if ($treeByName.Count -gt 0) { $treeByName -join ', ' } else { '(none)' }
     }
 
     $proc.CloseMainWindow() | Out-Null
@@ -68,14 +120,41 @@ foreach ($i in 1..$Runs) {
 
 $avg = [math]::Round(($startupTimes | Measure-Object -Average).Average, 1)
 $min = [math]::Round(($startupTimes | Measure-Object -Minimum).Minimum, 1)
-$startVerdict = if ($avg -lt 500) { 'PASS' } else { 'OVER' }
-Write-Host ("Cold start (avg) : {0} ms  (budget 500 ms, best {1} ms, n={2}) [{3}]" -f $avg, $min, $Runs, $startVerdict)
+$max = [math]::Round(($startupTimes | Measure-Object -Maximum).Maximum, 1)
+
+# Windows PowerShell 5.1's Measure-Object has no -Median switch (that landed in
+# pwsh 7+), and the mean is exactly what's unreliable here: WaitForInputIdle
+# returning early on some runs and not on others produces a skewed distribution
+# where the average describes neither the typical case nor the worst case.
+# Median is the honest "what does a typical run look like" number.
+function Get-Median([double[]]$Values) {
+    $sorted = $Values | Sort-Object
+    $mid = [math]::Floor($sorted.Count / 2)
+    if ($sorted.Count % 2 -eq 1) { return $sorted[$mid] }
+    return ($sorted[$mid - 1] + $sorted[$mid]) / 2
+}
+$median = [math]::Round((Get-Median $startupTimes), 1)
+$perRun = ($startupTimes | ForEach-Object { [math]::Round($_, 1) }) -join ', '
+
+# Verdict is based on the median, not the mean, since the mean is skewed by
+# whichever runs WaitForInputIdle happened to return early (or late) on.
+$startVerdict = if ($median -lt 500) { 'PASS' } else { 'OVER' }
+Write-Host ("Cold start        : median {0} ms  (avg {1}, min {2}, max {3} ms, n={4}) [{5}, provisional]" -f $median, $avg, $min, $max, $Runs, $startVerdict)
+Write-Host ("  per-run (ms)    : {0}" -f $perRun)
+Write-Host ''
+Write-Host 'Note: WaitForInputIdle measures "message loop pumping", not first paint --' -ForegroundColor DarkGray
+Write-Host 'it can return well before WebView2 has rendered anything, or hit its own' -ForegroundColor DarkGray
+Write-Host 'timeout. A trustworthy first-paint number needs the frontend to report a' -ForegroundColor DarkGray
+Write-Host 'performance.now() mark back to Go over the Wails runtime bridge -- a' -ForegroundColor DarkGray
+Write-Host 'follow-up, not implemented by this script. Treat the verdict above as provisional.' -ForegroundColor DarkGray
 
 Write-Host ''
 Write-Host 'Memory, one empty document (budget 100 MB with five tabs):'
 Write-Host ("  hashpad.exe working set    : {0} MB" -f [math]::Round($ownWorkingSet / 1MB, 1))
-Write-Host ("  whole tree working set     : {0} MB  ({1} processes)" -f [math]::Round($treeWorkingSet / 1MB, 1), $procCount)
+Write-Host ("  whole tree working set     : {0} MB  ({1} descendant processes, {2} total incl. hashpad.exe)" -f [math]::Round($treeWorkingSet / 1MB, 1), $descendantCount, $tree.Count)
 Write-Host ("  whole tree private commit  : {0} MB" -f [math]::Round($treeCommit / 1MB, 1))
+Write-Host ("  process breakdown          : {0}" -f $treeByNameSummary)
+Write-Host ("  resolved PIDs              : {0}" -f ($treeIds -join ', '))
 Write-Host ''
 Write-Host 'Note: this is one empty document, not the five-tab budget case.' -ForegroundColor DarkGray
 Write-Host 'Five-tab measurement lands with tabs at Checkpoint C.' -ForegroundColor DarkGray
