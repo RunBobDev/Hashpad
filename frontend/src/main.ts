@@ -1,6 +1,7 @@
 import './styles/app.css';
 import { COMMAND_EVENT, mountMenuBar } from './ui/menubar';
 import { Quit } from '../wailsjs/runtime/runtime';
+import { createEditor } from './editor/editor';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('#app not found');
@@ -17,3 +18,5 @@ document.addEventListener(COMMAND_EVENT, (event) => {
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
 root.append(editorArea);
+
+createEditor(editorArea, '');
