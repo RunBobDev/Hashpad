@@ -40,6 +40,13 @@ export const hashpadTheme = EditorView.theme({
     {
       backgroundColor: 'var(--selection)',
     },
+  // highlightActiveLine() ships its own hard-coded #cceeff44 / #99eeff33 in
+  // @codemirror/view's base theme. Overriding it is not cosmetic: without this
+  // rule the active line is the one part of the editor whose colour does not
+  // come from variables.css, so it would not follow the theme or the accent.
+  '.cm-activeLine': {
+    backgroundColor: 'var(--bg-active-line)',
+  },
   '.cm-scroller': {
     fontFamily: 'inherit',
     overflow: 'auto',
