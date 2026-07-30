@@ -1,8 +1,15 @@
-import { EditorView, drawSelection, highlightActiveLine, keymap } from '@codemirror/view';
+import {
+  EditorView,
+  type ViewUpdate,
+  drawSelection,
+  highlightActiveLine,
+  keymap,
+} from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { COMMAND_EVENT } from '../ui/menubar';
+import { store } from '../state/appcontext';
 
 /**
  * Builds a CodeMirror command that dispatches the given `hashpad:command` id
@@ -20,6 +27,45 @@ function dispatchCommand(id: string): () => boolean {
     document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: id }));
     return true;
   };
+}
+
+/**
+ * The store's `Document.editorState` is only ever set at the moment a
+ * document is created, opened, or saved — nothing pushes the live view's
+ * state back into it as the user types, which is what let `isDirty` (see
+ * state/document.ts) stay permanently false for a never-saved document and
+ * permanently true after a save. This listener is the fix: it writes the
+ * updated `EditorState` into whichever document is currently active.
+ *
+ * Two guards keep this cheap and safe:
+ * - `update.docChanged` filters out pure selection/cursor moves, which don't
+ *   affect dirty state and would otherwise wake the store on every arrow key.
+ * - The active document is looked up fresh from the store each time
+ *   (`store.getState().activeDocumentId`) rather than captured in a closure,
+ *   so this always targets whatever document the view is currently showing.
+ *   That matters because the view is shared and reused across documents
+ *   (see fileops.ts's `replaceActiveDocument`, which calls
+ *   `view.setState(...)` to swap documents in place) — a stale captured id
+ *   would let this write into the wrong document across a swap.
+ *
+ * No debounce needed: the title subscription in main.ts selects a `{
+ * filePath, dirty }` pair, and the store's `Object.is`/shallow-equal check
+ * (state/store.ts) already skips re-notifying when neither actually
+ * changed, so a burst of keystrokes that keeps `dirty` at `true` only
+ * notifies once, on the first keystroke that flips it.
+ */
+function syncActiveDocument(update: ViewUpdate): void {
+  if (!update.docChanged) return;
+
+  const activeId = store.getState().activeDocumentId;
+  if (activeId === null) return;
+
+  store.setState((prev) => ({
+    ...prev,
+    documents: prev.documents.map((doc) =>
+      doc.id === activeId ? { ...doc, editorState: update.state } : doc,
+    ),
+  }));
 }
 
 /**
@@ -58,5 +104,6 @@ export function buildExtensions(isDark: boolean): Extension[] {
     keymap.of([...defaultKeymap, ...historyKeymap]),
     hashpadTheme,
     darkThemeCompartment.of(EditorView.darkTheme.of(isDark)),
+    EditorView.updateListener.of(syncActiveDocument),
   ];
 }

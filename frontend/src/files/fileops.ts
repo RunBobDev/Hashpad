@@ -4,14 +4,11 @@
  * both call into (see editor/extensions.ts and main.ts) so there is exactly
  * one implementation of "what Ctrl+O does" no matter which trigger fired it.
  *
- * `store` and `view` are imported from `main.ts`, which in turn imports the
- * orchestration functions below to route `hashpad:command` events — a real
- * circular dependency between the two modules. That is fine at runtime: ES
- * module bindings are live references resolved lazily, and nothing here (or
- * in main.ts) touches `store`/`view` at module-evaluation time, only from
- * inside function bodies that run later. main.ts guards its own DOM setup so
- * merely importing it (as this module's import of `store`/`view` requires)
- * never throws in a DOM-less context such as this file's own unit tests.
+ * `store` and the active view (via `getEditorView()`) come from
+ * `state/appcontext.ts`, not from `main.ts` — main.ts imports the
+ * orchestration functions below to route `hashpad:command` events, so
+ * importing them back from main.ts would recreate the circular dependency
+ * that module used to have with this one.
  */
 import { EditorState, type Text } from '@codemirror/state';
 import {
@@ -23,7 +20,7 @@ import {
 import { buildExtensions } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
-import { store, view } from '../main';
+import { getEditorView, store } from '../state/appcontext';
 
 /** Basename of a path, or `Untitled` for a document never saved to disk. */
 export function displayName(doc: Document): string {
@@ -80,9 +77,23 @@ async function confirmDiscardActive(): Promise<boolean> {
  * Swaps in `doc` as the (sole) active document and loads its text into the
  * one shared view. Checkpoint C turns this into opening a new tab instead of
  * clobbering the current one — there is nowhere else to put it until then.
+ *
+ * Order matters here, though not for the reason it might look like: CodeMirror's
+ * `EditorView.setState` fully reinitialises the view's plugins from scratch
+ * rather than running them through the normal dispatch/update path, so it
+ * never invokes `EditorView.updateListener` (verified against
+ * `@codemirror/view`'s source — `setState` never constructs a `ViewUpdate`
+ * or reads the `updateListener` facet; only `update()`, the dispatch path,
+ * does). The editor/extensions.ts update listener therefore cannot fire
+ * between these two lines. Even if a future CodeMirror version changed that,
+ * `store.setState` below replaces `documents` wholesale (`[doc]`, not a map
+ * over the previous array), so any write the listener made to the outgoing
+ * document in between would be discarded here regardless. `view.setState`
+ * still runs first so the view is never left holding a state that doesn't
+ * match `activeDocumentId` for any observable tick.
  */
 function replaceActiveDocument(doc: Document): void {
-  view.setState(doc.editorState);
+  getEditorView().setState(doc.editorState);
   store.setState((prev) => ({
     ...prev,
     documents: [doc],
@@ -90,8 +101,13 @@ function replaceActiveDocument(doc: Document): void {
   }));
 }
 
-/** Writes `savedDoc` back into the store so `isDirty` for that document goes false. */
-function markSaved(id: string, savedDoc: Text): void {
+/**
+ * Writes `savedDoc` back into the store so `isDirty` for that document goes
+ * false. Exported (rather than kept module-private) purely so
+ * fileops.test.ts can exercise it directly against the store without going
+ * through the DOM-/IPC-bound `saveActive`/`saveActiveAs`.
+ */
+export function markSaved(id: string, savedDoc: Text): void {
   store.setState((prev) => ({
     ...prev,
     documents: prev.documents.map((doc) => (doc.id === id ? { ...doc, savedDoc } : doc)),
@@ -172,14 +188,20 @@ export async function saveActive(): Promise<boolean> {
   if (!doc) return false;
   if (doc.filePath === null) return saveActiveAs();
 
+  // Captured once, before the IPC round trip: if this read `view.state.doc`
+  // again after the `await` instead, and the user kept typing while the
+  // write was in flight, `savedDoc` would end up recording text that was
+  // never actually written to disk — the document would look clean while
+  // still holding unsaved changes.
+  const snapshot = getEditorView().state.doc;
   try {
-    await WriteFile(doc.filePath, view.state.doc.toString(), doc.encoding, doc.lineEnding);
+    await WriteFile(doc.filePath, snapshot.toString(), doc.encoding, doc.lineEnding);
   } catch (error) {
     console.error(`hashpad: failed to save ${doc.filePath}`, error);
     return false;
   }
 
-  markSaved(doc.id, view.state.doc);
+  markSaved(doc.id, snapshot);
   return true;
 }
 
@@ -197,17 +219,22 @@ export async function saveActiveAs(): Promise<boolean> {
   }
   if (path === '') return false;
 
+  // Same reasoning as saveActive: capture the snapshot once, before the
+  // WriteFile round trip, and use that exact snapshot for both the bytes
+  // written and the recorded savedDoc.
+  const snapshot = getEditorView().state.doc;
   try {
-    await WriteFile(path, view.state.doc.toString(), doc.encoding, doc.lineEnding);
+    await WriteFile(path, snapshot.toString(), doc.encoding, doc.lineEnding);
   } catch (error) {
     console.error(`hashpad: failed to save ${path}`, error);
     return false;
   }
 
-  const savedDoc = view.state.doc;
   store.setState((prev) => ({
     ...prev,
-    documents: prev.documents.map((d) => (d.id === doc.id ? { ...d, filePath: path, savedDoc } : d)),
+    documents: prev.documents.map((d) =>
+      d.id === doc.id ? { ...d, filePath: path, savedDoc: snapshot } : d,
+    ),
   }));
   return true;
 }
