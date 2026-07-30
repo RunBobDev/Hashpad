@@ -1,4 +1,4 @@
-import type { EditorState, Text } from '@codemirror/state';
+import type { EditorState, StateEffect, Text } from '@codemirror/state';
 
 /**
  * Dirty state is derived (`!editorState.doc.eq(savedDoc)`), never stored as a
@@ -14,6 +14,13 @@ export interface Document {
   viewMode: 'source' | 'live' | 'split';
   encoding: 'utf-8' | 'utf-8-bom' | 'utf-16le';
   lineEnding: 'lf' | 'crlf';
+  /**
+   * CodeMirror's scroll position, captured as a StateEffect when this document
+   * is switched away from and replayed when it comes back. Design §4.4 dropped
+   * a numeric scrollTop in favour of this — the effect survives document
+   * changes that a raw pixel offset would not.
+   */
+  scrollSnapshot: StateEffect<unknown> | null;
 }
 
 export interface AppState {
@@ -44,5 +51,6 @@ export function createUntitledDocument(editorState: EditorState): Document {
     viewMode: 'source',
     encoding: 'utf-8',
     lineEnding: 'crlf',
+    scrollSnapshot: null,
   };
 }

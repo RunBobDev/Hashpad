@@ -1,25 +1,29 @@
 /**
- * Open/save/save-as orchestration against the single central store and the
- * one shared CodeMirror view. This is the layer the menu and the keyboard
- * both call into (see editor/extensions.ts and main.ts) so there is exactly
- * one implementation of "what Ctrl+O does" no matter which trigger fired it.
+ * Open/save orchestration against the single central store and the Go IPC
+ * bindings. This is the layer the menu and the keyboard both call into (see
+ * editor/extensions.ts and main.ts) so there is exactly one implementation of
+ * "what Ctrl+O does" no matter which trigger fired it.
  *
  * `store` and the active view (via `getEditorView()`) come from
  * `state/appcontext.ts`, not from `main.ts` — main.ts imports the
  * orchestration functions below to route `hashpad:command` events, so
  * importing them back from main.ts would recreate the circular dependency
  * that module used to have with this one.
+ *
+ * This file and `files/documentops.ts` import each other (this one for
+ * `openDocumentInNewTab`, so `openFiles` has exactly one implementation of
+ * "add a tab" to call; documentops.ts for `saveDocument`/`displayName`, so
+ * `closeDocumentWithPrompt` saves the right buffer). That is safe: every
+ * binding crossing the cycle is a hoisted `function` export, never a `const`
+ * evaluated at module-load time, and nothing on either side calls into the
+ * other at module scope — only from inside functions invoked later, by which
+ * point both modules have finished initialising.
  */
-import { EditorState, type Text } from '@codemirror/state';
-import {
-  ReadFile,
-  ShowOpenDialog,
-  ShowSaveDialog,
-  WriteFile,
-} from '../../wailsjs/go/app/App';
-import { buildExtensions } from '../editor/extensions';
-import { confirmSave, type SaveChoice } from '../ui/confirmdialog';
-import { createUntitledDocument, isDirty, type Document } from '../state/document';
+import type { Text } from '@codemirror/state';
+import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
+import { openDocumentInNewTab } from './documentops';
+import type { SaveChoice } from '../ui/confirmdialog';
+import { isDirty, type Document } from '../state/document';
 import { getEditorView, store } from '../state/appcontext';
 
 /** Basename of a path, or `Untitled` for a document never saved to disk. */
@@ -46,59 +50,24 @@ export function windowTitle(doc: Document | null): string {
   return `${marker}${displayName(doc)} — Hashpad`;
 }
 
-/** Reads the store's one active document. Never null once the app has booted. */
-function activeDocument(): Document | null {
-  const state = store.getState();
-  return state.documents.find((doc) => doc.id === state.activeDocumentId) ?? null;
+/** Looks up a document by id without assuming it is the active one. */
+function findDocument(id: string): Document | null {
+  return store.getState().documents.find((doc) => doc.id === id) ?? null;
 }
 
 /**
- * Gate shared by every action that would blow away the active document's
- * buffer (opening a file, starting a new one). Checkpoint B has one view and
- * no tabs, so "replace" really does destroy unsaved work unless this runs
- * first.
- *
- * Resolves to whether it is safe to proceed: true if the document was
- * already clean, the user chose Don't Save, or Save succeeded; false on
- * Cancel, or when the user chose Save but the save itself failed or was
- * cancelled — a failed save is never treated as permission to discard.
+ * The text that should be written for `doc` right now. The active document's
+ * authoritative text lives in the live `EditorView` — that is what the user is
+ * looking at and typing into. Every other document's text was last written
+ * into its own `editorState` by the update listener (editor/extensions.ts)
+ * the moment before it stopped being active, and nothing touches it again
+ * until it becomes active once more, so `doc.editorState.doc` is exactly as
+ * current for a background document as `view.state.doc` is for the active
+ * one. Reading the wrong one of these two sources for a given document is
+ * the single easiest way to save a stale or wrong buffer.
  */
-async function confirmDiscardActive(): Promise<boolean> {
-  const doc = activeDocument();
-  if (!doc || !isDirty(doc)) return true;
-
-  const choice = await confirmSave(displayName(doc));
-  if (choice === 'cancel') return false;
-  if (choice === 'dontsave') return true;
-  return saveActive();
-}
-
-/**
- * Swaps in `doc` as the (sole) active document and loads its text into the
- * one shared view. Checkpoint C turns this into opening a new tab instead of
- * clobbering the current one — there is nowhere else to put it until then.
- *
- * Order matters here, though not for the reason it might look like: CodeMirror's
- * `EditorView.setState` fully reinitialises the view's plugins from scratch
- * rather than running them through the normal dispatch/update path, so it
- * never invokes `EditorView.updateListener` (verified against
- * `@codemirror/view`'s source — `setState` never constructs a `ViewUpdate`
- * or reads the `updateListener` facet; only `update()`, the dispatch path,
- * does). The editor/extensions.ts update listener therefore cannot fire
- * between these two lines. Even if a future CodeMirror version changed that,
- * `store.setState` below replaces `documents` wholesale (`[doc]`, not a map
- * over the previous array), so any write the listener made to the outgoing
- * document in between would be discarded here regardless. `view.setState`
- * still runs first so the view is never left holding a state that doesn't
- * match `activeDocumentId` for any observable tick.
- */
-function replaceActiveDocument(doc: Document): void {
-  getEditorView().setState(doc.editorState);
-  store.setState((prev) => ({
-    ...prev,
-    documents: [doc],
-    activeDocumentId: doc.id,
-  }));
+function currentText(doc: Document): Text {
+  return doc.id === store.getState().activeDocumentId ? getEditorView().state.doc : doc.editorState.doc;
 }
 
 /**
@@ -115,14 +84,11 @@ export function markSaved(id: string, savedDoc: Text): void {
 }
 
 /**
- * File > Open. Checkpoint B has one editor view and no tabs, so each opened
- * file replaces the currently active document rather than appending — a
- * multi-file selection ends with only the last path actually on screen.
- * Checkpoint C turns this loop into "append a new tab per path" instead.
+ * File > Open. Checkpoint C: each opened file becomes its own tab via
+ * `documentops.ts`'s `openDocumentInNewTab` — opening a file no longer
+ * discards anything, so there is nothing to confirm first.
  */
 export async function openFiles(): Promise<void> {
-  if (!(await confirmDiscardActive())) return;
-
   let paths: string[];
   try {
     paths = await ShowOpenDialog();
@@ -140,60 +106,36 @@ export async function openFiles(): Promise<void> {
       continue;
     }
 
-    const editorState = EditorState.create({
-      doc: contents.content,
-      extensions: buildExtensions(store.getState().isDark),
-    });
-
-    replaceActiveDocument({
-      id: crypto.randomUUID(),
-      filePath: contents.path,
-      editorState,
-      savedDoc: editorState.doc,
-      viewMode: 'source',
-      // FileContents' generated TS type widens Go's Encoding/LineEnding enums
-      // to plain `string` (see wailsjs/go/models.ts), but Go only ever sends
-      // one of Document's literal members — the cast just restores what the
-      // binding's typing lost.
-      encoding: contents.encoding as Document['encoding'],
-      lineEnding: contents.lineEnding as Document['lineEnding'],
-    });
+    openDocumentInNewTab(contents);
   }
 }
 
 /**
- * File > New. Still "replace the active document" for the same reason
- * `openFiles` is: Checkpoint B has one view and no tabs, so a fresh untitled
- * document goes through the identical discard-then-swap path.
- */
-export async function newDocument(): Promise<void> {
-  if (!(await confirmDiscardActive())) return;
-
-  const editorState = EditorState.create({
-    doc: '',
-    extensions: buildExtensions(store.getState().isDark),
-  });
-  replaceActiveDocument(createUntitledDocument(editorState));
-}
-
-/**
- * File > Save. Returns false whenever the file did not end up written —
- * either the user cancelled the Save As this delegates to for an untitled
- * document, or the write itself rejected. Callers use the return value to
+ * Saves the document identified by `id`, whether or not it is the active
+ * tab. This is the fix for a latent wrong-file write: an earlier version of
+ * this module only ever saved whichever document the store considered
+ * active, which was safe only while there was exactly one document.
+ * `closeDocumentWithPrompt` (documentops.ts) may be asked to save a
+ * background tab, and `resolveDocumentsBeforeQuit` iterates every dirty
+ * document in the list — both need to save the document they were actually
+ * given, not whatever happens to be on screen.
+ *
+ * Returns false whenever the file did not end up written — an unknown id, a
+ * cancelled Save As, or a rejected write. Callers use the return value to
  * decide whether it is safe to treat the document as no-longer-dirty, so a
  * failed write must never report true.
  */
-export async function saveActive(): Promise<boolean> {
-  const doc = activeDocument();
+export async function saveDocument(id: string): Promise<boolean> {
+  const doc = findDocument(id);
   if (!doc) return false;
-  if (doc.filePath === null) return saveActiveAs();
+  if (doc.filePath === null) return saveDocumentAs(id);
 
-  // Captured once, before the IPC round trip: if this read `view.state.doc`
-  // again after the `await` instead, and the user kept typing while the
-  // write was in flight, `savedDoc` would end up recording text that was
-  // never actually written to disk — the document would look clean while
-  // still holding unsaved changes.
-  const snapshot = getEditorView().state.doc;
+  // Captured once, before the IPC round trip: if this read the text again
+  // after the `await` instead, and the user kept typing while the write was
+  // in flight, `savedDoc` would end up recording text that was never
+  // actually written to disk — the document would look clean while still
+  // holding unsaved changes.
+  const snapshot = currentText(doc);
   try {
     await WriteFile(doc.filePath, snapshot.toString(), doc.encoding, doc.lineEnding);
   } catch (error) {
@@ -205,9 +147,19 @@ export async function saveActive(): Promise<boolean> {
   return true;
 }
 
-/** File > Save As. `ShowSaveDialog` returns `""` on cancel — a normal outcome, not an error. */
-export async function saveActiveAs(): Promise<boolean> {
-  const doc = activeDocument();
+/** File > Save. Thin wrapper: saves whichever document is currently active. */
+export async function saveActive(): Promise<boolean> {
+  const id = store.getState().activeDocumentId;
+  if (id === null) return false;
+  return saveDocument(id);
+}
+
+/**
+ * Save As for the document identified by `id`. `ShowSaveDialog` returns `""`
+ * on cancel — a normal outcome, not an error.
+ */
+export async function saveDocumentAs(id: string): Promise<boolean> {
+  const doc = findDocument(id);
   if (!doc) return false;
 
   let path: string;
@@ -219,10 +171,10 @@ export async function saveActiveAs(): Promise<boolean> {
   }
   if (path === '') return false;
 
-  // Same reasoning as saveActive: capture the snapshot once, before the
+  // Same reasoning as saveDocument: capture the snapshot once, before the
   // WriteFile round trip, and use that exact snapshot for both the bytes
   // written and the recorded savedDoc.
-  const snapshot = getEditorView().state.doc;
+  const snapshot = currentText(doc);
   try {
     await WriteFile(path, snapshot.toString(), doc.encoding, doc.lineEnding);
   } catch (error) {
@@ -239,18 +191,26 @@ export async function saveActiveAs(): Promise<boolean> {
   return true;
 }
 
+/** File > Save As. Thin wrapper: saves-as whichever document is currently active. */
+export async function saveActiveAs(): Promise<boolean> {
+  const id = store.getState().activeDocumentId;
+  if (id === null) return false;
+  return saveDocumentAs(id);
+}
+
 /**
  * The save-prompt sequence run before the window is allowed to close
  * (main.ts's `app:close-requested` handler). Pulled out as a pure function,
  * taking `prompt` and `save` as arguments rather than calling `confirmSave`/
- * `saveActive` directly, so the one rule that matters here -- Cancel, or a
+ * `saveDocument` directly, so the one rule that matters here -- Cancel, or a
  * failed/cancelled Save, aborts the *entire* quit rather than merely skipping
  * that document -- is exercisable with plain stubs (fileops.test.ts), with no
  * DOM and no IPC involved.
  *
- * Written as a loop even though Checkpoint B only ever passes one document:
- * Checkpoint C adds tabs, and a single-document special case here would only
- * have to be unpicked then.
+ * Written as a loop even though Checkpoint B only ever passed one document:
+ * Checkpoint C adds tabs, and every dirty document in the list must be saved
+ * to *its own* path -- see main.ts's `saveDocumentForQuit`, which is what
+ * closes over each document's own id rather than reading the active one.
  */
 export async function resolveDocumentsBeforeQuit(
   documents: Document[],

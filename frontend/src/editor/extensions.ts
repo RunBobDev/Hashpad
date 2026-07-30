@@ -44,7 +44,7 @@ function dispatchCommand(id: string): () => boolean {
  *   (`store.getState().activeDocumentId`) rather than captured in a closure,
  *   so this always targets whatever document the view is currently showing.
  *   That matters because the view is shared and reused across documents
- *   (see fileops.ts's `replaceActiveDocument`, which calls
+ *   (see files/documentops.ts's `switchToDocument`, which calls
  *   `view.setState(...)` to swap documents in place) — a stale captured id
  *   would let this write into the wrong document across a swap.
  *

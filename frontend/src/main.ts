@@ -5,15 +5,17 @@ import { EventsOn, Quit, WindowSetTitle } from '../wailsjs/runtime/runtime';
 import { ConfirmQuit } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import {
-  newDocument,
   openFiles,
   resolveDocumentsBeforeQuit,
   saveActive,
   saveActiveAs,
+  saveDocument,
   windowTitle,
 } from './files/fileops';
+import { makeUntitledDocument, switchToDocument } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { store, setEditorView } from './state/appcontext';
+import { addDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
 
 const root = document.querySelector<HTMLDivElement>('#app');
@@ -49,9 +51,17 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     case 'file.exit':
       Quit();
       break;
-    case 'file.new':
-      void newDocument();
+    case 'file.new': {
+      // Adds a tab rather than replacing anything -- Checkpoint C drops the
+      // single-document assumption `newDocument` used to encode. Inlined
+      // here rather than added as a new documentops.ts export because that
+      // module's public surface (see Task 2's brief) is exactly the five
+      // functions it already has; this is just their composition.
+      const doc = makeUntitledDocument();
+      store.setState((prev) => addDocument(prev, doc));
+      switchToDocument(doc.id);
       break;
+    }
     case 'file.open':
       void openFiles();
       break;
@@ -91,15 +101,19 @@ store.subscribe(
 WindowSetTitle(windowTitle(initialDocument));
 
 /**
- * `saveActive` (files/fileops.ts) always saves whichever document the store
- * currently considers active, not whatever it's handed -- Checkpoint B has
- * exactly one document and it is always the active one, so the two coincide.
- * `resolveDocumentsBeforeQuit` takes a `(doc) => Promise<boolean>` collaborator
- * so it stays correct once Checkpoint C adds tabs and per-document saving;
- * only this adapter will need to change then.
+ * Saves the exact document `resolveDocumentsBeforeQuit` is currently
+ * prompting about, by id -- not whatever the store happens to consider
+ * active. An earlier version of this adapter called `saveActive()` here,
+ * which saved the *active* document regardless of `doc`; that was safe only
+ * while Checkpoint B guaranteed exactly one document. The moment tabs exist,
+ * quitting with two dirty tabs would prompt about tab A and then write tab
+ * B's contents over tab A's file -- silent data corruption. `saveDocument`
+ * (files/fileops.ts) takes the id and reads from the right buffer for it
+ * (the live view if it's active, that document's own stored `editorState`
+ * otherwise), so this adapter now genuinely saves what it was asked to.
  */
-function saveDocumentForQuit(_doc: Document): Promise<boolean> {
-  return saveActive();
+function saveDocumentForQuit(doc: Document): Promise<boolean> {
+  return saveDocument(doc.id);
 }
 
 // See internal/app/app.go's OnBeforeClose for why this dance exists: Wails'
