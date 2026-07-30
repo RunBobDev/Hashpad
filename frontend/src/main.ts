@@ -12,8 +12,9 @@ import {
   saveDocument,
   windowTitle,
 } from './files/fileops';
-import { makeUntitledDocument, switchToDocument } from './files/documentops';
+import { closeDocumentWithPrompt, makeUntitledDocument, switchToDocument } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
+import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { store, setEditorView } from './state/appcontext';
 import { addDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
@@ -22,6 +23,9 @@ const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('#app not found');
 
 mountMenuBar(root);
+// Between the menu bar and the editor area, per SPEC §6.1's chrome layout --
+// the window is frameless, so this row is the only place a filename appears.
+mountTabBar(root);
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
@@ -47,6 +51,16 @@ store.setState((prev) => ({
 // commands get routed to effects.
 document.addEventListener(COMMAND_EVENT, (event) => {
   const id = (event as CustomEvent<string>).detail;
+
+  // Tab-bar commands carry a document id (ui/tabbar.ts), so they cannot be
+  // matched by the plain-string switch below -- handle them first and return.
+  const tabCommand = parseTabCommand(id);
+  if (tabCommand) {
+    if (tabCommand.kind === 'activate') switchToDocument(tabCommand.id);
+    else void closeDocumentWithPrompt(tabCommand.id);
+    return;
+  }
+
   switch (id) {
     case 'file.exit':
       Quit();

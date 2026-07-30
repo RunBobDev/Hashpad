@@ -146,6 +146,153 @@ body {
   font: inherit;
 }
 
+/*
+ * Tab strip (SPEC §6.2). Same drag convention as .menubar above: the row's
+ * own empty space drags the frameless window, and every interactive child
+ * opts back out with no-drag. `.tabbar__tabs` itself is left un-opted-out
+ * deliberately -- when there are few tabs it has real slack space to the
+ * right of the last one, and that space should stay draggable too.
+ */
+.tabbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--h-tabbar);
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border);
+  --wails-draggable: drag;
+}
+
+.tabbar__tabs {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  flex: 1 1 auto;
+  /* Without this a flex child never shrinks below its content's natural
+     width, so overflow-x below would never actually get the chance to
+     trigger no matter how many tabs pile up. */
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tab {
+  --wails-draggable: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 120px;
+  max-width: 200px;
+  height: 100%;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  cursor: default;
+}
+
+.tab:hover:not([aria-selected='true']) {
+  background: var(--bg-hover);
+}
+
+/* The active tab's background matches the editor beneath it -- the usual
+   tab-strip trick for reading as "this is the pane you're looking at" --
+   plus the accent underline SPEC §6.2 asks for. Neither is colour alone:
+   aria-selected also carries the state for assistive tech. */
+.tab[aria-selected='true'] {
+  background: var(--bg-editor);
+  border-bottom-color: var(--accent);
+}
+
+.tab__indicator {
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.tab__dot {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg-secondary);
+  opacity: 1;
+  pointer-events: none;
+}
+
+.tab__close {
+  --wails-draggable: no-drag;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  line-height: 1;
+  opacity: 0;
+  cursor: default;
+}
+
+/* The dot and the close button occupy the same slot (.tab__indicator, fixed
+   16x16) and are swapped purely by opacity, on :hover or :focus-within --
+   never by adding or removing nodes -- so nothing shifts size when the mouse
+   crosses a tab (SPEC §6.2). :focus-within also covers a keyboard user who
+   has only reached the outer tab, not yet the close button itself, so the
+   affordance is discoverable before Tab reaches it. */
+.tab:hover .tab__dot,
+.tab:focus-within .tab__dot {
+  opacity: 0;
+}
+
+.tab:hover .tab__close,
+.tab:focus-within .tab__close {
+  opacity: 1;
+}
+
+.tab__close:hover {
+  background: var(--bg-active);
+}
+
+.tab__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.tabbar__new {
+  --wails-draggable: no-drag;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: var(--h-tabbar);
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  font-size: 16px;
+  cursor: default;
+}
+
+.tabbar__new:hover {
+  background: var(--bg-hover);
+}
+
 .editor-area {
   flex: 1 1 auto;
   min-height: 0;
