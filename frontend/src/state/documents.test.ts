@@ -98,12 +98,28 @@ describe('closeDocument', () => {
     for (let i = 0; i < REOPEN_STACK_LIMIT + 2; i++) {
       s = closeDocument(s, `d${i}`, untitledFactory);
     }
+    // Asserting identity, not just length: trimming from the wrong end would
+    // still leave exactly REOPEN_STACK_LIMIT entries while throwing away the
+    // most recent closes — the ones Ctrl+Shift+T is most likely to want.
     expect(s.closedPaths).toHaveLength(REOPEN_STACK_LIMIT);
+    expect(s.closedPaths[0]).toBe('d11.md');
+    expect(s.closedPaths.at(-1)).toBe('d2.md');
   });
 
   it('ignores an unknown id', () => {
     const before = stateWith([doc('a')]);
-    expect(closeDocument(before, 'nope', untitledFactory).documents).toHaveLength(1);
+    const next = closeDocument(before, 'nope', untitledFactory);
+    // By id, not by count: mistakenly taking the last-document branch would
+    // also leave one document — but it would be a fresh untitled one, having
+    // silently thrown away the document the user still had open.
+    expect(next.documents.map((d) => d.id)).toEqual(['a']);
+  });
+
+  it('does not mutate the input state', () => {
+    const before = stateWith([doc('a', 'a.md'), doc('b')]);
+    closeDocument(before, 'a', untitledFactory);
+    expect(before.documents.map((d) => d.id)).toEqual(['a', 'b']);
+    expect(before.closedPaths).toEqual([]);
   });
 });
 
@@ -115,6 +131,12 @@ describe('activateDocument', () => {
   it('ignores an unknown id rather than blanking the active document', () => {
     const next = activateDocument(stateWith([doc('a')], 'a'), 'nope');
     expect(next.activeDocumentId).toBe('a');
+  });
+
+  it('does not mutate the input state', () => {
+    const before = stateWith([doc('a'), doc('b')], 'a');
+    activateDocument(before, 'b');
+    expect(before.activeDocumentId).toBe('a');
   });
 });
 
@@ -143,6 +165,17 @@ describe('reorderDocument', () => {
     const next = reorderDocument(stateWith([doc('a'), doc('b')]), 'a', 0);
     expect(next.documents.map((d) => d.id)).toEqual(['a', 'b']);
   });
+
+  it('is a no-op for the only document, whatever index is asked for', () => {
+    const next = reorderDocument(stateWith([doc('a')]), 'a', 5);
+    expect(next.documents.map((d) => d.id)).toEqual(['a']);
+  });
+
+  it('does not mutate the input state', () => {
+    const before = stateWith([doc('a'), doc('b'), doc('c')]);
+    reorderDocument(before, 'a', 2);
+    expect(before.documents.map((d) => d.id)).toEqual(['a', 'b', 'c']);
+  });
 });
 
 describe('neighbourId', () => {
@@ -168,6 +201,14 @@ describe('documentAtPosition', () => {
   it('is null past the end, so Ctrl+Alt+9 with two tabs does nothing', () => {
     expect(documentAtPosition(stateWith([doc('a')]), 9)).toBeNull();
   });
+
+  // Position 0 and below cannot arrive from the Ctrl+Alt+1..9 bindings, but the
+  // function is exported and the correct answer relies on a negative array index
+  // yielding undefined rather than wrapping. Pin it so a future guard-clause
+  // rewrite cannot quietly turn it into "the last tab".
+  it.each([0, -1, -5])('is null for out-of-range position %i', (position) => {
+    expect(documentAtPosition(stateWith([doc('a'), doc('b')]), position)).toBeNull();
+  });
 });
 
 describe('takeReopenPath', () => {
@@ -180,6 +221,12 @@ describe('takeReopenPath', () => {
 
   it('returns null when nothing was closed', () => {
     expect(takeReopenPath(stateWith([doc('a')])).path).toBeNull();
+  });
+
+  it('does not mutate the input state', () => {
+    const before: AppState = { ...stateWith([doc('a')]), closedPaths: ['b.md', 'a.md'] };
+    takeReopenPath(before);
+    expect(before.closedPaths).toEqual(['b.md', 'a.md']);
   });
 });
 
