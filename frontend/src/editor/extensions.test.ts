@@ -21,7 +21,7 @@ describe('syncActiveDocument update listener', () => {
   afterEach(() => {
     // Reset the shared appcontext store so this file's writes don't leak
     // into other tests that happen to run in the same worker.
-    store.setState(() => ({ documents: [], activeDocumentId: null, isDark: false }));
+    store.setState(() => ({ documents: [], activeDocumentId: null, isDark: false, closedPaths: [] }));
   });
 
   it('writes a document change back into the store, flipping the active document dirty', () => {

@@ -27,6 +27,7 @@ export const store: Store<AppState> = createStore<AppState>({
   documents: [],
   activeDocumentId: null,
   isDark: false,
+  closedPaths: [],
 });
 
 let editorView: EditorView | undefined;

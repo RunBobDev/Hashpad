@@ -21,6 +21,13 @@ export interface AppState {
   activeDocumentId: string | null;
   /** Resolved light/dark, whatever the source (manual or system). */
   isDark: boolean;
+  /**
+   * File paths of recently closed documents, most recent first, for
+   * Ctrl+Shift+T. Only paths — never buffers. Reopening re-reads from disk, so
+   * a tab closed with Don't Save cannot resurrect the discarded text, which
+   * SPEC §6.3 requires to be gone.
+   */
+  closedPaths: string[];
 }
 
 export function isDirty(doc: Document): boolean {
