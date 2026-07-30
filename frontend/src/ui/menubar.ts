@@ -37,25 +37,32 @@ interface Menu {
 }
 
 /**
- * Checkpoint A can genuinely do very little, so most items are disabled. They
- * are listed anyway to fix the structure and the shortcut assignments; each
- * later checkpoint flips its own items to enabled.
+ * Most items are still disabled — later checkpoints flip their own items to
+ * enabled as each feature lands. They are listed anyway to fix the structure
+ * and the shortcut assignments up front.
  *
  * `help.about` is disabled for the same reason: there is no About dialog yet,
  * so leaving it enabled would mean an item that does nothing when activated.
  * `edit.undo`/`edit.redo` are enabled: the editor ships `history()` and
  * `historyKeymap` (see editor/extensions.ts), so Ctrl+Z/Ctrl+Y already work —
  * the menu items must be reachable too, or the shortcut exists with no menu
- * path to it.
+ * path to it. The four File items above `exit` are enabled for the same
+ * reason, now that `files/fileops.ts` and the matching keymap in
+ * `editor/extensions.ts` back them: New, Open, Save, and Save As all do real
+ * work, and Ctrl+N/O/S/Shift+S already work as shortcuts.
+ *
+ * Still unavailable: Edit > Find/Replace (no search panel yet), every View
+ * item (no preview, outline, or word-wrap toggle yet), and Help > About (no
+ * dialog yet).
  */
 const MENUS: Menu[] = [
   {
     label: 'File',
     items: [
-      { id: 'file.new', label: 'New', shortcut: 'Ctrl+N', enabled: false },
-      { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', enabled: false },
-      { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: false },
-      { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: false },
+      { id: 'file.new', label: 'New', shortcut: 'Ctrl+N', enabled: true },
+      { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', enabled: true },
+      { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: true },
+      { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: true },
       { id: 'file.exit', label: 'Exit', enabled: true },
     ],
   },
