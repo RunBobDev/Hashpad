@@ -151,3 +151,64 @@ body {
   min-height: 0;
   background: var(--bg-editor);
 }
+
+/*
+ * SPEC §6.3 Save/Don't Save/Cancel prompt (see ui/confirmdialog.ts). Verified
+ * against real Chromium (WebView2's engine) that custom properties DO inherit
+ * into ::backdrop from the dialog that generates it, so it takes a token like
+ * everything else here — there is no literal-colour exception in this file.
+ */
+.confirm-dialog {
+  min-width: 340px;
+  max-width: 460px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  font-size: var(--size-ui);
+  box-shadow: var(--shadow-popup);
+}
+
+.confirm-dialog::backdrop {
+  background: var(--bg-backdrop);
+}
+
+.confirm-dialog__message {
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-dialog__actions button {
+  min-width: 96px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  color: var(--fg-primary);
+  font: inherit;
+  cursor: default;
+}
+
+.confirm-dialog__actions button:hover {
+  background: var(--bg-hover);
+}
+
+.confirm-dialog__button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.confirm-dialog__button--primary:hover {
+  /* Keeps the primary button distinguishable on hover instead of falling back
+     to the neutral hover fill, which would make it look disabled. */
+  background: color-mix(in oklab, var(--accent) 85%, var(--fg-primary));
+}

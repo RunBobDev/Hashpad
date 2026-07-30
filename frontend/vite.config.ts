@@ -28,7 +28,12 @@ export default defineConfig({
   },
   test: {
     // Commands and the store are pure functions by design, so no DOM is needed
-    // and tests stay fast (design §5.4).
+    // and tests stay fast (design §5.4). Most tests are like this — DOM tests
+    // are the exception, so they opt in per file with a
+    // `// @vitest-environment jsdom` docblock on line 1 instead of flipping
+    // this default. Do NOT change this to 'jsdom' to make DOM tests "just
+    // work": that switches every test in the suite onto jsdom's slower setup,
+    // including the pure ones that never needed it.
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },

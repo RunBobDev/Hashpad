@@ -74,6 +74,11 @@
   --fg-on-danger: #ffffff;
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 18%);
 
+  /* Dims the app behind a modal dialog. Same reasoning as --bg-danger: a
+     scrim reads the same regardless of which theme is active, so it is not
+     derived per-theme. */
+  --bg-backdrop: rgb(0 0 0 / 35%);
+
   /* Active editor line. Kept neutral and very faint deliberately: it marks the
      cursor's line without competing with the accent or with syntax colour. */
   --bg-active-line: rgb(0 0 0 / 4%);
@@ -118,6 +123,7 @@
   --fg-on-danger: #ffffff;
   /* Deeper than light mode: a shadow at 18% is invisible against dark chrome. */
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 44%);
+  --bg-backdrop: rgb(0 0 0 / 35%);
 
   /* Lifts rather than darkens: a black wash is invisible on a near-black editor. */
   --bg-active-line: rgb(255 255 255 / 5%);
