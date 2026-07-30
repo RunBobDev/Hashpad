@@ -1,12 +1,26 @@
 import { EditorState } from '@codemirror/state';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { store } from '../state/appcontext';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
-import { displayName, markSaved, windowTitle } from './fileops';
+import type { SaveChoice } from '../ui/confirmdialog';
+import { displayName, markSaved, resolveDocumentsBeforeQuit, windowTitle } from './fileops';
 
 function docWith(overrides: Partial<Document>): Document {
   const base = createUntitledDocument(EditorState.create({ doc: 'hello' }));
   return { ...base, ...overrides };
+}
+
+/** A document whose editorState has diverged from savedDoc -- isDirty(doc) is true. */
+function dirtyDoc(overrides: Partial<Document> = {}): Document {
+  const original = EditorState.create({ doc: 'hello' });
+  const changed = original.update({ changes: { from: 5, insert: '!' } }).state;
+  return docWith({ editorState: changed, savedDoc: original.doc, ...overrides });
+}
+
+/** A document whose editorState matches savedDoc -- isDirty(doc) is false. */
+function cleanDoc(overrides: Partial<Document> = {}): Document {
+  const state = EditorState.create({ doc: 'hello' });
+  return docWith({ editorState: state, savedDoc: state.doc, ...overrides });
 }
 
 describe('displayName', () => {
@@ -106,5 +120,109 @@ describe('dirty tracking', () => {
     const saved = store.getState().documents.find((d) => d.id === doc.id);
     expect(saved).toBeDefined();
     expect(isDirty(saved!)).toBe(false);
+  });
+});
+
+/**
+ * This is the highest-risk logic in Checkpoint B: a Cancel anywhere in the
+ * list must abort the entire quit, and a Save that silently failed (or was
+ * itself cancelled, e.g. Save As) must be treated the same as Cancel -- never
+ * as permission to proceed as though the file were written. Both `prompt` and
+ * `save` are plain stubs here; no DOM and no IPC are involved, which is the
+ * whole reason the sequence was pulled out of the `app:close-requested`
+ * handler into a pure function.
+ */
+describe('resolveDocumentsBeforeQuit', () => {
+  it('resolves true without prompting when every document is clean', async () => {
+    const docs = [cleanDoc({ filePath: 'a.md' }), cleanDoc({ filePath: 'b.md' })];
+    const prompt = vi.fn<(name: string) => Promise<SaveChoice>>();
+    const save = vi.fn<(doc: Document) => Promise<boolean>>();
+
+    const result = await resolveDocumentsBeforeQuit(docs, prompt, save);
+
+    expect(result).toBe(true);
+    expect(prompt).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('resolves true and saves once when the one dirty document is saved', async () => {
+    const doc = dirtyDoc({ filePath: 'a.md' });
+    const prompt = vi.fn<(name: string) => Promise<SaveChoice>>().mockResolvedValue('save');
+    const save = vi.fn<(doc: Document) => Promise<boolean>>().mockResolvedValue(true);
+
+    const result = await resolveDocumentsBeforeQuit([doc], prompt, save);
+
+    expect(result).toBe(true);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(doc);
+  });
+
+  it("does not save when the user picks Don't Save", async () => {
+    const doc = dirtyDoc({ filePath: 'a.md' });
+    const prompt = vi.fn<(name: string) => Promise<SaveChoice>>().mockResolvedValue('dontsave');
+    const save = vi.fn<(doc: Document) => Promise<boolean>>();
+
+    const result = await resolveDocumentsBeforeQuit([doc], prompt, save);
+
+    expect(result).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('resolves false and prompts no further documents when the user picks Cancel', async () => {
+    const doc = dirtyDoc({ filePath: 'a.md' });
+    const prompt = vi.fn<(name: string) => Promise<SaveChoice>>().mockResolvedValue('cancel');
+    const save = vi.fn<(doc: Document) => Promise<boolean>>();
+
+    const result = await resolveDocumentsBeforeQuit([doc], prompt, save);
+
+    expect(result).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('stops at the second of three dirty documents when it is cancelled, never prompting the third', async () => {
+    const docs = [
+      dirtyDoc({ filePath: 'a.md' }),
+      dirtyDoc({ filePath: 'b.md' }),
+      dirtyDoc({ filePath: 'c.md' }),
+    ];
+    const prompt = vi
+      .fn<(name: string) => Promise<SaveChoice>>()
+      .mockResolvedValueOnce('dontsave')
+      .mockResolvedValueOnce('cancel')
+      .mockResolvedValueOnce('dontsave'); // would prove the third was (wrongly) reached
+    const save = vi.fn<(doc: Document) => Promise<boolean>>();
+
+    const result = await resolveDocumentsBeforeQuit(docs, prompt, save);
+
+    expect(result).toBe(false);
+    expect(prompt).toHaveBeenCalledTimes(2);
+    expect(prompt).toHaveBeenNthCalledWith(1, 'a.md');
+    expect(prompt).toHaveBeenNthCalledWith(2, 'b.md');
+  });
+
+  it('resolves false when Save is chosen but the save fails or is cancelled (e.g. a cancelled Save As)', async () => {
+    const doc = dirtyDoc({ filePath: 'a.md' });
+    const prompt = vi.fn<(name: string) => Promise<SaveChoice>>().mockResolvedValue('save');
+    const save = vi.fn<(doc: Document) => Promise<boolean>>().mockResolvedValue(false);
+
+    const result = await resolveDocumentsBeforeQuit([doc], prompt, save);
+
+    expect(result).toBe(false);
+  });
+
+  it('prompts documents in array order', async () => {
+    const docs = [dirtyDoc({ filePath: 'a.md' }), dirtyDoc({ filePath: 'b.md' })];
+    const seen: string[] = [];
+    const prompt = vi
+      .fn<(name: string) => Promise<SaveChoice>>()
+      .mockImplementation(async (name) => {
+        seen.push(name);
+        return 'dontsave';
+      });
+    const save = vi.fn<(doc: Document) => Promise<boolean>>();
+
+    await resolveDocumentsBeforeQuit(docs, prompt, save);
+
+    expect(seen).toEqual(['a.md', 'b.md']);
   });
 });

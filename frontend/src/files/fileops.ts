@@ -18,7 +18,7 @@ import {
   WriteFile,
 } from '../../wailsjs/go/app/App';
 import { buildExtensions } from '../editor/extensions';
-import { confirmSave } from '../ui/confirmdialog';
+import { confirmSave, type SaveChoice } from '../ui/confirmdialog';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
 import { getEditorView, store } from '../state/appcontext';
 
@@ -236,5 +236,39 @@ export async function saveActiveAs(): Promise<boolean> {
       d.id === doc.id ? { ...d, filePath: path, savedDoc: snapshot } : d,
     ),
   }));
+  return true;
+}
+
+/**
+ * The save-prompt sequence run before the window is allowed to close
+ * (main.ts's `app:close-requested` handler). Pulled out as a pure function,
+ * taking `prompt` and `save` as arguments rather than calling `confirmSave`/
+ * `saveActive` directly, so the one rule that matters here -- Cancel, or a
+ * failed/cancelled Save, aborts the *entire* quit rather than merely skipping
+ * that document -- is exercisable with plain stubs (fileops.test.ts), with no
+ * DOM and no IPC involved.
+ *
+ * Written as a loop even though Checkpoint B only ever passes one document:
+ * Checkpoint C adds tabs, and a single-document special case here would only
+ * have to be unpicked then.
+ */
+export async function resolveDocumentsBeforeQuit(
+  documents: Document[],
+  prompt: (name: string) => Promise<SaveChoice>,
+  save: (doc: Document) => Promise<boolean>,
+): Promise<boolean> {
+  for (const doc of documents) {
+    if (!isDirty(doc)) continue;
+
+    const choice = await prompt(displayName(doc));
+    if (choice === 'cancel') return false;
+    if (choice === 'dontsave') continue;
+
+    // choice === 'save'. A save that failed, or a Save As the user cancelled,
+    // must abort the quit exactly like Cancel would -- treating it as
+    // permission to proceed would close the window over a document whose
+    // text was never actually written to disk.
+    if (!(await save(doc))) return false;
+  }
   return true;
 }

@@ -35,6 +35,7 @@ func main() {
 		// exception to "colours only live in variables.css".
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 255},
 		OnStartup:        application.Startup,
+		OnBeforeClose:    application.OnBeforeClose,
 		Bind:             []interface{}{application},
 	})
 	if err != nil {
