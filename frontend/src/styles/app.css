@@ -201,13 +201,17 @@ body {
   background: var(--bg-hover);
 }
 
-.confirm-dialog__button--primary {
+/* Qualified with the parent and element selectors so it outranks
+   `.confirm-dialog__actions button` above. Without that, the general rule's
+   (0,1,1) beats a bare class's (0,1,0) and the primary button silently renders
+   identical to the other two — which is the entire point of marking it. */
+.confirm-dialog__actions button.confirm-dialog__button--primary {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-fg);
 }
 
-.confirm-dialog__button--primary:hover {
+.confirm-dialog__actions button.confirm-dialog__button--primary:hover {
   /* Keeps the primary button distinguishable on hover instead of falling back
      to the neutral hover fill, which would make it look disabled. */
   background: color-mix(in oklab, var(--accent) 85%, var(--fg-primary));

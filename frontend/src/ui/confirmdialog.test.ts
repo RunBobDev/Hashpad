@@ -27,8 +27,15 @@
  * support, that test starts failing and is the signal to come back and write
  * the real interaction tests.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { confirmSave } from './confirmdialog';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildConfirmDialog, confirmSave, type SaveChoice } from './confirmdialog';
+
+/** Clicks the button with the given label inside `dialog`. */
+function click(dialog: HTMLDialogElement, label: string): void {
+  const button = [...dialog.querySelectorAll('button')].find((b) => b.textContent === label);
+  if (!button) throw new Error(`no button labelled ${label}`);
+  button.click();
+}
 
 afterEach(() => {
   // finish() is the only code path that ever removes the dialog, and it
@@ -36,6 +43,66 @@ afterEach(() => {
   // dialog created below outlives its test. Clear the body so each test
   // only ever sees its own dialog.
   document.body.innerHTML = '';
+});
+
+/**
+ * These reach the behaviour that matters — which choice a click yields, that it
+ * settles once, that the element is torn down — by driving the dialog directly
+ * instead of through `confirmSave`, whose `showModal()` call jsdom cannot run.
+ * Nothing here is stubbed: the listeners under test are the real ones.
+ */
+describe('buildConfirmDialog', () => {
+  it.each([
+    ['Save', 'save'],
+    ["Don't Save", 'dontsave'],
+    ['Cancel', 'cancel'],
+  ])('reports %s as %s', (label, expected) => {
+    const onChoice = vi.fn();
+    const dialog = buildConfirmDialog('notes.md', onChoice);
+
+    click(dialog, label);
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith(expected as SaveChoice);
+  });
+
+  it('treats Escape as Cancel', () => {
+    const onChoice = vi.fn();
+    const dialog = buildConfirmDialog('notes.md', onChoice);
+
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith('cancel');
+  });
+
+  it('settles once even if a second button is clicked', () => {
+    const onChoice = vi.fn();
+    const dialog = buildConfirmDialog('notes.md', onChoice);
+
+    click(dialog, 'Save');
+    click(dialog, 'Cancel');
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith('save');
+  });
+
+  it('ignores an Escape that arrives after a button was already clicked', () => {
+    const onChoice = vi.fn();
+    const dialog = buildConfirmDialog('notes.md', onChoice);
+
+    click(dialog, "Don't Save");
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith('dontsave');
+  });
+
+  it('removes itself from the document once a choice is made', () => {
+    const dialog = buildConfirmDialog('notes.md', vi.fn());
+    document.body.append(dialog);
+    expect(dialog.isConnected).toBe(true);
+
+    click(dialog, 'Cancel');
+
+    expect(dialog.isConnected).toBe(false);
+  });
 });
 
 describe('confirmSave under jsdom (see file header for why this list is short)', () => {
