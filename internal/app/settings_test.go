@@ -2,10 +2,12 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadSettingsFromMissingFileReturnsDefaults(t *testing.T) {
@@ -44,7 +46,7 @@ func TestLoadSettingsFromValidFile(t *testing.T) {
 func TestLoadSettingsFromMalformedFileBacksUpAndFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	if err := os.WriteFile(path, []byte("{not valid json"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(malformedSettings), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -56,27 +58,120 @@ func TestLoadSettingsFromMalformedFileBacksUpAndFallsBack(t *testing.T) {
 		t.Errorf("got %+v, want defaults", got)
 	}
 
+	backups := backupFiles(t, dir)
+	if len(backups) != 1 {
+		t.Fatalf("expected exactly 1 backup file, found %d", len(backups))
+	}
+
+	// Assert the backup's *content*, not just its existence. Checking only that
+	// a .bak- file appeared would pass against an implementation that deleted
+	// the bad file and touched an empty marker — losing the user's hand-edited
+	// config while reporting success, the worst outcome this code can produce.
+	backedUp := readFile(t, filepath.Join(dir, backups[0]))
+	if backedUp != malformedSettings {
+		t.Errorf("backup content = %q, want the original bad bytes %q", backedUp, malformedSettings)
+	}
+}
+
+// A directory where settings.json should be is unreadable but is not
+// "not found", so it takes a different branch. It must still not brick the app.
+func TestLoadSettingsFromUnreadablePathReturnsDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("an unreadable settings path must not return an error, got %v", err)
+	}
+	if got != DefaultSettings() {
+		t.Errorf("got %+v, want defaults", got)
+	}
+}
+
+// The timestamp in a backup name has one-second resolution and os.Rename
+// overwrites silently on Windows, so a second bad load in the same second used
+// to destroy the first backup. Pre-creating the exact name the code is about to
+// choose forces the collision deterministically rather than hoping for it.
+func TestBackupNeverOverwritesAnExistingBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	occupied := fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405"))
+	const existing = "an earlier backup that must survive"
+	if err := os.WriteFile(occupied, []byte(existing), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := os.WriteFile(path, []byte(malformedSettings), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := LoadSettingsFrom(path); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if got := readFile(t, occupied); got != existing {
+		t.Errorf("the pre-existing backup was clobbered: got %q, want %q", got, existing)
+	}
+	if backups := backupFiles(t, dir); len(backups) != 2 {
+		t.Errorf("expected 2 backups (the seeded one and the new one), found %d", len(backups))
+	}
+}
+
+func TestSaveThenLoadRoundTripsNonDefaultValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+
+	want := DefaultSettings()
+	want.Appearance.Theme = "dark"
+	want.Appearance.AccentColor = "#c50f1f"
+	want.Editor.FontFamily = "JetBrains Mono"
+	want.Editor.WordWrap = false
+	want.Editor.LineHeight = 1.85
+	want.Preview.SyncScroll = false
+	want.Files.Autosave = true
+	want.Window.PreviewSplitRatio = 0.35
+	want.Window.Maximized = true
+
+	if err := SaveSettingsTo(path, want); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got != want {
+		t.Errorf("round trip changed settings:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+const malformedSettings = "{not valid json"
+
+func backupFiles(t *testing.T, dir string) []string {
+	t.Helper()
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("readdir: %v", err)
 	}
-	var backups int
+
+	var names []string
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), "settings.json.bak-") {
-			backups++
+			names = append(names, e.Name())
 		}
 	}
-	if backups != 1 {
-		t.Errorf("expected exactly 1 backup file, found %d", backups)
-	}
+	return names
+}
 
-	// The original bad content must survive somewhere.
-	if _, err := os.Stat(path); err == nil {
-		data, _ := os.ReadFile(path)
-		if string(data) == "{not valid json" {
-			t.Error("bad file was left in place rather than backed up")
-		}
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
 	}
+	return string(data)
 }
 
 func TestLoadSettingsFromUnknownVersionFallsBackToDefaults(t *testing.T) {

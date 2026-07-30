@@ -123,7 +123,13 @@ func LoadSettingsFrom(path string) (Settings, error) {
 		return DefaultSettings(), nil
 	}
 	if err != nil {
-		return DefaultSettings(), fmt.Errorf("read settings %s: %w", path, err)
+		// Unreadable for some other reason — a directory at the settings path,
+		// a permissions problem, a bad mount. Treated exactly like a corrupt
+		// file: log and carry on with defaults. Returning an error here would
+		// brick the editor over its own config, which SPEC §6.13 forbids. No
+		// backup is attempted because there is nothing readable to preserve.
+		log.Printf("hashpad: cannot read settings at %s (%v); using defaults", path, err)
+		return DefaultSettings(), nil
 	}
 
 	// Start from defaults so keys the file omits keep their default rather than
@@ -145,16 +151,44 @@ func LoadSettingsFrom(path string) (Settings, error) {
 	return settings, nil
 }
 
-// backupBadSettings renames the offending file out of the way. Best effort: if
-// it fails there is nothing useful to do beyond logging, and the caller still
-// gets working defaults.
+// maxBackupAttempts bounds the search for an unused backup name so a
+// pathological directory cannot spin here. Reaching it means giving up rather
+// than clobbering something.
+const maxBackupAttempts = 100
+
+// backupBadSettings moves the offending file aside so the user can recover what
+// they had. Best effort: if it fails there is nothing useful to do beyond
+// logging, and the caller still gets working defaults.
 func backupBadSettings(path string) {
-	backup := fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405"))
+	backup, err := unusedBackupPath(path)
+	if err != nil {
+		log.Printf("hashpad: could not back up %s: %v", path, err)
+		return
+	}
 	if err := os.Rename(path, backup); err != nil {
 		log.Printf("hashpad: could not back up %s: %v", path, err)
 		return
 	}
 	log.Printf("hashpad: previous settings saved to %s", backup)
+}
+
+// unusedBackupPath finds a backup name nothing occupies yet.
+//
+// The existence check is load-bearing, not belt-and-braces: the timestamp has
+// one-second resolution and os.Rename silently overwrites an existing
+// destination on Windows, so two bad loads in the same second would destroy the
+// first backup — overwriting the very thing SPEC §6.13 says to preserve.
+func unusedBackupPath(path string) (string, error) {
+	base := fmt.Sprintf("%s.bak-%s", path, time.Now().Format("20060102-150405"))
+
+	candidate := base
+	for attempt := 2; attempt <= maxBackupAttempts; attempt++ {
+		if _, err := os.Stat(candidate); errors.Is(err, fs.ErrNotExist) {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s-%d", base, attempt)
+	}
+	return "", fmt.Errorf("no unused backup name near %s after %d attempts", base, maxBackupAttempts)
 }
 
 func SaveSettingsTo(path string, s Settings) error {
