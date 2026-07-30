@@ -120,8 +120,9 @@ EventsOn('app:close-requested', () => {
   quitPromptInFlight = true;
 
   void (async () => {
+    let canQuit = false;
     try {
-      const canQuit = await resolveDocumentsBeforeQuit(
+      canQuit = await resolveDocumentsBeforeQuit(
         store.getState().documents,
         confirmSave,
         saveDocumentForQuit,
@@ -129,9 +130,19 @@ EventsOn('app:close-requested', () => {
       // Only ever call ConfirmQuit on a true result: resolveDocumentsBeforeQuit
       // already folds Cancel and a failed/cancelled Save into false, so this
       // is the single point where "safe to quit" turns into actually quitting.
-      if (canQuit) void ConfirmQuit();
+      //
+      // Awaited, not fire-and-forget: Go does not set its approval flag until
+      // this IPC call lands, so releasing the guard first leaves a window where
+      // another close request is still vetoed and re-emitted, restarting the
+      // whole sequence. A document just dismissed with Don't Save is still
+      // dirty by design, so it would be prompted for a second time.
+      if (canQuit) await ConfirmQuit();
     } finally {
-      quitPromptInFlight = false;
+      // Stay latched once the quit is confirmed. The window is on its way down,
+      // and no further close request should be able to restart the prompts.
+      // Released only when the user aborted, or something threw — both of which
+      // leave the app running and needing to accept a future close.
+      if (!canQuit) quitPromptInFlight = false;
     }
   })();
 });
