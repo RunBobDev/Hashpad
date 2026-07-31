@@ -245,3 +245,56 @@ describe('tab.goto<N> commands', () => {
     expect(getEditorView().state.doc.toString()).toBe('A');
   });
 });
+
+describe('tab.moveLeft / tab.moveRight commands', () => {
+  it('moves the active tab one place left', () => {
+    setupDocs([cleanDoc('a', 'A'), cleanDoc('b', 'B'), cleanDoc('c', 'C')], 'b');
+
+    emit('tab.moveLeft');
+
+    expect(store.getState().documents.map((d) => d.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('moves the active tab one place right', () => {
+    setupDocs([cleanDoc('a', 'A'), cleanDoc('b', 'B'), cleanDoc('c', 'C')], 'b');
+
+    emit('tab.moveRight');
+
+    expect(store.getState().documents.map((d) => d.id)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('keeps the moved tab active', () => {
+    setupDocs([cleanDoc('a', 'A'), cleanDoc('b', 'B')], 'a');
+
+    emit('tab.moveRight');
+
+    expect(store.getState().activeDocumentId).toBe('a');
+  });
+
+  // Clamping lives in reorderDocument, so the ends are a no-op rather than
+  // something the command router has to special-case.
+  it('does nothing at the left end', () => {
+    setupDocs([cleanDoc('a', 'A'), cleanDoc('b', 'B')], 'a');
+
+    emit('tab.moveLeft');
+
+    expect(store.getState().documents.map((d) => d.id)).toEqual(['a', 'b']);
+  });
+
+  it('does nothing at the right end', () => {
+    setupDocs([cleanDoc('a', 'A'), cleanDoc('b', 'B')], 'b');
+
+    emit('tab.moveRight');
+
+    expect(store.getState().documents.map((d) => d.id)).toEqual(['a', 'b']);
+  });
+
+  it('does nothing with a single tab', () => {
+    setupDocs([cleanDoc('a', 'A')], 'a');
+
+    emit('tab.moveLeft');
+    emit('tab.moveRight');
+
+    expect(store.getState().documents.map((d) => d.id)).toEqual(['a']);
+  });
+});

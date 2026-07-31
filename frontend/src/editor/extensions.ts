@@ -115,6 +115,12 @@ export function buildExtensions(isDark: boolean): Extension[] {
         // checks it is left unhandled both before and after this block.
         { key: 'Ctrl-Tab', run: dispatchCommand('tab.next') },
         { key: 'Ctrl-Shift-Tab', run: dispatchCommand('tab.previous') },
+        // The keyboard path for reordering. Drag-and-drop is inherently
+        // mouse-only, so without these the strip has a capability no keyboard
+        // user can reach, against the project's full-keyboard-navigability
+        // constraint. Matches what Firefox and Chrome bind for moving a tab.
+        { key: 'Mod-Shift-ArrowLeft', run: dispatchCommand('tab.moveLeft') },
+        { key: 'Mod-Shift-ArrowRight', run: dispatchCommand('tab.moveRight') },
         // One binding per position (Mod-Alt-1..9) rather than a single
         // handler reading event.code: CodeMirror's own keymap dispatch
         // already does modifier matching and Mac/Windows normalisation per

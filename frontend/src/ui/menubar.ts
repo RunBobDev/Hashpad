@@ -95,6 +95,22 @@ const MENUS: Menu[] = [
     items: [
       { id: 'tab.next', label: 'Next Tab', shortcut: 'Ctrl+Tab', enabled: true },
       { id: 'tab.previous', label: 'Previous Tab', shortcut: 'Ctrl+Shift+Tab', enabled: true },
+      // Reordering is otherwise mouse-only: SPEC §6.2 asks for drag, but the
+      // project's accessibility constraint asks for full keyboard navigability,
+      // and a capability reachable only by dragging fails it. Ctrl+Shift with
+      // the arrow keys is what Firefox and Chrome use for moving a tab.
+      { id: 'tab.moveLeft', label: 'Move Tab Left', shortcut: 'Ctrl+Shift+Left', enabled: true },
+      { id: 'tab.moveRight', label: 'Move Tab Right', shortcut: 'Ctrl+Shift+Right', enabled: true },
+      // SPEC §6.14 requires every shortcut to be reachable through a menu with
+      // its shortcut displayed. Nine entries is more than this menu wants, but
+      // the requirement is explicit and a single summary line would show the
+      // chord without actually being invocable, which is not what it asks for.
+      ...Array.from({ length: 9 }, (_, i) => ({
+        id: `tab.goto${i + 1}`,
+        label: `Go to Tab ${i + 1}`,
+        shortcut: `Ctrl+Alt+${i + 1}`,
+        enabled: true,
+      })),
       { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: false },
       { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: false },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: false },

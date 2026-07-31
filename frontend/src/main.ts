@@ -116,6 +116,21 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     case 'tab.reopen':
       void reopenLastClosed();
       break;
+    case 'tab.moveLeft':
+    case 'tab.moveRight': {
+      // The keyboard equivalent of dragging a tab. Clamping lives in
+      // reorderDocument, so moving past either end is a harmless no-op rather
+      // than something this router has to special-case.
+      const state = store.getState();
+      const active = state.activeDocumentId;
+      if (active === null) break;
+      const from = state.documents.findIndex((d) => d.id === active);
+      if (from === -1) break;
+      store.setState((prev) =>
+        reorderDocument(prev, active, from + (id === 'tab.moveLeft' ? -1 : 1)),
+      );
+      break;
+    }
     case 'tab.next': {
       const nextId = neighbourId(store.getState(), 1);
       if (nextId !== null) switchToDocument(nextId);
