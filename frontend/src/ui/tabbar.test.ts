@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { EditorState } from '@codemirror/state';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createUntitledDocument, type Document } from '../state/document';
 import { COMMAND_EVENT } from './menubar';
 import { buildTabStrip, tabActivateCommand, tabCloseCommand } from './tabbar';
@@ -17,12 +17,22 @@ function dirtyDoc(overrides: Partial<Document> = {}): Document {
   return docWith({ editorState: changed, savedDoc: original.doc, ...overrides });
 }
 
+/** Listeners registered by captureCommands, torn down after each test. */
+const captured: ((event: Event) => void)[] = [];
+
+afterEach(() => {
+  for (const listener of captured) document.removeEventListener(COMMAND_EVENT, listener);
+  captured.length = 0;
+});
+
 /** Records every hashpad:command dispatched on `document` from this point on. */
 function captureCommands(): string[] {
   const seen: string[] = [];
-  document.addEventListener(COMMAND_EVENT, (event) => {
+  const listener = (event: Event): void => {
     seen.push((event as CustomEvent<string>).detail);
-  });
+  };
+  document.addEventListener(COMMAND_EVENT, listener);
+  captured.push(listener);
   return seen;
 }
 
@@ -126,5 +136,76 @@ describe('buildTabStrip', () => {
     tab!.querySelector<HTMLButtonElement>('.tab__close')!.click();
 
     expect(seen).toEqual([tabCloseCommand('a')]);
+  });
+});
+
+describe('accessible naming', () => {
+  it('names a clean tab with just the filename', () => {
+    const [tab] = tabsOf(buildTabStrip([docWith({ id: 'a', filePath: '/notes/todo.md' })], 'a'));
+    expect(tab!.getAttribute('aria-label')).toBe('todo.md');
+  });
+
+  // The dirty dot is aria-hidden decoration, so without this the only cue that
+  // a document has unsaved changes would never reach a screen reader.
+  it('names a dirty tab as having unsaved changes', () => {
+    const [tab] = tabsOf(buildTabStrip([dirtyDoc({ id: 'a', filePath: '/notes/todo.md' })], 'a'));
+    expect(tab!.getAttribute('aria-label')).toBe('todo.md, unsaved changes');
+  });
+
+  // A <button> may not contain interactive content; browsers enforce that by
+  // flattening the subtree in the accessibility tree, which would strip the
+  // close button's role and bleed its label into the tab's own name.
+  it('does not nest the close button inside a button element', () => {
+    const [tab] = tabsOf(buildTabStrip([docWith({ id: 'a' })], 'a'));
+    expect(tab!.tagName).not.toBe('BUTTON');
+    expect(tab!.closest('button')).toBeNull();
+  });
+
+  it('keeps each tab reachable by keyboard', () => {
+    const [tab] = tabsOf(buildTabStrip([docWith({ id: 'a' })], 'a'));
+    expect(tab!.tabIndex).toBe(0);
+  });
+});
+
+describe('keyboard activation', () => {
+  it('activates the tab on Enter', () => {
+    const seen = captureCommands();
+    const [tab] = tabsOf(buildTabStrip([docWith({ id: 'a' }), docWith({ id: 'b' })], 'b'));
+
+    tab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(seen).toEqual([tabActivateCommand('a')]);
+  });
+
+  it('ignores other keys', () => {
+    const seen = captureCommands();
+    const [tab] = tabsOf(buildTabStrip([docWith({ id: 'a' })], 'a'));
+
+    tab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+
+    expect(seen).toEqual([]);
+  });
+
+  // Enter on the close button must close only. Without the target check the
+  // keydown bubbles to the tab and activates the tab it just closed.
+  it('does not also activate when Enter lands on the close button', () => {
+    const seen = captureCommands();
+    const strip = buildTabStrip([docWith({ id: 'a' })], 'a');
+    const close = strip.querySelector<HTMLButtonElement>('.tab__close');
+
+    close!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(seen).not.toContain(tabActivateCommand('a'));
+  });
+});
+
+describe('the new-tab button', () => {
+  it('dispatches the new-document command', () => {
+    const seen = captureCommands();
+    const strip = buildTabStrip([docWith({ id: 'a' })], 'a');
+
+    strip.querySelector<HTMLButtonElement>('.tabbar__new')!.click();
+
+    expect(seen).toEqual(['file.new']);
   });
 });

@@ -51,14 +51,25 @@ function emit(command: string): void {
   document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: command }));
 }
 
-function buildTab(doc: Document, isActive: boolean): HTMLButtonElement {
+function buildTab(doc: Document, isActive: boolean): HTMLDivElement {
   const name = displayName(doc);
+  const dirty = isDirty(doc);
 
-  const tab = document.createElement('button');
-  tab.type = 'button';
+  // A div rather than a button, despite this being a click target. HTML forbids
+  // interactive content inside a <button>, and browsers implement that by
+  // flattening the button's subtree in the accessibility tree — which would
+  // strip the nested close button's role and let its label bleed into the tab's
+  // own accessible name. The cost is re-implementing what a button gives free:
+  // tabindex and Enter/Space activation, both below.
+  const tab = document.createElement('div');
   tab.className = 'tab';
   tab.setAttribute('role', 'tab');
+  tab.tabIndex = 0;
   tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  // The dirty dot is aria-hidden decoration, and the visible label is only the
+  // basename, so without this the single cue the app's save-safety story rests
+  // on would reach assistive tech nowhere at all.
+  tab.setAttribute('aria-label', dirty ? `${name}, unsaved changes` : name);
   // SPEC §6.2: the tooltip is the full path. An untitled document has no
   // path to show, so it gets no `title` at all rather than an empty string —
   // some screen readers announce an empty title as "blank", which is worse
@@ -74,7 +85,7 @@ function buildTab(doc: Document, isActive: boolean): HTMLButtonElement {
   const indicator = document.createElement('span');
   indicator.className = 'tab__indicator';
 
-  if (isDirty(doc)) {
+  if (dirty) {
     const dot = document.createElement('span');
     dot.className = 'tab__dot';
     // Decoration only: the tab's own name is what a screen reader needs, so
@@ -103,6 +114,17 @@ function buildTab(doc: Document, isActive: boolean): HTMLButtonElement {
   tab.append(indicator, label);
 
   tab.addEventListener('click', () => emit(tabActivateCommand(doc.id)));
+
+  // Restores what dropping <button> cost us. Space is excluded deliberately —
+  // it scrolls by default and a tab strip is not a place users expect that, but
+  // Enter alone matches how the menu bar's items already behave. Keydown events
+  // originating in the close button are ignored so Enter there does not both
+  // close and activate.
+  tab.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.target !== tab) return;
+    event.preventDefault();
+    emit(tabActivateCommand(doc.id));
+  });
 
   // Middle-click closes (SPEC §6.2). A real middle-click fires 'auxclick' in
   // Chromium (WebView2's engine), not 'click' — but 'mousedown' fires for
