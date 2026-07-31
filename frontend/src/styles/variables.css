@@ -66,6 +66,10 @@
   --accent-fg: #ffffff;
   --accent-subtle: color-mix(in oklab, var(--accent-base) 14%, transparent);
   --selection: color-mix(in oklab, var(--accent-base) 26%, transparent);
+  /* Drag-to-reorder's insertion line (SPEC §6.2). Reuses --accent rather than
+     a standalone colour: it is the same "here's where the next action lands"
+     meaning the active-tab underline already carries. */
+  --drop-indicator: var(--accent);
 
   /* Windows' standard close red. Deliberately identical in both themes — it is
      the one colour users read as "this closes the window", so it should not
@@ -118,6 +122,7 @@
   --accent-fg: #1a1a1a;
   --accent-subtle: color-mix(in oklab, var(--accent-base) 22%, transparent);
   --selection: color-mix(in oklab, var(--accent-base) 34%, transparent);
+  --drop-indicator: var(--accent);
 
   --bg-danger: #c42b1c;
   --fg-on-danger: #ffffff;

@@ -21,7 +21,7 @@ import {
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { store, setEditorView } from './state/appcontext';
-import { addDocument, documentAtPosition, neighbourId } from './state/documents';
+import { addDocument, documentAtPosition, neighbourId, reorderDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
 
 const root = document.querySelector<HTMLDivElement>('#app');
@@ -61,8 +61,17 @@ document.addEventListener(COMMAND_EVENT, (event) => {
   // matched by the plain-string switch below -- handle them first and return.
   const tabCommand = parseTabCommand(id);
   if (tabCommand) {
-    if (tabCommand.kind === 'activate') switchToDocument(tabCommand.id);
-    else void closeDocumentWithPrompt(tabCommand.id);
+    switch (tabCommand.kind) {
+      case 'activate':
+        switchToDocument(tabCommand.id);
+        break;
+      case 'close':
+        void closeDocumentWithPrompt(tabCommand.id);
+        break;
+      case 'reorder':
+        store.setState((prev) => reorderDocument(prev, tabCommand.id, tabCommand.toIndex));
+        break;
+    }
     return;
   }
 

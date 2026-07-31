@@ -263,6 +263,28 @@ body {
   background: var(--bg-active);
 }
 
+/* Drag-to-reorder's insertion point (SPEC §6.2): a class on the tab being
+   hovered, never a DOM move -- reordering elements mid-drag would shift the
+   drop target out from under the cursor, which is exactly the jitter this
+   avoids. inset box-shadow draws the line without adding to the box model
+   (unlike a border, which -- even with box-sizing: border-box -- would still
+   need a matching change somewhere else to avoid nudging the label), so nothing
+   shifts by even a pixel while it's shown. */
+.tab--insert-before {
+  box-shadow: inset 2px 0 0 0 var(--drop-indicator);
+}
+
+.tab--insert-after {
+  box-shadow: inset -2px 0 0 0 var(--drop-indicator);
+}
+
+/* The strip doesn't reorder its DOM until drop, so without this the only
+   sign a drag is under way at all is the browser's own ghost image trailing
+   the cursor. */
+.tab--dragging {
+  opacity: 0.5;
+}
+
 .tab__label {
   flex: 1 1 auto;
   min-width: 0;

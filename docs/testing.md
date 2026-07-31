@@ -54,3 +54,18 @@ close request, so the following need a human running `build/bin/hashpad.exe`.
 - [ ] Press Ctrl+S on an untitled (never-saved) document and confirm it opens the Save As dialog rather than silently failing.
 - [ ] Start a Save As, then cancel the dialog, and confirm the document is still marked dirty and still unsaved.
 - [ ] With unsaved changes, close the window and confirm the Save / Don't Save / Cancel prompt appears with all three buttons, and that Cancel aborts the close (the window stays open).
+
+## Checkpoint C manual checks
+
+Automation cannot drive a real OS-level drag gesture, real horizontal scroll physics, or real hover/pointer timing, so the following need a human running `build/bin/hashpad.exe`.
+
+- [ ] Drag a tab past several others and confirm the order sticks (survives switching away and back, and survives closing an unrelated tab).
+- [ ] Open enough tabs to trigger horizontal scrolling in the strip.
+- [ ] Middle-click a tab and confirm it closes.
+- [ ] Hover a tab and confirm the dirty dot becomes an × (and back, on mouse-out).
+- [ ] Hover a saved tab and confirm the tooltip shows the full path.
+- [ ] Ctrl+W on the last remaining tab leaves a fresh untitled document, not a window with zero tabs.
+- [ ] Ctrl+Shift+T after closing a saved tab reopens it.
+- [ ] Ctrl+Shift+T after closing an untitled tab does nothing (there is no path to reopen).
+
+**Known gap:** drag-to-reorder has no keyboard equivalent. Every other tab-strip action (activate, close, cycle, jump to position) has a keyboard path; reordering does not. This is a real accessibility gap, not an oversight to wave away -- SPEC §6.2 only asks for drag, but a keyboard-only user cannot reorder tabs at all in this checkpoint.
