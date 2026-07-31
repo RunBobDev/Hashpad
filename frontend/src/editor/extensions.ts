@@ -99,6 +99,34 @@ export function buildExtensions(isDark: boolean): Extension[] {
         { key: 'Mod-s', run: dispatchCommand('file.save') },
         { key: 'Mod-Shift-s', run: dispatchCommand('file.saveAs') },
         { key: 'Mod-n', run: dispatchCommand('file.new') },
+        { key: 'Mod-w', run: dispatchCommand('tab.close') },
+        { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },
+        // Ctrl-Tab/Ctrl-Shift-Tab, spelled with the literal Ctrl- modifier
+        // rather than Mod-, because SPEC §6.2 fixes this as a Windows-style
+        // chord on every platform, not "whatever this OS calls its primary
+        // modifier". WebView2 (Chromium) can treat Ctrl+Tab as its own
+        // browser-tab-switching chord before a page ever sees the keydown,
+        // so only Prec.high plus dispatchCommand's unconditional `true`
+        // return reliably claims it first. There is no separate plain-Tab
+        // indent binding here to worry about clobbering: buildExtensions
+        // never adds @codemirror/commands' `indentWithTab`, and
+        // `defaultKeymap` itself has no Tab entry -- confirmed in
+        // extensions.test.ts, which dispatches a plain Tab keydown and
+        // checks it is left unhandled both before and after this block.
+        { key: 'Ctrl-Tab', run: dispatchCommand('tab.next') },
+        { key: 'Ctrl-Shift-Tab', run: dispatchCommand('tab.previous') },
+        // One binding per position (Mod-Alt-1..9) rather than a single
+        // handler reading event.code: CodeMirror's own keymap dispatch
+        // already does modifier matching and Mac/Windows normalisation per
+        // binding, so this loop gets that for free instead of re-deriving
+        // it. Ctrl+Alt rather than plain Ctrl -- see documents.ts's
+        // documentAtPosition and the task brief -- because Ctrl+1..6 is
+        // reserved for heading levels in a later checkpoint; that collision
+        // was resolved deliberately and is not to be undone here.
+        ...Array.from({ length: 9 }, (_, i) => ({
+          key: `Mod-Alt-${i + 1}`,
+          run: dispatchCommand(`tab.goto${i + 1}`),
+        })),
       ]),
     ),
     keymap.of([...defaultKeymap, ...historyKeymap]),

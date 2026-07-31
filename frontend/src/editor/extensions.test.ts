@@ -4,6 +4,7 @@ import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it } from 'vitest';
 import { store, setEditorView } from '../state/appcontext';
 import { createUntitledDocument, isDirty } from '../state/document';
+import { COMMAND_EVENT } from '../ui/menubar';
 import { buildExtensions } from './extensions';
 
 /**
@@ -61,6 +62,140 @@ describe('syncActiveDocument update listener', () => {
     expect(updated!.editorState).toBe(doc.editorState);
     expect(isDirty(updated!)).toBe(false);
 
+    view.destroy();
+  });
+});
+
+/**
+ * The tab keymap lives inside a real `Prec.high(keymap.of([...]))` block, and
+ * CodeMirror's key handling (`handleKeyEvents` in @codemirror/view) is wired
+ * up as a `keydown` DOM listener on `view.contentDOM` -- so the only way to
+ * prove a binding actually fires (as opposed to merely appearing in the
+ * `keymap.of([...])` array with the right-looking `key` string) is to
+ * construct a real `EditorView` and dispatch a real `KeyboardEvent` at it,
+ * the same technique the describe block above already established works
+ * under jsdom.
+ *
+ * `dispatchEvent`'s return value doubles as a "was this consumed" check:
+ * `dispatchCommand`'s handler always returns `true`, which CodeMirror's
+ * `runHandlers` treats as "call `event.preventDefault()`", which makes
+ * `dispatchEvent` itself return `false`. That is what lets the plain-Tab test
+ * below assert not just "no command fired" but "the key was left alone",
+ * which is the actual regression this task's hazard warns about.
+ */
+describe('tab command keymap', () => {
+  afterEach(() => {
+    store.setState(() => ({ documents: [], activeDocumentId: null, isDark: false, closedPaths: [] }));
+  });
+
+  function buildView(): EditorView {
+    return new EditorView({
+      state: EditorState.create({ doc: '', extensions: buildExtensions(false) }),
+      parent: document.createElement('div'),
+    });
+  }
+
+  /** Records every hashpad:command dispatched on `document` while active. */
+  function captureCommands(): { seen: string[]; stop: () => void } {
+    const seen: string[] = [];
+    const listener = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listener);
+    return { seen, stop: () => document.removeEventListener(COMMAND_EVENT, listener) };
+  }
+
+  /** Dispatches a real keydown on the view's editable root; returns whether it was left unhandled. */
+  function press(view: EditorView, key: string, modifiers: KeyboardEventInit = {}): boolean {
+    return view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true, ...modifiers }));
+  }
+
+  it('dispatches tab.close on Mod-w and consumes the key', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = press(view, 'w', { ctrlKey: true });
+
+    expect(seen).toEqual(['tab.close']);
+    expect(notHandled).toBe(false);
+
+    stop();
+    view.destroy();
+  });
+
+  it('dispatches tab.reopen on Mod-Shift-t', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    press(view, 't', { ctrlKey: true, shiftKey: true });
+
+    expect(seen).toEqual(['tab.reopen']);
+
+    stop();
+    view.destroy();
+  });
+
+  it('dispatches tab.next on Ctrl-Tab and consumes the key', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = press(view, 'Tab', { ctrlKey: true });
+
+    expect(seen).toEqual(['tab.next']);
+    // The genuine hazard this task calls out: if Ctrl-Tab were left
+    // unconsumed, WebView2 could still treat it as its own tab-switching
+    // chord even after our handler ran.
+    expect(notHandled).toBe(false);
+
+    stop();
+    view.destroy();
+  });
+
+  it('dispatches tab.previous on Ctrl-Shift-Tab', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    press(view, 'Tab', { ctrlKey: true, shiftKey: true });
+
+    expect(seen).toEqual(['tab.previous']);
+
+    stop();
+    view.destroy();
+  });
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])('dispatches tab.goto%i on Mod-Alt-%i', (n) => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    press(view, String(n), { ctrlKey: true, altKey: true });
+
+    expect(seen).toEqual([`tab.goto${n}`]);
+
+    stop();
+    view.destroy();
+  });
+
+  /**
+   * The regression check the task brief asks for by name: verify plain Tab
+   * (no modifiers) is untouched by adding Ctrl-Tab. It was already the case
+   * before this task that Tab did nothing special here -- buildExtensions
+   * never adds @codemirror/commands' `indentWithTab`, and `defaultKeymap`
+   * itself carries no Tab entry (checked directly against the installed
+   * @codemirror/commands package) -- so there was no indent-on-Tab behaviour
+   * to begin with, and none for this task to have broken. What matters is
+   * that our new Ctrl-Tab binding, added at high precedence, does not also
+   * swallow a bare Tab keydown.
+   */
+  it('leaves plain Tab unhandled -- no tab command fires and the key is not consumed', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = press(view, 'Tab');
+
+    expect(seen).toEqual([]);
+    expect(notHandled).toBe(true);
+
+    stop();
     view.destroy();
   });
 });

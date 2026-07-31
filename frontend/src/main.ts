@@ -12,11 +12,16 @@ import {
   saveDocument,
   windowTitle,
 } from './files/fileops';
-import { closeDocumentWithPrompt, makeUntitledDocument, switchToDocument } from './files/documentops';
+import {
+  closeDocumentWithPrompt,
+  makeUntitledDocument,
+  reopenLastClosed,
+  switchToDocument,
+} from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { store, setEditorView } from './state/appcontext';
-import { addDocument } from './state/documents';
+import { addDocument, documentAtPosition, neighbourId } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
 
 const root = document.querySelector<HTMLDivElement>('#app');
@@ -91,6 +96,46 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     case 'edit.redo':
       redo(view);
       break;
+    case 'tab.close': {
+      // No id is carried on this command (unlike tab-bar close, which names
+      // its tab explicitly) -- Ctrl+W and File > Close Tab both always mean
+      // "close whichever tab is on screen right now".
+      const activeId = store.getState().activeDocumentId;
+      if (activeId !== null) void closeDocumentWithPrompt(activeId);
+      break;
+    }
+    case 'tab.reopen':
+      void reopenLastClosed();
+      break;
+    case 'tab.next': {
+      const nextId = neighbourId(store.getState(), 1);
+      if (nextId !== null) switchToDocument(nextId);
+      break;
+    }
+    case 'tab.previous': {
+      const previousId = neighbourId(store.getState(), -1);
+      if (previousId !== null) switchToDocument(previousId);
+      break;
+    }
+    // Nine literal ids rather than a single parameterised command (contrast
+    // ui/tabbar.ts's `tab.activate:<id>`): the set is fixed at exactly 1..9,
+    // so a case per id is plainer than inventing and parsing a second
+    // command-id encoding for a checkpoint that will never need more than
+    // nine of these.
+    case 'tab.goto1':
+    case 'tab.goto2':
+    case 'tab.goto3':
+    case 'tab.goto4':
+    case 'tab.goto5':
+    case 'tab.goto6':
+    case 'tab.goto7':
+    case 'tab.goto8':
+    case 'tab.goto9': {
+      const position = Number(id.slice('tab.goto'.length));
+      const target = documentAtPosition(store.getState(), position);
+      if (target) switchToDocument(target.id);
+      break;
+    }
     default:
       break;
   }

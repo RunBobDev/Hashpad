@@ -51,9 +51,22 @@ interface Menu {
  * `editor/extensions.ts` back them: New, Open, Save, and Save As all do real
  * work, and Ctrl+N/O/S/Shift+S already work as shortcuts.
  *
- * Still unavailable: Edit > Find/Replace (no search panel yet), every View
- * item (no preview, outline, or word-wrap toggle yet), and Help > About (no
- * dialog yet).
+ * `tab.close`/`tab.reopen` sit in File next to New and Open rather than under
+ * View or a new "Tabs" menu — SPEC §6.1 fixes the bar at exactly four menus
+ * (File, Edit, View, Help), so tab management has to live inside one of
+ * those, and it is fundamentally about which file is open, same as New and
+ * Open. `tab.next`/`tab.previous` go under View instead: they change what is
+ * *displayed*, not what documents exist, which is the same distinction that
+ * already separates View's other (still-disabled) display toggles from
+ * File's document operations. There is deliberately no per-position "Go to
+ * Tab 1".."Go to Tab 9" — nine near-identical entries would be menu clutter
+ * that Next/Previous already make discoverable; Ctrl+Alt+1..9 (see
+ * editor/extensions.ts) remains keyboard-only, same as most editors treat
+ * numbered-tab jumps.
+ *
+ * Still unavailable: Edit > Find/Replace (no search panel yet), View's
+ * display toggles (no preview, outline, or word-wrap yet), and Help > About
+ * (no dialog yet).
  */
 const MENUS: Menu[] = [
   {
@@ -61,6 +74,8 @@ const MENUS: Menu[] = [
     items: [
       { id: 'file.new', label: 'New', shortcut: 'Ctrl+N', enabled: true },
       { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', enabled: true },
+      { id: 'tab.close', label: 'Close Tab', shortcut: 'Ctrl+W', enabled: true },
+      { id: 'tab.reopen', label: 'Reopen Closed Tab', shortcut: 'Ctrl+Shift+T', enabled: true },
       { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: true },
       { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: true },
       { id: 'file.exit', label: 'Exit', enabled: true },
@@ -78,6 +93,8 @@ const MENUS: Menu[] = [
   {
     label: 'View',
     items: [
+      { id: 'tab.next', label: 'Next Tab', shortcut: 'Ctrl+Tab', enabled: true },
+      { id: 'tab.previous', label: 'Previous Tab', shortcut: 'Ctrl+Shift+Tab', enabled: true },
       { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: false },
       { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: false },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: false },
