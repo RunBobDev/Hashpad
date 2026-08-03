@@ -234,6 +234,37 @@ The rejected alternative was calling Win32 `MB_YESNOCANCEL` by syscall, which yi
 Yes / No / Cancel — precisely the wording §6.3 avoids — and adds Windows-only code plus a
 Linux equivalent for a dialog the app can render itself.
 
+### 4.11 Tab tear-off to a second window: considered and declined
+
+Raised by the owner after Checkpoint C: drag a tab out of the window to open it in a
+second instance, and drag it back to close that instance. Investigated and declined —
+recorded here so it does not resurface as an open question.
+
+**Wails v2 supports exactly one window per application.** Multi-window is a Wails v3
+feature, and v3 is still alpha (§1). So "another window" necessarily means another
+*process*.
+
+The two halves differ sharply:
+
+- **Dragging out** is possible but conflicts with two spec decisions. SPEC §6.4 requires a
+  single-instance lock so an Explorer double-click reuses the running app; that cannot
+  coexist with spawning processes on demand. And transferring a tab with unsaved changes
+  requires writing that content somewhere for the new process to read, which SPEC §6.3
+  forbids outright.
+- **Dragging back in cannot be done.** HTML5 drag-and-drop does not cross process
+  boundaries — a webview cannot detect a drag that originated in another application.
+  Chrome and VS Code implement tear-off with native OS window handling and mouse capture,
+  owning the windowing layer. Here it would mean bespoke Win32 code, then a second
+  implementation for WebKitGTK, against SPEC §2.4 — for a feature SPEC §8 lists as
+  explicitly out of scope ("Multi-window — tabs are sufficient").
+
+**The achievable subset, if it is ever wanted:** a tab context-menu "Open in New Window"
+for **saved** files only, launching a second instance with that path. No unsaved-content
+transfer, no cross-process dragging. The single-instance lock would need a launch flag so
+a deliberate second window bypasses it while Explorer double-clicks still route to the
+primary. Deferred by agreement; it would overturn SPEC §8's multi-window decision, which
+is the owner's call to make.
+
 ### 4.9 GitHub Actions workflow deferred
 
 SPEC §9 asks for a release workflow. There is no repository yet, so this is deferred by
