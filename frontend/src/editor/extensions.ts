@@ -8,6 +8,8 @@ import {
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
+import { blockquoteLines } from './blockquote';
+import { markdownSupport } from './highlight';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { store } from '../state/appcontext';
 
@@ -136,6 +138,12 @@ export function buildExtensions(isDark: boolean): Extension[] {
       ]),
     ),
     keymap.of([...defaultKeymap, ...historyKeymap]),
+    // Markdown language + token highlighting (highlight.ts), and the
+    // blockquote line decoration it can't express on its own (blockquote.ts)
+    // -- see those modules for why markers stay visible and why the
+    // decoration is viewport-limited.
+    ...markdownSupport(),
+    blockquoteLines,
     hashpadTheme,
     darkThemeCompartment.of(EditorView.darkTheme.of(isDark)),
     EditorView.updateListener.of(syncActiveDocument),

@@ -322,6 +322,21 @@ body {
 }
 
 /*
+ * The blockquote line decoration (editor/blockquote.ts). Qualified with
+ * `.cm-content` ancestor plus the `.cm-line` class CM6 already puts on every
+ * line, not just `.cm-blockquote` alone: theme.ts's hashpadTheme sets
+ * `.cm-line`'s padding through EditorView.theme, which compiles to a
+ * two-class selector (a generated theme class plus `.cm-line`) of equal or
+ * greater specificity than a bare `.cm-blockquote` class would have. Without
+ * the extra ancestor here, the padding-left below would be a coin flip
+ * against that rule instead of a guaranteed override.
+ */
+.cm-content .cm-line.cm-blockquote {
+  border-left: 3px solid var(--syn-quote-border);
+  padding-left: 12px;
+}
+
+/*
  * SPEC §6.3 Save/Don't Save/Cancel prompt (see ui/confirmdialog.ts). Verified
  * against real Chromium (WebView2's engine) that custom properties DO inherit
  * into ::backdrop from the dialog that generates it, so it takes a token like
