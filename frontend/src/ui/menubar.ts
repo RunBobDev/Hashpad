@@ -58,11 +58,11 @@ interface Menu {
  * Open. `tab.next`/`tab.previous` go under View instead: they change what is
  * *displayed*, not what documents exist, which is the same distinction that
  * already separates View's other (still-disabled) display toggles from
- * File's document operations. There is deliberately no per-position "Go to
- * Tab 1".."Go to Tab 9" — nine near-identical entries would be menu clutter
- * that Next/Previous already make discoverable; Ctrl+Alt+1..9 (see
- * editor/extensions.ts) remains keyboard-only, same as most editors treat
- * numbered-tab jumps.
+ * File's document operations. "Go to Tab 1".."Go to Tab 9" are listed even
+ * though nine near-identical entries are more than this menu wants: SPEC §6.14
+ * requires every shortcut to be reachable through a menu with its shortcut
+ * displayed, and a single summary line would show the chord without being
+ * invocable, which is not what that asks for.
  *
  * Still unavailable: Edit > Find/Replace (no search panel yet), View's
  * display toggles (no preview, outline, or word-wrap yet), and Help > About
@@ -127,9 +127,12 @@ const MENUS: Menu[] = [
         shortcut: `Ctrl+Alt+${i + 1}`,
         enabled: true,
       })),
-      { id: 'theme.system', label: 'System', enabled: true },
-      { id: 'theme.light', label: 'Light', enabled: true },
-      { id: 'theme.dark', label: 'Dark', enabled: true },
+      // Prefixed rather than bare "System"/"Light"/"Dark": these sit directly
+      // below "Go to Tab 9" in a flat list with no separators or submenus, so
+      // an item reading only "System" says nothing about what it does.
+      { id: 'theme.system', label: 'Theme: Follow System', enabled: true },
+      { id: 'theme.light', label: 'Theme: Light', enabled: true },
+      { id: 'theme.dark', label: 'Theme: Dark', enabled: true },
       { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: false },
       { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: false },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: false },
