@@ -26,9 +26,9 @@ import type { Extension } from '@codemirror/state';
  */
 export const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.heading1, fontSize: '1.6em', fontWeight: 'bold', color: 'var(--syn-heading)' },
-  { tag: tags.heading2, fontSize: '1.4em', fontWeight: 'bold', color: 'var(--syn-heading)' },
-  { tag: tags.heading3, fontSize: '1.25em', fontWeight: 'bold', color: 'var(--syn-heading)' },
-  { tag: tags.heading4, fontSize: '1.15em', fontWeight: 'bold', color: 'var(--syn-heading)' },
+  { tag: tags.heading2, fontSize: '1.42em', fontWeight: 'bold', color: 'var(--syn-heading)' },
+  { tag: tags.heading3, fontSize: '1.28em', fontWeight: 'bold', color: 'var(--syn-heading)' },
+  { tag: tags.heading4, fontSize: '1.17em', fontWeight: 'bold', color: 'var(--syn-heading)' },
   { tag: tags.heading5, fontSize: '1.08em', fontWeight: 'bold', color: 'var(--syn-heading)' },
   { tag: tags.heading6, fontSize: '1.0em', fontWeight: 'bold', color: 'var(--syn-heading)' },
   { tag: tags.strong, fontWeight: 'bold' },
