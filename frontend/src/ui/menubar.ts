@@ -67,6 +67,22 @@ interface Menu {
  * Still unavailable: Edit > Find/Replace (no search panel yet), View's
  * display toggles (no preview, outline, or word-wrap yet), and Help > About
  * (no dialog yet).
+ *
+ * `theme.system`/`theme.light`/`theme.dark` sit in their own group below the
+ * tab commands and above the (still-disabled) display toggles -- distinct
+ * from both neighbours rather than interleaved with either, so the menu
+ * stays scannable per-topic. None carries a shortcut: SPEC §6.14's list of
+ * chords to wire up has no entry for theme switching, so there is nothing to
+ * display beside them (contrast `view.wordWrap`, also shortcut-less, for the
+ * same reason). There is deliberately no fourth entry per accent preset:
+ * SPEC §6.14 only requires *shortcuts* to be menu-reachable, and accents have
+ * none, while §6.13 places appearance settings (and §6.12's custom colour
+ * picker) in the settings dialog -- splitting the eight presets from the
+ * picker across two surfaces would be worse than either alone, so accent
+ * presets stay deferred to the settings dialog in Checkpoint H. Also
+ * deliberately absent: a checkmark or radio indicator on whichever mode is
+ * active. `MenuItem` has no field for that, and adding one is out of scope
+ * for the checkpoint that first gives these commands somewhere to live.
  */
 const MENUS: Menu[] = [
   {
@@ -111,6 +127,9 @@ const MENUS: Menu[] = [
         shortcut: `Ctrl+Alt+${i + 1}`,
         enabled: true,
       })),
+      { id: 'theme.system', label: 'System', enabled: true },
+      { id: 'theme.light', label: 'Light', enabled: true },
+      { id: 'theme.dark', label: 'Dark', enabled: true },
       { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: false },
       { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: false },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: false },

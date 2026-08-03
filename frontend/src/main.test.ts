@@ -31,7 +31,7 @@ import { buildExtensions } from './editor/extensions';
 import { createUntitledDocument, type Document } from './state/document';
 import { getEditorView, store } from './state/appcontext';
 import { COMMAND_EVENT } from './ui/menubar';
-import { ReadFile } from '../wailsjs/go/app/App';
+import { ReadFile, SaveSettings, SystemThemeIsDark } from '../wailsjs/go/app/App';
 
 vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
@@ -307,5 +307,89 @@ describe('tab.moveLeft / tab.moveRight commands', () => {
     emit('tab.moveRight');
 
     expect(store.getState().documents.map((d) => d.id)).toEqual(['a']);
+  });
+});
+
+describe('theme.system / theme.light / theme.dark commands', () => {
+  it('theme.light applies the light theme immediately, with no await needed', () => {
+    // Start from a known non-light state so the assertion below can't pass
+    // by accident (e.g. the dataset attribute never having been set).
+    emit('theme.dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+
+    emit('theme.light');
+
+    // setThemeMode applies before its first await (LoadSettings), so this is
+    // true synchronously right after the event dispatch returns.
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(store.getState().isDark).toBe(false);
+  });
+
+  it('theme.dark applies the dark theme immediately, with no await needed', () => {
+    emit('theme.light');
+    expect(document.documentElement.dataset.theme).toBe('light');
+
+    emit('theme.dark');
+
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(store.getState().isDark).toBe(true);
+  });
+
+  it('theme.system re-reads the system preference immediately rather than keeping the prior theme', async () => {
+    // Windows currently reports light, matching SPEC's example of switching
+    // Dark -> System while the OS is light -- this must go light right away,
+    // not wait for the next focus event to notice.
+    vi.mocked(SystemThemeIsDark).mockResolvedValueOnce(false);
+    emit('theme.dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+
+    emit('theme.system');
+
+    await vi.waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
+    expect(store.getState().isDark).toBe(false);
+  });
+
+  it.each([
+    ['theme.system', 'system'],
+    ['theme.light', 'light'],
+    ['theme.dark', 'dark'],
+  ])('%s persists "%s" through SaveSettings', async (command, mode) => {
+    emit(command);
+
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    const saved = vi.mocked(SaveSettings).mock.calls[0]![0];
+    expect(saved.appearance.theme).toBe(mode);
+  });
+
+  // The regression this guards against: picking Light (or Dark) and then
+  // alt-tabbing back into the window must not silently revert to the system
+  // theme. themeMode is set synchronously at the top of setThemeMode, before
+  // any await, so the focus listener's `themeMode !== 'system'` guard must
+  // already see 'light' by the time this dispatch runs -- proven here by the
+  // fact that it never even asks the OS for the system preference.
+  it('an explicit Light choice survives a window focus event', async () => {
+    emit('theme.light');
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    expect(document.documentElement.dataset.theme).toBe('light');
+
+    vi.mocked(SystemThemeIsDark).mockClear();
+    window.dispatchEvent(new Event('focus'));
+
+    expect(SystemThemeIsDark).not.toHaveBeenCalled();
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(store.getState().isDark).toBe(false);
+  });
+
+  it('an explicit Dark choice survives a window focus event', async () => {
+    emit('theme.dark');
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    expect(document.documentElement.dataset.theme).toBe('dark');
+
+    vi.mocked(SystemThemeIsDark).mockClear();
+    window.dispatchEvent(new Event('focus'));
+
+    expect(SystemThemeIsDark).not.toHaveBeenCalled();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(store.getState().isDark).toBe(true);
   });
 });

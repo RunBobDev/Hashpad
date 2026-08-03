@@ -2,7 +2,13 @@ import { redo, undo } from '@codemirror/commands';
 import './styles/app.css';
 import { COMMAND_EVENT, mountMenuBar } from './ui/menubar';
 import { EventsOn, Quit, WindowSetTitle } from '../wailsjs/runtime/runtime';
-import { ConfirmQuit, LoadSettings, ShowWindow, SystemThemeIsDark } from '../wailsjs/go/app/App';
+import {
+  ConfirmQuit,
+  LoadSettings,
+  SaveSettings,
+  ShowWindow,
+  SystemThemeIsDark,
+} from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import {
   openFiles,
@@ -105,6 +111,50 @@ async function bootstrapTheme(): Promise<void> {
   }
 }
 void bootstrapTheme();
+
+/**
+ * Routes a View > Theme menu choice. `themeMode` is updated first and
+ * unconditionally -- it is the same module-local the focus listener below
+ * reads to decide whether the OS may override the user's pick, so an
+ * explicit Light or Dark choice must be visible there immediately, not just
+ * reflected in the applied colours.
+ *
+ * SPEC §6.13 requires every setting to take effect immediately, so the new
+ * theme is applied before anything async happens; `SaveSettings` runs after,
+ * and a failed disk write (logged, not thrown) must not undo the repaint
+ * that already happened.
+ */
+async function setThemeMode(mode: ThemeMode): Promise<void> {
+  themeMode = mode;
+
+  // Light/dark resolve without consulting the OS at all (resolveIsDark), so
+  // only 'system' needs a fresh read -- picking it while Windows is light
+  // must go light right away rather than waiting for the next focus event.
+  let systemIsDark: boolean | null = null;
+  if (mode === 'system') {
+    try {
+      systemIsDark = await SystemThemeIsDark();
+    } catch {
+      // Same fallback as bootstrapTheme: undeterminable is expected (SPEC
+      // §6.12), worth one log line, and resolveIsDark's null handling covers
+      // the rest without further action.
+      console.info('hashpad: system theme preference is undeterminable; falling back');
+      systemIsDark = null;
+    }
+  }
+  applyTheme(resolveIsDark(mode, systemIsDark));
+
+  try {
+    const settings = await LoadSettings();
+    settings.appearance.theme = mode;
+    await SaveSettings(settings);
+  } catch (err) {
+    // The visible change above already happened; a settings round-trip that
+    // fails here means the choice won't survive a restart, not that it
+    // silently didn't apply.
+    console.error('hashpad: failed to persist theme choice', err);
+  }
+}
 
 // There is no OS-level watcher (see internal/app/theme.go), so this is how a
 // theme changed mid-session gets picked up -- a registry read on focus costs
@@ -221,6 +271,15 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       if (previousId !== null) switchToDocument(previousId);
       break;
     }
+    case 'theme.system':
+      void setThemeMode('system');
+      break;
+    case 'theme.light':
+      void setThemeMode('light');
+      break;
+    case 'theme.dark':
+      void setThemeMode('dark');
+      break;
     // Nine literal ids rather than a single parameterised command (contrast
     // ui/tabbar.ts's `tab.activate:<id>`): the set is fixed at exactly 1..9,
     // so a case per id is plainer than inventing and parsing a second
