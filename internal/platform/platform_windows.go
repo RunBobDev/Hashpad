@@ -30,6 +30,9 @@ const (
 // light and a corrupt value should not darken the whole UI.
 func appsUseLightThemeToDark(value uint64) bool { return value == 0 }
 
+// PLATFORM: reads the Windows colour preference from the registry. The Linux
+// equivalent is a different mechanism entirely — desktop-environment dependent,
+// and often undeterminable, which is why the interface allows an error.
 func (p *windowsPlatform) SystemThemeIsDark() (bool, error) {
 	key, err := registry.OpenKey(registry.CURRENT_USER, personalizeKey, registry.QUERY_VALUE)
 	if err != nil {
