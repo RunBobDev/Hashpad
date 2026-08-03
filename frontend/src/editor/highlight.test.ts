@@ -2,9 +2,11 @@
 import { tags, type Tag } from '@lezer/highlight';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { LanguageDescription } from '@codemirror/language';
 import { describe, expect, it } from 'vitest';
 import { blockquoteLines } from './blockquote';
 import { markdownHighlightStyle, markdownSupport } from './highlight';
+import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
 /**
  * `HighlightStyle` and the blockquote `ViewPlugin` both need a real
@@ -70,6 +72,64 @@ describe('markdownHighlightStyle', () => {
     const computed = window.getComputedStyle(markerEl as Element);
     expect(computed.display).not.toBe('none');
     expect(computed.visibility).not.toBe('hidden');
+
+    view.destroy();
+  });
+});
+
+describe('fenced code block highlighting (task 5)', () => {
+  it('keeps the fence markers visible and marker-styled on a fenced block that names a language', () => {
+    // No load() awaited here on purpose: marker rendering is provided by the
+    // *outer* markdown grammar's own CodeMark node (see highlight.ts's module
+    // comment), not by whichever nested grammar the info string selects, so
+    // it must not depend on that grammar having finished loading.
+    const view = mount('```python\ndef f():\n    pass\n```');
+    const markerClass = classFor(tags.processingInstruction);
+
+    const markers = view.contentDOM.querySelectorAll(`.${markerClass}`);
+    // One CodeMark for the opening fence, one for the closing fence.
+    expect(markers.length).toBe(2);
+    for (const marker of markers) expect(marker.textContent).toBe('```');
+
+    view.destroy();
+  });
+
+  /**
+   * `codeLanguages` resolves a fenced block's info string to a
+   * `LanguageDescription` that lazily `import()`s its grammar (see
+   * languages.ts) -- CodeMirror's own async-reparse-on-load scheduling means
+   * a document mounted the instant a *new* language is first requested can
+   * legitimately render one frame of plain text before that import settles.
+   * Awaiting `load()` up front replicates the steady state of an actual
+   * editing session (the grammar already loaded, whether from this document
+   * or an earlier one) without asserting anything about that scheduling
+   * timing itself, which belongs to CodeMirror internals, not this task.
+   */
+  it('colours fenced code content with the loaded grammar, distinctly from the fence markers', async () => {
+    const found = LanguageDescription.matchLanguageName(MARKDOWN_CODE_LANGUAGES, 'python', true);
+    expect(found).not.toBeNull();
+    await found!.load();
+
+    const view = mount('```python\ndef f():\n    pass\n```');
+    const markerClass = classFor(tags.processingInstruction);
+
+    const codeLine = Array.from(view.contentDOM.querySelectorAll('.cm-line')).find((line) =>
+      line.textContent?.includes('def'),
+    );
+    expect(codeLine).toBeDefined();
+
+    // The Python grammar's own `def` keyword must land in some highlighted
+    // span -- i.e. not just bare text, the way it rendered before this task
+    // (verified directly: without `codeLanguages`, this same line is plain
+    // text with zero child spans) -- and that span must carry a different
+    // class than the fence markers, since `def` is a `keyword`
+    // (`defaultHighlightStyle`'s fallback), not a `CodeMark`
+    // (`markdownHighlightStyle`'s `processingInstruction`).
+    const spans = codeLine!.querySelectorAll('span');
+    expect(spans.length).toBeGreaterThan(0);
+    const keywordSpan = Array.from(spans).find((s) => s.textContent === 'def');
+    expect(keywordSpan).toBeDefined();
+    expect(keywordSpan!.className).not.toBe(markerClass);
 
     view.destroy();
   });
