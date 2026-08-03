@@ -44,6 +44,9 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 
 vi.mock('../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
+  // Bound rather than the runtime's WindowShow so Go can tell a normal start
+  // from a frontend that never got this far -- see App.showWindowEventually.
+  ShowWindow: vi.fn(),
   // Resolved, not left as a bare vi.fn(): main.ts's bootstrap awaits this and
   // reads .appearance straight off the result, so leaving it `undefined`
   // (vi.fn()'s default) would push every test in this file through

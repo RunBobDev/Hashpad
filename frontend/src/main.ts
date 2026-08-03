@@ -1,8 +1,8 @@
 import { redo, undo } from '@codemirror/commands';
 import './styles/app.css';
 import { COMMAND_EVENT, mountMenuBar } from './ui/menubar';
-import { EventsOn, Quit, WindowSetTitle, WindowShow } from '../wailsjs/runtime/runtime';
-import { ConfirmQuit, LoadSettings, SystemThemeIsDark } from '../wailsjs/go/app/App';
+import { EventsOn, Quit, WindowSetTitle } from '../wailsjs/runtime/runtime';
+import { ConfirmQuit, LoadSettings, ShowWindow, SystemThemeIsDark } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import {
   openFiles,
@@ -101,7 +101,7 @@ async function bootstrapTheme(): Promise<void> {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
   } finally {
-    WindowShow();
+    ShowWindow();
   }
 }
 void bootstrapTheme();

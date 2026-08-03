@@ -14,6 +14,8 @@ export function ShowOpenDialog():Promise<Array<string>>;
 
 export function ShowSaveDialog(arg1:string):Promise<string>;
 
+export function ShowWindow():Promise<void>;
+
 export function SystemThemeIsDark():Promise<boolean>;
 
 export function WriteFile(arg1:string,arg2:string,arg3:app.Encoding,arg4:app.LineEnding):Promise<void>;

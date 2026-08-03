@@ -26,6 +26,10 @@ export function ShowSaveDialog(arg1) {
   return window['go']['app']['App']['ShowSaveDialog'](arg1);
 }
 
+export function ShowWindow() {
+  return window['go']['app']['App']['ShowWindow']();
+}
+
 export function SystemThemeIsDark() {
   return window['go']['app']['App']['SystemThemeIsDark']();
 }
