@@ -38,16 +38,24 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
   WindowSetTitle: vi.fn(),
+  WindowShow: vi.fn(),
   WindowToggleMaximise: vi.fn(),
 }));
 
 vi.mock('../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
-  LoadSettings: vi.fn(),
+  // Resolved, not left as a bare vi.fn(): main.ts's bootstrap awaits this and
+  // reads .appearance straight off the result, so leaving it `undefined`
+  // (vi.fn()'s default) would push every test in this file through
+  // bootstrapTheme's settings-failed catch branch instead of the tab/document
+  // routing this suite actually exercises. Only the fields main.ts's
+  // bootstrap reads are present -- this is not a full app.Settings.
+  LoadSettings: vi.fn().mockResolvedValue({ appearance: { theme: 'system', accentColor: '#0078d4' } }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
+  SystemThemeIsDark: vi.fn().mockResolvedValue(false),
   WriteFile: vi.fn(),
 }));
 

@@ -1,8 +1,8 @@
 import { redo, undo } from '@codemirror/commands';
 import './styles/app.css';
 import { COMMAND_EVENT, mountMenuBar } from './ui/menubar';
-import { EventsOn, Quit, WindowSetTitle } from '../wailsjs/runtime/runtime';
-import { ConfirmQuit } from '../wailsjs/go/app/App';
+import { EventsOn, Quit, WindowSetTitle, WindowShow } from '../wailsjs/runtime/runtime';
+import { ConfirmQuit, LoadSettings, SystemThemeIsDark } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import {
   openFiles,
@@ -23,6 +23,7 @@ import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { store, setEditorView } from './state/appcontext';
 import { addDocument, documentAtPosition, neighbourId, reorderDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
+import { applyAccent, applyTheme, isValidAccent, resolveIsDark, type ThemeMode } from './theme/theme';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('#app not found');
@@ -36,8 +37,8 @@ const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
 root.append(editorArea);
 
-// No system/manual theme detection yet (later checkpoint), so the editor and
-// the store both start from the same hard-coded light default.
+// Starts light; bootstrapTheme() below replaces this the moment settings and
+// the system preference are known, before the (still-hidden) window shows.
 const view = createEditor(editorArea, '', false);
 setEditorView(view);
 
@@ -50,6 +51,85 @@ store.setState((prev) => ({
   documents: [initialDocument],
   activeDocumentId: initialDocument.id,
 }));
+
+// The mode currently in effect, tracked outside the store because the focus
+// listener needs to know whether the *user's choice* is 'system' -- the
+// store's `isDark` only ever holds the resolved boolean, which can't
+// distinguish "system, currently resolving to light" from an explicit
+// 'light' choice that must never be overridden by the OS.
+let themeMode: ThemeMode = 'system';
+
+function isThemeMode(value: string): value is ThemeMode {
+  return value === 'system' || value === 'light' || value === 'dark';
+}
+
+/**
+ * Settings arrive over IPC and CSP (`script-src 'self'`) forbids the inline
+ * bootstrap script that would otherwise pick a theme before first paint, so
+ * the window starts hidden (main.go's StartHidden) and this is what shows it.
+ *
+ * Wrapped in try/finally: a settings file that fails to load must still
+ * result in a visible window, in the compiled-in default theme (light --
+ * `resolveIsDark('system', null)`), rather than an app that appears to hang
+ * on launch.
+ */
+async function bootstrapTheme(): Promise<void> {
+  try {
+    const settings = await LoadSettings();
+    themeMode = isThemeMode(settings.appearance.theme) ? settings.appearance.theme : 'system';
+
+    let systemIsDark: boolean | null;
+    try {
+      systemIsDark = await SystemThemeIsDark();
+    } catch {
+      // Undeterminable is an expected, meaningful outcome (SPEC §6.12), not a
+      // bug -- worth one log line at startup, but resolveIsDark's fallback to
+      // the manual setting (light, here) handles it without further action.
+      console.info('hashpad: system theme preference is undeterminable at startup; falling back');
+      systemIsDark = null;
+    }
+
+    // A hand-edited settings.json can carry anything in accentColor; writing
+    // it straight into --accent-base without validation is a CSS-injection
+    // vector (theme.ts's isValidAccent), so an invalid value is skipped
+    // rather than applied, leaving variables.css's own default in place.
+    if (isValidAccent(settings.appearance.accentColor)) {
+      applyAccent(settings.appearance.accentColor);
+    }
+    applyTheme(resolveIsDark(themeMode, systemIsDark));
+  } catch (err) {
+    console.error('hashpad: failed to load settings; starting with the default theme', err);
+    applyTheme(false);
+  } finally {
+    WindowShow();
+  }
+}
+void bootstrapTheme();
+
+// There is no OS-level watcher (see internal/app/theme.go), so this is how a
+// theme changed mid-session gets picked up -- a registry read on focus costs
+// microseconds, so polling it here is free.
+window.addEventListener('focus', () => {
+  // An explicit Light or Dark choice must never be overridden by the OS.
+  if (themeMode !== 'system') return;
+
+  void (async () => {
+    let systemIsDark: boolean;
+    try {
+      systemIsDark = await SystemThemeIsDark();
+    } catch {
+      // Swallowed, not logged: unlike the one-shot startup read, this fires
+      // on every focus, and a user whose registry key genuinely doesn't
+      // exist would otherwise see it spammed on every alt-tab.
+      return;
+    }
+
+    const resolved = resolveIsDark(themeMode, systemIsDark);
+    // Alt-tabbing is frequent; repaint only when the resolved theme actually
+    // changed rather than on every focus.
+    if (resolved !== store.getState().isDark) applyTheme(resolved);
+  })();
+});
 
 // Menu items and keyboard shortcuts (see editor/extensions.ts) both dispatch
 // commands rather than calling features directly; this is where those

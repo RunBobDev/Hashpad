@@ -34,9 +34,15 @@ func main() {
 		// applies. Go cannot read CSS, so this is the single sanctioned
 		// exception to "colours only live in variables.css".
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 255},
-		OnStartup:        application.Startup,
-		OnBeforeClose:    application.OnBeforeClose,
-		Bind:             []interface{}{application},
+		// The theme is not known at first paint -- settings arrive over IPC,
+		// and CSP's script-src 'self' forbids the inline bootstrap script
+		// that would otherwise pick a theme before anything renders. So the
+		// window starts hidden and frontend/src/main.ts calls WindowShow once
+		// it has applied a theme, on every path (including failure ones).
+		StartHidden:   true,
+		OnStartup:     application.Startup,
+		OnBeforeClose: application.OnBeforeClose,
+		Bind:          []interface{}{application},
 	})
 	if err != nil {
 		// wails.Run only returns on failure to start (for example, the webview
