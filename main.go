@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"hashpad/internal/app"
+	"hashpad/internal/platform"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -15,6 +16,16 @@ import (
 var assets embed.FS
 
 func main() {
+	// Before the webview exists, so every process it spawns inherits the job.
+	// WebView2 leaves roughly half its process tree running after the window
+	// closes -- a documented WebView2 defect, not something the host can ask it
+	// not to do -- and those orphans accumulate across launches. Not fatal if it
+	// fails: the app works fine, it just leaks the way it did before.
+	if err := platform.ConfineChildProcesses(); err != nil {
+		log.Printf("hashpad: could not confine child processes (%v); "+
+			"webview processes may outlive the app", err)
+	}
+
 	application := app.New()
 
 	err := wails.Run(&options.App{
