@@ -97,6 +97,12 @@
   --syn-link: var(--accent);
   --syn-quote-border: #c8c8c8;
   --syn-quote-fg: #4a4a4a;
+
+  /* ==highlight==. A marker-pen wash: the text stays the primary foreground
+     colour and the background carries the meaning, so contrast is governed by
+     fg-on-highlight rather than by the wash itself. */
+  --syn-highlight-bg: #fff3a3;
+  --syn-highlight-fg: #1a1a1a; /* 15.42:1 */
 }
 
 :root[data-theme='dark'] {
@@ -141,4 +147,9 @@
   --syn-link: var(--accent);
   --syn-quote-border: #3d3d3d;
   --syn-quote-fg: #b0b0b0;
+
+  /* Dark: a saturated yellow wash would glare. Muted amber at low lightness
+     with a light foreground, hand-tuned rather than inverted (SPEC §6.12). */
+  --syn-highlight-bg: #5c4a12;
+  --syn-highlight-fg: #f0e6c8; /* 6.90:1 */
 }

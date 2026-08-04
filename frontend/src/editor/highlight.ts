@@ -16,6 +16,7 @@ import { HighlightStyle, defaultHighlightStyle, syntaxHighlighting } from '@code
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { tags } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
+import { HighlightMarkExtension, highlightTag } from './highlightmark';
 import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
 /**
@@ -51,6 +52,14 @@ export const markdownHighlightStyle = HighlightStyle.define([
   // not decoration -- do not lower it, and do not hide what it colours.
   { tag: tags.processingInstruction, color: 'var(--syn-marker)' },
   { tag: tags.strikethrough, textDecoration: 'line-through' },
+  // The `==` marks themselves keep `tags.processingInstruction` from the
+  // node spec in highlightmark.ts, so source mode's dim-marker rule above
+  // already colours them -- this rule only paints the marked text itself.
+  {
+    tag: highlightTag,
+    backgroundColor: 'var(--syn-highlight-bg)',
+    color: 'var(--syn-highlight-fg)',
+  },
 ]);
 
 /**
@@ -101,7 +110,11 @@ export const markdownHighlightStyle = HighlightStyle.define([
  */
 export function markdownSupport(): Extension[] {
   return [
-    markdown({ base: markdownLanguage, codeLanguages: MARKDOWN_CODE_LANGUAGES }),
+    markdown({
+      base: markdownLanguage,
+      codeLanguages: MARKDOWN_CODE_LANGUAGES,
+      extensions: [HighlightMarkExtension],
+    }),
     syntaxHighlighting(markdownHighlightStyle),
     syntaxHighlighting(defaultHighlightStyle),
   ];
