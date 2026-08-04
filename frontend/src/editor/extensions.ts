@@ -6,7 +6,7 @@ import {
   keymap,
 } from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
-import { Prec, type Extension } from '@codemirror/state';
+import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
@@ -90,6 +90,14 @@ export function buildExtensions(isDark: boolean): Extension[] {
   return [
     history(),
     drawSelection(),
+    // Off by default in CodeMirror. `drawSelection()` above is what actually
+    // renders a second caret/range once one exists -- without it the browser's
+    // native selection painting shows only one -- and the formatting commands
+    // in commands.ts already operate on every range via `changeByRange` and
+    // per-range `enclosingInlineMark` lookups, so turning this on needs no
+    // command changes, only this facet contribution to let the editor build a
+    // multi-range selection in the first place (e.g. multi-cursor click/Alt-click).
+    EditorState.allowMultipleSelections.of(true),
     highlightActiveLine(),
     // Word wrap is on by default (SPEC §6.6). Checkpoint G makes it a toggle.
     EditorView.lineWrapping,

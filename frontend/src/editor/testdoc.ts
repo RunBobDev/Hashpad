@@ -21,8 +21,11 @@ export function testState(doc: string, anchor = 0, head = anchor): EditorState {
     // including the very transaction a test uses to construct a multi-range
     // selection in the first place. Task 2's commands operate on every range
     // in `state.selection.ranges`, so tests need to be able to build a state
-    // that actually has more than one; the shipped editor (extensions.ts)
-    // does not enable this, since nothing yet creates multiple cursors there.
+    // that actually has more than one. `extensions.ts`'s `buildExtensions`
+    // enables the same facet for the shipped editor, so this mirrors
+    // production rather than granting the test harness a capability the app
+    // lacks; it is repeated here because `testState` builds its own extension
+    // list rather than calling `buildExtensions`.
     extensions: [...markdownSupport(), EditorState.allowMultipleSelections.of(true)],
   });
 }

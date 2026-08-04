@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { EditorState } from '@codemirror/state';
+import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it } from 'vitest';
 import { store, setEditorView } from '../state/appcontext';
@@ -197,5 +197,31 @@ describe('tab command keymap', () => {
 
     stop();
     view.destroy();
+  });
+});
+
+/**
+ * `testdoc.ts`'s `testState` enables `EditorState.allowMultipleSelections`
+ * for the command test suites, with a comment that used to claim the shipped
+ * editor did not need the same facet because nothing in it created multiple
+ * cursors yet. That was true when it was written and became false the moment
+ * multi-cursor commands shipped, and nothing would have caught the drift: a
+ * state built the normal way (`EditorState.create({ extensions:
+ * buildExtensions(...) })`) would silently collapse any multi-range
+ * selection back to one, in production, while every command test kept
+ * passing against `testState`'s more permissive state. This test builds a
+ * state the same way the app does and asserts the facet is actually on,
+ * so a future change that drops it here fails a test instead of only
+ * showing up as "second cursor doesn't work" in the running app.
+ */
+describe('allowMultipleSelections', () => {
+  it('permits a state built from buildExtensions to carry more than one selection range', () => {
+    const state = EditorState.create({ doc: 'one two', extensions: buildExtensions(false) });
+
+    const next = state.update({
+      selection: EditorSelection.create([EditorSelection.range(0, 3), EditorSelection.range(4, 7)]),
+    }).state;
+
+    expect(next.selection.ranges).toHaveLength(2);
   });
 });

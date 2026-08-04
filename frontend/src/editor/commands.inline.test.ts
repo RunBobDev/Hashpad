@@ -100,24 +100,107 @@ describe('bold', () => {
 });
 
 describe('the other four inline marks', () => {
+  // Full `{ doc, from, to }` triples, not just the wrapped text: an assertion
+  // that stops at `doc` can't tell a correct wrap from one that inserted the
+  // right characters but left the selection outside its new markers.
   it.each([
-    ['italic', '*'],
-    ['strikethrough', '~~'],
-    ['highlight', '=='],
-    ['inlineCode', '`'],
-  ] as const)('%s wraps a selection', (id, delim) => {
-    const result = apply(testState('a word b', 2, 6), id);
-    expect(result?.doc).toBe(`a ${delim}word${delim} b`);
+    ['italic', 'a *word* b', 3, 7],
+    ['strikethrough', 'a ~~word~~ b', 4, 8],
+    ['highlight', 'a ==word== b', 4, 8],
+    ['inlineCode', 'a `word` b', 3, 7],
+  ] as const)('%s wraps a selection', (id, doc, from, to) => {
+    expect(apply(testState('a word b', 2, 6), id)).toEqual({ doc, from, to });
   });
 
+  // Each row's expected doc is asserted exactly (`toEqual`, not
+  // `not.toContain`): strikethrough and highlight both use multi-character
+  // delimiters, and a remove that deletes one character per side instead of
+  // two -- e.g. leaving `a ~gone~ b` -- would satisfy `not.toContain('*')`
+  // and a three-token split just as well as a correct removal. Only pinning
+  // the exact resulting doc (and, per the file's own `applyCommand` doc
+  // comment, the exact cursor position) catches that.
   it.each([
-    ['italic', 'a *soft* b', 4],
-    ['strikethrough', 'a ~~gone~~ b', 5],
-    ['highlight', 'a ==marked== b', 6],
-    ['inlineCode', 'a `code` b', 4],
-  ] as const)('%s toggles off from inside', (id, doc, pos) => {
-    const result = apply(testState(doc, pos), id);
-    expect(result?.doc).not.toContain('*');
-    expect(result?.doc.trim().split(/\s+/)).toHaveLength(3);
+    ['italic', 'a *soft* b', 4, 'a soft b', 3],
+    ['strikethrough', 'a ~~gone~~ b', 5, 'a gone b', 3],
+    ['highlight', 'a ==marked== b', 6, 'a marked b', 4],
+    ['inlineCode', 'a `code` b', 4, 'a code b', 3],
+  ] as const)('%s toggles off from inside', (id, doc, pos, expectedDoc, expectedPos) => {
+    expect(apply(testState(doc, pos), id)).toEqual({
+      doc: expectedDoc,
+      from: expectedPos,
+      to: expectedPos,
+    });
+  });
+
+  it('declines inlineCode inside a fenced code block', () => {
+    // The fenced-code guard lives in toggleInlineMark itself, ahead of the
+    // per-mark logic, so all five commands share it -- but backticks are the
+    // one delimiter that also appears in the fence markers themselves, which
+    // makes inlineCode the natural paranoid case for it, distinct from the
+    // guard test already covering bold.
+    const doc = '```js\nlet x = 1;\n```';
+    expect(apply(testState(doc, doc.indexOf('let')), 'inlineCode')).toBeNull();
+  });
+});
+
+/**
+ * The remove path (commands.ts) deletes `[span.openFrom, span.openTo)` and
+ * `[span.closeFrom, span.closeTo)` -- the *measured* delimiter runs
+ * `enclosingInlineMark` found in the tree -- rather than deriving offsets
+ * from `INLINE_MARK_DELIMITERS[mark].length`. Every test above happens to use
+ * a document where the two agree (a bold span is always exactly `**`, etc.),
+ * so a regression to `{ from: span.openFrom, to: span.openFrom +
+ * delimiter.length }` would pass every one of them while quietly eating or
+ * leaving behind a character on a real document. These two documents are
+ * where the measured run and the constant provably diverge, or -- for the
+ * second case -- where getting the *node* boundaries wrong under nesting
+ * would show up in the output; see task-2-report.md's "Fix pass" section for
+ * the grammar dump backing both.
+ */
+describe('remove path uses the measured delimiter run, not the constant length', () => {
+  it('removes a double-backtick code span (CodeMark is 2 chars wide; the inlineCode constant is 1)', () => {
+    // `a ``code`` b` parses to InlineCode[2,10) with CodeMark[2,4) and
+    // CodeMark[8,10) -- each backtick run is 2 characters, unlike the
+    // single-backtick case every other inlineCode test uses. Deriving the
+    // delete range from the constant's length (1) instead of the measured
+    // run would delete only one backtick per side, leaving `a `code` b`
+    // instead of removing the span cleanly.
+    const doc = 'a ``code`` b';
+    expect(apply(testState(doc, 5), 'inlineCode')).toEqual({
+      doc: 'a code b',
+      from: 3,
+      to: 3,
+    });
+  });
+
+  it('removes the inner bold from ***soft*** without disturbing the outer italic', () => {
+    // ***soft*** parses to Emphasis[0,10) (outer, 1-char marks at [0,1) and
+    // [9,10)) wrapping StrongEmphasis[1,9) (inner, 2-char marks at [1,3) and
+    // [7,9)). Both widths happen to equal their own mark's constant here --
+    // @lezer/markdown's emphasis parser only ever emits 1-char Emphasis marks
+    // or 2-char StrongEmphasis marks, so this document does not actually
+    // discriminate the measured-vs-constant bug the way the backtick case
+    // above does. What it does pin down is that removing bold reaches for
+    // the *inner* node's own measured marks and stops there, rather than
+    // reading past them into the outer italic's `*` -- a real way to get
+    // "boundaries" wrong that has nothing to do with delimiter width.
+    const doc = '***soft***';
+    expect(apply(testState(doc, 5), 'bold')).toEqual({
+      doc: '*soft*',
+      from: 3,
+      to: 3,
+    });
+  });
+
+  it('removes the outer italic from ***soft*** without disturbing the inner bold', () => {
+    // Same document, the other mark: the cursor sits inside the innermost
+    // node (StrongEmphasis), so this also exercises walking *up* to the
+    // enclosing Emphasis rather than stopping at the first node found.
+    const doc = '***soft***';
+    expect(apply(testState(doc, 5), 'italic')).toEqual({
+      doc: '**soft**',
+      from: 4,
+      to: 4,
+    });
   });
 });
