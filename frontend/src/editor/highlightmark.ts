@@ -11,7 +11,7 @@
  * `~~`. `after: "Emphasis"` keeps `*` and `_` resolving first, so `**==a==**`
  * nests the way a reader expects.
  */
-import { Tag, tags } from '@lezer/highlight';
+import { Tag } from '@lezer/highlight';
 import type { MarkdownConfig } from '@lezer/markdown';
 
 /**
@@ -23,19 +23,49 @@ import type { MarkdownConfig } from '@lezer/markdown';
 export const highlightTag = Tag.define();
 
 /**
+ * A second dedicated tag for the `==` marks themselves, deliberately NOT
+ * `tags.processingInstruction` (what every other marker in the grammar gets).
+ * `{ 'Highlight/...': highlightTag }` below uses Lezer's inherit-mode style
+ * spec (the `/...` suffix), which applies `highlightTag`'s class to every
+ * descendant node -- including `HighlightMark`. If `HighlightMark` also
+ * carried `tags.processingInstruction`, it would carry both tags, and
+ * `markdownHighlightStyle`'s cascade (styles later in the list win, per
+ * `@codemirror/language`'s `HighlightStyle.define` docs) would decide which
+ * one paints the marker -- accidentally, based on array order, not on
+ * purpose. A tag that only `HighlightMark` carries lets `highlight.ts` give
+ * the marks their own rule instead.
+ */
+export const highlightMarkTag = Tag.define();
+
+/**
  * `@lezer/markdown` keeps its own `Punctuation` regex module-private
- * (dist/index.js:1389), so this is a copy. The flanking rules below are the
- * CommonMark left/right-flanking delimiter run rules, which are what stop
+ * (dist/index.js:1389), so this is a copy -- including the `try`/overwrite
+ * immediately below it (dist/index.js:1390-1393). The ASCII literal is only
+ * ever the *fallback*: every JS engine this app ships on supports the
+ * `\p{...}` Unicode-property escape, so the `new RegExp(...)` assignment
+ * always succeeds and the literal is replaced before first use. Keeping only
+ * the ASCII literal here would make `x==「y」==z` open a highlight (the copy
+ * would call `「` non-punctuation) where the real package's `~~` would not,
+ * silently breaking the "modelled on Strikethrough" claim above for any
+ * non-ASCII punctuation. The flanking rules below are the CommonMark
+ * left/right-flanking delimiter run rules, which are what stop
  * `a == b == c` from becoming a highlight.
  */
-const Punctuation = /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~\xA1‐-‧]/;
+let Punctuation = /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~\xA1‐-‧]/;
+try {
+  Punctuation = new RegExp('[\\p{S}|\\p{P}]', 'u');
+} catch {
+  // Fall back to the ASCII literal above on an engine with no Unicode
+  // property escape support -- unreachable in practice, but this is exactly
+  // what the package itself does, and diverging here is the bug being fixed.
+}
 
 const HighlightDelim = { resolve: 'Highlight', mark: 'HighlightMark' };
 
 export const HighlightMarkExtension: MarkdownConfig = {
   defineNodes: [
     { name: 'Highlight', style: { 'Highlight/...': highlightTag } },
-    { name: 'HighlightMark', style: tags.processingInstruction },
+    { name: 'HighlightMark', style: highlightMarkTag },
   ],
   parseInline: [
     {

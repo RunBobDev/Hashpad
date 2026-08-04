@@ -16,7 +16,7 @@ import { HighlightStyle, defaultHighlightStyle, syntaxHighlighting } from '@code
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { tags } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
-import { HighlightMarkExtension, highlightTag } from './highlightmark';
+import { HighlightMarkExtension, highlightMarkTag, highlightTag } from './highlightmark';
 import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
 /**
@@ -52,14 +52,25 @@ export const markdownHighlightStyle = HighlightStyle.define([
   // not decoration -- do not lower it, and do not hide what it colours.
   { tag: tags.processingInstruction, color: 'var(--syn-marker)' },
   { tag: tags.strikethrough, textDecoration: 'line-through' },
-  // The `==` marks themselves keep `tags.processingInstruction` from the
-  // node spec in highlightmark.ts, so source mode's dim-marker rule above
-  // already colours them -- this rule only paints the marked text itself.
   {
     tag: highlightTag,
     backgroundColor: 'var(--syn-highlight-bg)',
     color: 'var(--syn-highlight-fg)',
   },
+  // `HighlightMark` (the `==` characters) carries BOTH `highlightTag` (via
+  // the inherit-mode `'Highlight/...'` style spec in highlightmark.ts, which
+  // applies to every descendant of a `Highlight` node) and its own
+  // `highlightMarkTag`. `HighlightStyle.define` gives later entries higher
+  // CSS precedence for a node that matches more than one rule, so this rule
+  // MUST come after the `highlightTag` rule above -- swapping the order
+  // would make the marks render in `--syn-highlight-fg` again, indistinguishable
+  // from the marked text, rather than dim like every other marker in source
+  // mode. `--syn-highlight-marker` is its own token (not `--syn-marker`,
+  // which reads as text on this wash but fails 4.5:1 against it -- see the
+  // token's comment in variables.css) so the marks stay dim-but-readable
+  // (SPEC §6.6) specifically against the highlight wash, not against
+  // `--bg-editor`.
+  { tag: highlightMarkTag, color: 'var(--syn-highlight-marker)' },
 ]);
 
 /**

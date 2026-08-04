@@ -95,13 +95,52 @@ describe('enclosingInlineMark', () => {
     expect(enclosingInlineMark(state, 6, 'bold')).toBeNull();
   });
 
-  it.each([
-    ['strikethrough', '~~gone~~'],
-    ['highlight', '==marked=='],
-    ['inlineCode', '`code`'],
-  ] as const)('finds %s', (mark, doc) => {
-    const state = testState(doc);
-    expect(enclosingInlineMark(state, 3, mark)).not.toBeNull();
+  it('finds strikethrough around a cursor inside it, with exact boundaries', () => {
+    const state = testState('~~gone~~');
+    const span = enclosingInlineMark(state, 3, 'strikethrough');
+    expect(span).not.toBeNull();
+    expect([span?.from, span?.to]).toEqual([0, 8]);
+    expect([span?.openFrom, span?.openTo]).toEqual([0, 2]);
+    expect([span?.closeFrom, span?.closeTo]).toEqual([6, 8]);
+  });
+
+  // `highlight`'s delimiter positions come from `cx.addDelimiter(HighlightDelim,
+  // pos, pos + 2, ...)` in highlightmark.ts -- code this commit wrote, unlike
+  // strikethrough/inlineCode's positions, which come from @lezer/markdown
+  // itself. `not.toBeNull()` alone would still pass even if `pos + 2` were
+  // wrong (e.g. off by one); only pinning the exact offsets would catch a
+  // toggle command later deleting the wrong character of the user's document.
+  it('finds highlight around a cursor inside it, with exact boundaries', () => {
+    const state = testState('==marked==');
+    const span = enclosingInlineMark(state, 3, 'highlight');
+    expect(span).not.toBeNull();
+    expect([span?.from, span?.to]).toEqual([0, 10]);
+    expect([span?.openFrom, span?.openTo]).toEqual([0, 2]);
+    expect([span?.closeFrom, span?.closeTo]).toEqual([8, 10]);
+  });
+
+  it('finds inline code around a cursor inside it, with exact boundaries', () => {
+    const state = testState('`code`');
+    const span = enclosingInlineMark(state, 3, 'inlineCode');
+    expect(span).not.toBeNull();
+    expect([span?.from, span?.to]).toEqual([0, 6]);
+    expect([span?.openFrom, span?.openTo]).toEqual([0, 1]);
+    expect([span?.closeFrom, span?.closeTo]).toEqual([5, 6]);
+  });
+
+  // At the seam of `**a**==b==` (position 5, exactly between the bold node's
+  // closing `**` and the highlight node's opening `==`), both marks report as
+  // enclosing. This is a deliberate consequence of checking both sides (see
+  // the comment on the `side` loop above) so a cursor touching either edge of
+  // a mark counts as inside it: side -1 resolves straight to the bold node
+  // for 'bold', while for 'highlight' side -1 walks the bold node's ancestry
+  // to the root without finding one, and side +1 then resolves to the
+  // highlight node. Recorded here so a later change to the walk order can't
+  // silently flip this without a test noticing.
+  it('reports both marks at the seam between two abutting marks', () => {
+    const state = testState('**a**==b==');
+    expect(enclosingInlineMark(state, 5, 'bold')).not.toBeNull();
+    expect(enclosingInlineMark(state, 5, 'highlight')).not.toBeNull();
   });
 });
 
@@ -193,5 +232,16 @@ describe('activeFormats', () => {
   it('reports codeBlock inside a fence', () => {
     const doc = '```\nx\n```';
     expect(activeFormats(testState(doc, doc.indexOf('x')))).toContain('codeBlock');
+  });
+
+  // headingLevelAt/blockPrefixAt scan line text, not the tree, so `# comment`
+  // inside a fence looks exactly like a real heading to them. Every command
+  // except codeBlock declines inside a fence, so if this reported 'heading1'
+  // too, the toolbar would light an H1 button whose own command would refuse
+  // to run -- button state contradicting button behaviour.
+  it('reports only codeBlock inside a fence, even over heading-shaped text', () => {
+    const doc = '```\n# comment\n```';
+    const state = testState(doc, doc.indexOf('# comment'));
+    expect(activeFormats(state)).toEqual(['codeBlock']);
   });
 });

@@ -132,6 +132,14 @@ export function inFencedCode(state: EditorState, pos: number): boolean {
  */
 export function activeFormats(state: EditorState): string[] {
   const head = state.selection.main.head;
+
+  // `headingLevelAt`/`blockPrefixAt` scan line text, not the tree, so a `#`
+  // or `- ` that is literal content inside a fence (e.g. a comment in a code
+  // sample) would otherwise read as an active heading or list. Every command
+  // except `codeBlock` already declines inside a fence, so reporting anything
+  // else here would light a toolbar button whose command refuses to run.
+  if (inFencedCode(state, head)) return ['codeBlock'];
+
   const lineText = state.doc.lineAt(head).text;
   const formats: string[] = [];
 
@@ -145,8 +153,6 @@ export function activeFormats(state: EditorState): string[] {
 
   const level = headingLevelAt(lineText);
   if (level !== null) formats.push(`heading${level}`);
-
-  if (inFencedCode(state, head)) formats.push('codeBlock');
 
   return formats.sort();
 }

@@ -100,9 +100,17 @@
 
   /* ==highlight==. A marker-pen wash: the text stays the primary foreground
      colour and the background carries the meaning, so contrast is governed by
-     fg-on-highlight rather than by the wash itself. */
+     fg-on-highlight rather than by the wash itself. Not text, so no AA
+     obligation of its own -- measured only as the surface the two tokens
+     below sit on. */
   --syn-highlight-bg: #fff3a3;
-  --syn-highlight-fg: #1a1a1a; /* 15.42:1 */
+  --syn-highlight-fg: var(--fg-primary); /* 15.42:1 on --syn-highlight-bg */
+  /* The `==` marks. Deliberately its own token, not --syn-marker (--syn-marker
+     is 4.02:1 here -- clears AA against --bg-editor, where it was tuned, but
+     not against this brighter wash) and deliberately darker than --syn-marker
+     so it still reads as dim next to --syn-highlight-fg's ~15:1 while
+     clearing the wash's AA floor on its own. */
+  --syn-highlight-marker: #696969; /* 4.86:1 on --syn-highlight-bg */
 }
 
 :root[data-theme='dark'] {
@@ -149,7 +157,14 @@
   --syn-quote-fg: #b0b0b0;
 
   /* Dark: a saturated yellow wash would glare. Muted amber at low lightness
-     with a light foreground, hand-tuned rather than inverted (SPEC §6.12). */
+     with a light foreground, hand-tuned rather than inverted (SPEC §6.12).
+     Not text, so no AA obligation of its own -- measured only as the surface
+     the two tokens below sit on. */
   --syn-highlight-bg: #5c4a12;
-  --syn-highlight-fg: #f0e6c8; /* 6.90:1 */
+  --syn-highlight-fg: #f0e6c8; /* 6.90:1 on --syn-highlight-bg */
+  /* The `==` marks. --syn-marker is only 2.27:1 here (it was tuned against
+     --bg-editor, far darker than this amber wash), so this is its own token:
+     lighter than --syn-marker but dimmer than --syn-highlight-fg's ~6.9:1, so
+     it still clears AA on this specific background. */
+  --syn-highlight-marker: #c4c4c4; /* 4.93:1 on --syn-highlight-bg */
 }
