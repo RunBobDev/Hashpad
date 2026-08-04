@@ -154,8 +154,8 @@ describe('the other four inline marks', () => {
  * leaving behind a character on a real document. These two documents are
  * where the measured run and the constant provably diverge, or -- for the
  * second case -- where getting the *node* boundaries wrong under nesting
- * would show up in the output; see task-2-report.md's "Fix pass" section for
- * the grammar dump backing both.
+ * would show up in the output. Each test below carries the node boundaries it
+ * relies on in its own comment.
  */
 describe('remove path uses the measured delimiter run, not the constant length', () => {
   it('removes a double-backtick code span (CodeMark is 2 chars wide; the inlineCode constant is 1)', () => {

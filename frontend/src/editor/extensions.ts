@@ -96,8 +96,17 @@ export function buildExtensions(isDark: boolean): Extension[] {
     // in commands.ts already operate on every range via `changeByRange` and
     // per-range `enclosingInlineMark` lookups, so turning this on needs no
     // command changes, only this facet contribution to let the editor build a
-    // multi-range selection in the first place (e.g. multi-cursor click/Alt-click).
+    // multi-range selection in the first place.
     EditorState.allowMultipleSelections.of(true),
+    // Which gesture adds a cursor. CodeMirror's own default is Ctrl+click on
+    // Windows (`clickAddsSelectionRange` falls back to `event.ctrlKey` when
+    // nothing contributes to the facet), but every editor a Windows user
+    // arrives from -- VS Code, Sublime, Notepad++ -- uses Alt+click, and
+    // Ctrl+click is what people expect to *follow a link*, which this app has
+    // in every document. SPEC §6.14 asks for Windows conventions where one
+    // exists; here the convention is Alt, and CodeMirror's default is the odd
+    // one out.
+    EditorView.clickAddsSelectionRange.of((event) => event.altKey),
     highlightActiveLine(),
     // Word wrap is on by default (SPEC §6.6). Checkpoint G makes it a toggle.
     EditorView.lineWrapping,
