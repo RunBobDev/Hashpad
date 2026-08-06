@@ -385,6 +385,30 @@ describe('formatting command keymap', () => {
       '> word',
     ],
     ['heading3', { key: '3', code: 'Digit3', keyCode: 51, ctrlKey: true }, '### word'],
+    ['heading5', { key: '5', code: 'Digit5', keyCode: 53, ctrlKey: true }, '##### word'],
+    // The five insert commands sit on adjacent lines in the keymap array,
+    // which is where a transposition is most plausible.
+    ['link', { key: 'k', code: 'KeyK', keyCode: 75, ctrlKey: true }, '[word](url)'],
+    [
+      'image',
+      { key: 'I', code: 'KeyI', keyCode: 73, ctrlKey: true, shiftKey: true },
+      '![word](path)',
+    ],
+    [
+      'horizontalRule',
+      { key: '_', code: 'Minus', keyCode: 189, ctrlKey: true, shiftKey: true },
+      'word\n\n---\n',
+    ],
+    [
+      'footnote',
+      { key: 'F', code: 'KeyF', keyCode: 70, ctrlKey: true, shiftKey: true },
+      'word[^1]\n\n[^1]: \n',
+    ],
+    [
+      'codeBlock',
+      { key: 'K', code: 'KeyK', keyCode: 75, ctrlKey: true, shiftKey: true },
+      '```\nword\n```\n',
+    ],
   ] as const)('%s fires on its own chord and produces its own markup', (_name, init, expected) => {
     const view = mountView('word');
     view.dispatch({ selection: EditorSelection.range(0, 4) });
@@ -393,19 +417,27 @@ describe('formatting command keymap', () => {
     view.destroy();
   });
 
-  // Ctrl+I inside a fence used to fall through to defaultKeymap's
-  // selectParentSyntax, expanding the selection where the user expected
-  // nothing to happen. A low-precedence binding now claims both chords so a
-  // declining command swallows the key instead of passing it on.
+  // Both chords are claimed by catch-all bindings sitting *last inside the
+  // Prec.high array* (not a lower-precedence one -- what they exist to beat
+  // is defaultKeymap, which sits between the two), so that a declining
+  // command means nothing happens rather than something else happening.
+  //
+  // The consumed-ness assertion is the load-bearing one, and it is the whole
+  // reason the Ctrl+B row exists. Without it that row cannot fail: bold
+  // already declines, so the document and selection are unchanged whether or
+  // not the catch-all is there, and only Ctrl+I would redden (via
+  // selectParentSyntax). `dispatchEvent` returns false precisely when
+  // preventDefault ran, which is what stops Chromium's own bold/italic from
+  // reaching a contentDOM that is a real contenteditable.
   it.each([
     ['Ctrl+B', { key: 'b', code: 'KeyB', keyCode: 66, ctrlKey: true }],
     ['Ctrl+I', { key: 'i', code: 'KeyI', keyCode: 73, ctrlKey: true }],
-  ] as const)('%s inside a fence changes neither the document nor the selection', (_name, init) => {
+  ] as const)('%s inside a fence consumes the key and changes nothing', (_name, init) => {
     const doc = '```js\nlet x = 1;\n```';
     const view = mountView(doc);
     view.dispatch({ selection: EditorSelection.cursor(doc.indexOf('let')) });
     const before = view.state.selection.main;
-    pressKey(view, init);
+    expect(pressKey(view, init)).toBe(false);
     expect(view.state.doc.toString()).toBe(doc);
     expect(view.state.selection.main.from).toBe(before.from);
     expect(view.state.selection.main.to).toBe(before.to);
@@ -445,7 +477,6 @@ describe('formatting command keymap', () => {
 
     // And true where the command does apply, so the test cannot pass by the
     // adapter simply always returning false.
-    view.dispatch({ selection: EditorSelection.cursor(0) });
     const view2 = mountView('word');
     view2.dispatch({ selection: EditorSelection.range(0, 4) });
     expect(toEditorCommand(COMMANDS.bold)(view2)).toBe(true);
