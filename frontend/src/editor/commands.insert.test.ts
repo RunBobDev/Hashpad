@@ -168,20 +168,36 @@ describe('blockInsert surrounds the construct with blank lines', () => {
   it('adds no leading blank line at the very start of the document', () => {
     expect(apply(testState('bar', 0), 'horizontalRule')?.doc).toBe('---\n\nbar');
   });
+
+  // The most common position of all -- cursor at the end of a line with more
+  // document below -- and the easiest to over-count, because the document
+  // already supplies the newline that ends the line. Emitting two more here
+  // leaves a stray empty line between the rule and the next paragraph.
+  it('does not double the newline the document already has at end of line', () => {
+    expect(apply(testState('foo\nbar', 3), 'horizontalRule')?.doc).toBe('foo\n\n---\n\nbar');
+  });
+
+  it('adds nothing below when a blank line already follows', () => {
+    expect(apply(testState('foo\n\nbar', 3), 'horizontalRule')?.doc).toBe('foo\n\n---\n\nbar');
+  });
 });
 
 // `codeBlock` consumes the selection -- that is the feature. The other two
 // have no use for it, and replacing the range deleted whatever the user had
 // selected: a toolbar click that silently ate a paragraph.
 describe('table and horizontalRule leave a selection intact', () => {
+  // Full-document equality rather than `toContain`: `toContain` would also
+  // pass for an implementation that inserted the rule *before* the selection,
+  // which preserves the text but is still the wrong edit.
   it('horizontalRule does not delete the selected text', () => {
-    const result = apply(testState('keep this text', 0, 14), 'horizontalRule');
-    expect(result?.doc).toContain('keep this text');
+    expect(apply(testState('keep this text', 0, 14), 'horizontalRule')?.doc).toBe(
+      'keep this text\n\n---\n',
+    );
   });
 
   it('table does not delete the selected text', () => {
-    const result = apply(testState('keep this text', 0, 14), 'table');
-    expect(result?.doc).toContain('keep this text');
+    const doc = apply(testState('keep this text', 0, 14), 'table')?.doc ?? '';
+    expect(doc.startsWith('keep this text\n\n| Column 1 |')).toBe(true);
   });
 
   it('codeBlock still consumes the selection, because it wraps it', () => {

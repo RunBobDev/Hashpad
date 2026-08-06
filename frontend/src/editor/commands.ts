@@ -340,6 +340,9 @@ function bulletOrTaskAt(lineText: string): { indent: string; marker: string } | 
  *
  * `cursorOffset` is measured from the start of `text` itself, i.e. *after*
  * any prefix this function adds, so callers need not know whether it fired.
+ * It may point past the end of `text` into the trailing newlines --
+ * `horizontalRule` does exactly that, because there is no useful position
+ * inside a rule and the caret belongs on the line after it.
  */
 function blockInsert(
   state: EditorState,
@@ -353,14 +356,20 @@ function blockInsert(
   // Where the construct goes. A caller that does not consume the selection
   // inserts after it rather than over it, so nothing is destroyed.
   const start = options.replaceSelection ? from : to;
-  const end = options.replaceSelection ? to : to;
+  const end = to;
 
   const { selectLength = 0 } = options;
-  const line = doc.lineAt(start);
-  const column = start - line.from;
-  const restOfLine = line.text.slice(column);
-  const previousBlank = line.number === 1 || doc.line(line.number - 1).text.trim() === '';
-  const nextBlank = line.number === doc.lines || doc.line(line.number + 1).text.trim() === '';
+
+  // The context above is read at `start` and the context below at `end`. For
+  // an insertion the two are the same position, but a `replaceSelection`
+  // caller is about to delete everything between them -- so what follows the
+  // construct is whatever follows `end`, not the selected text at `start`.
+  const startLine = doc.lineAt(start);
+  const endLine = doc.lineAt(end);
+  const column = start - startLine.from;
+  const restOfLine = endLine.text.slice(end - endLine.from);
+  const previousBlank = startLine.number === 1 || doc.line(startLine.number - 1).text.trim() === '';
+  const nextBlank = endLine.number === doc.lines || doc.line(endLine.number + 1).text.trim() === '';
 
   // Enough newlines to leave a blank line above, given what is already there.
   let prefix = '';
@@ -369,10 +378,15 @@ function blockInsert(
     else if (!previousBlank) prefix = '\n';
   }
 
-  // And below. Text still to come on this line becomes its own paragraph, so
-  // it needs the blank line too.
-  let suffix = '\n';
-  if (end < doc.length && (restOfLine !== '' || !nextBlank)) suffix = '\n\n';
+  // And below, counting what the document already supplies. Text still to
+  // come on this line becomes its own paragraph and needs a full blank line;
+  // at the end of a line the document's own newline is already there, so one
+  // more is enough -- adding two would leave a stray empty line, which is the
+  // most common case of all and the easiest to get wrong.
+  let suffix: string;
+  if (restOfLine !== '') suffix = '\n\n';
+  else if (end < doc.length && nextBlank) suffix = '';
+  else suffix = '\n';
 
   const caret = start + prefix.length + cursorOffset;
   return {
