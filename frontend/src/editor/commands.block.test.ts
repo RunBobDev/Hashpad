@@ -92,6 +92,17 @@ describe('bulletList', () => {
   it('removes the whole marker from a task item, checkbox included', () => {
     expect(apply(testState('- [ ] item', 8), 'bulletList')?.doc).toBe('item');
   });
+
+  // The other half of counting a task as a bullet. Over a mixed selection the
+  // task line already qualifies, so it is left alone and only the plain line
+  // gains a marker. Regenerating it as `- ` instead would destroy the user's
+  // checked state -- losing data, not just tidying markup, which is why
+  // `regenerate` is off for every command but numberedList.
+  it('keeps a checked task intact when bulleting the lines around it', () => {
+    expect(apply(testState('- [x] done\nplain', 0, 16), 'bulletList')?.doc).toBe(
+      '- [x] done\n- plain',
+    );
+  });
 });
 
 describe('numberedList', () => {

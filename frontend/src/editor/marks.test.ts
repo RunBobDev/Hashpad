@@ -5,6 +5,7 @@ import {
   blockPrefixAt,
   enclosingInlineMark,
   headingLevelAt,
+  headingMarkerAt,
   inFencedCode,
 } from './marks';
 import { testState } from './testdoc';
@@ -192,6 +193,46 @@ describe('headingLevelAt', () => {
   it('accepts a heading with no text', () => {
     expect(headingLevelAt('#')).toBe(1);
     expect(headingLevelAt('## ')).toBe(2);
+  });
+
+  // CommonMark allows up to three spaces of indent. Anchoring at column 0
+  // meant an indented heading matched nothing, so the toggle inserted a
+  // second marker instead of replacing the first.
+  it.each(['# x', ' # x', '  # x', '   # x'])('accepts up to three spaces before %s', (line) => {
+    expect(headingLevelAt(line)).toBe(1);
+  });
+
+  // The fourth space makes it an indented code block. Pinned here rather than
+  // only through a command, because the command declines on such a line for a
+  // second reason (inFencedCode matches CodeBlock) and would keep passing
+  // even if this bound were relaxed.
+  it('rejects a fourth space, which makes the line indented code', () => {
+    expect(headingLevelAt('    # x')).toBeNull();
+  });
+
+  // A leading tab is already four columns, so it is code for the same reason.
+  it('rejects a leading tab', () => {
+    expect(headingLevelAt('\t# x')).toBeNull();
+  });
+});
+
+describe('headingMarkerAt', () => {
+  it('reports the indent and the marker separately', () => {
+    expect(headingMarkerAt('  ## Title')).toEqual({ indent: '  ', marker: '## ' });
+  });
+
+  // The reason the marker is sliced from the match instead of computed as
+  // `'#'.repeat(level) + ' '`: at end of line there is no trailing space, so
+  // assuming one makes the marker a character too wide and the remove path
+  // deletes the newline along with it.
+  it('does not assume a trailing space on an empty heading', () => {
+    expect(headingMarkerAt('#')).toEqual({ indent: '', marker: '#' });
+    expect(headingMarkerAt('###')).toEqual({ indent: '', marker: '###' });
+  });
+
+  it('returns null on a non-heading', () => {
+    expect(headingMarkerAt('plain')).toBeNull();
+    expect(headingMarkerAt('#nospace')).toBeNull();
   });
 });
 

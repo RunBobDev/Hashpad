@@ -154,8 +154,23 @@ function toggleLinePrefix(options: {
    * nothing to replace.
    */
   conflict?: (lineText: string) => { indent: string; marker: string } | null;
+  /**
+   * Whether a line that *already* satisfies `detect` should have its marker
+   * rewritten when the command runs over a mixed selection.
+   *
+   * Only `numberedList` wants this, and only because its marker encodes a
+   * position: adding numbering to `1. one / two` has to renumber, or the
+   * result is `1. one / 2. two` by luck and `3. one / 2. two` otherwise.
+   *
+   * Every other command leaves such a line alone, because rewriting a marker
+   * that already matches can only lose information. `bulletList` over
+   * `- [x] done / plain` is the case that proves it: a task item *is* a
+   * bullet item, so regenerating it as `- ` silently discarded the user's
+   * checked state.
+   */
+  regenerate?: boolean;
 }): MarkdownCommand {
-  const { detect, format, conflict } = options;
+  const { detect, format, conflict, regenerate = false } = options;
 
   return (state) => {
     const ranges = state.selection.ranges;
@@ -180,6 +195,7 @@ function toggleLinePrefix(options: {
       // them, keeping the indent -- delete only the marker.
       return {
         changes: lines.map((line, i) => {
+          // Safe: this branch runs only when `every` found no null.
           const match = own[i]!;
           return {
             from: line.from + match.indent.length,
@@ -191,28 +207,36 @@ function toggleLinePrefix(options: {
 
     // At least one line lacks the prefix: give it to all of them.
     //
-    // Each branch replaces the run from `line.from` through whatever occupies
-    // the prefix slot -- the indent, plus any marker being replaced -- and
-    // writes back the same indent followed by the new marker. Preserving the
-    // indent is this function's job, not `format`'s (see the option's doc).
+    // One expression, replacing the run from `line.from` through whatever
+    // occupies the prefix slot -- the indent, plus any marker being replaced
+    // -- and writing back that same indent followed by the new marker.
+    // Preserving the indent is this function's job, not `format`'s (see the
+    // option's doc). `occupiedTo` measures from `line.from`, which is why
+    // `detect` and `conflict` must report the line's *whole* indent.
     return {
-      changes: lines.map((line, index) => {
-        // Already has this exact prefix. Regenerate rather than leave alone,
-        // so numberedList renumbers a line carrying *a* number but the wrong
-        // one. `conflict` is a different marker from the same family
-        // occupying the slot -- a plain bullet where a task is wanted, or
-        // another heading level. Falling through to neither means the slot
-        // holds nothing but indent.
-        // Safe on both: each is null-checked before its properties are read.
-        const occupant = own[index] ?? conflict?.(line.text) ?? null;
+      changes: lines.flatMap((line, index) => {
+        const already = own[index];
+
+        // Already exactly this prefix. Left untouched unless the command
+        // asked to regenerate -- rewriting a marker that already matches can
+        // only lose information (see the `regenerate` option).
+        if (already && !regenerate) return [];
+
+        // `conflict` is a different marker from the same family holding the
+        // slot -- a plain bullet where a task is wanted, or another heading
+        // level. Neither means the slot holds nothing but indent.
+        const occupant = already ?? conflict?.(line.text) ?? null;
+        // Safe: `\s*` matches at every position, so this exec cannot be null.
         const indent = occupant ? occupant.indent : /^\s*/.exec(line.text)![0];
         const occupiedTo = indent.length + (occupant ? occupant.marker.length : 0);
 
-        return {
-          from: line.from,
-          to: line.from + occupiedTo,
-          insert: indent + format(index),
-        };
+        return [
+          {
+            from: line.from,
+            to: line.from + occupiedTo,
+            insert: indent + format(index),
+          },
+        ];
       }),
     };
   };
@@ -237,11 +261,17 @@ function toggleHeading(level: number): MarkdownCommand {
 }
 
 /**
- * `- [ ] item` is a bullet item too, so removing "the bullet" from it has to
- * take the checkbox with it. Matching only `- ` would delete the dash and
- * leave `[ ] item` behind as literal text -- visibly not what the button
- * says it does. Task markers are therefore tried first, and only a line that
- * is not a task falls through to the plain bullet pattern.
+ * What `bulletList` counts as "already a bullet". A task item is a bullet
+ * item with a checkbox, so both shapes qualify, and the task pattern is tried
+ * first because it is the longer match.
+ *
+ * This drives both halves of the toggle, and the reason matters in each:
+ * - Removing: the whole marker goes, checkbox included. Matching only `- `
+ *   would delete the dash and leave `[ ] item` behind as literal text.
+ * - Adding over a mixed selection: a task line already counts as a bullet, so
+ *   `toggleLinePrefix` leaves it alone (`regenerate` is off for this command)
+ *   and only the non-bullet lines gain a marker. `- [x] done` keeps its
+ *   checked state instead of being flattened to `- done`.
  */
 function bulletOrTaskAt(lineText: string): { indent: string; marker: string } | null {
   return blockPrefixAt(lineText, 'taskList') ?? blockPrefixAt(lineText, 'bulletList');
@@ -260,6 +290,9 @@ export const COMMANDS = {
   numberedList: toggleLinePrefix({
     detect: (text) => blockPrefixAt(text, 'numberedList'),
     format: (index) => `${index + 1}. `,
+    // The one command whose marker encodes a position, so the one command
+    // that must rewrite lines already carrying a number.
+    regenerate: true,
   }),
   // A plain bullet is replaced, not prefixed, when a task marker is added:
   // `- item` becomes `- [ ] item`, never `- - [ ] item`. `detect` alone
