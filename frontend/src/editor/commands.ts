@@ -290,6 +290,191 @@ function bulletOrTaskAt(lineText: string): { indent: string; marker: string } | 
   return blockPrefixAt(lineText, 'taskList') ?? blockPrefixAt(lineText, 'bulletList');
 }
 
+/**
+ * `link`, `image`, `table`, `horizontalRule`, `footnote`, and `codeBlock`
+ * (below) are a different kind of command from everything above: they
+ * *insert* a construct rather than toggling one on and off, and none of them
+ * has a remove path. That is deliberate, not an oversight -- SPEC §6.5's
+ * "toggle, don't just insert" is about formatting that *wraps* text, where
+ * the wrapped text survives the toggle either way (`**bold**` <-> `bold`).
+ * There is no equivalent for these: a table has no "unwrapped" form to
+ * revert to, and a document either has a horizontal rule at some position or
+ * it does not -- there is nothing sensible to select and un-table.
+ */
+
+/**
+ * Shared by `table`, `horizontalRule`, and `codeBlock`: replaces the main
+ * selection range with `text`, prefixing a blank line when the insertion
+ * point is not already at the start of a line and always appending a
+ * trailing newline. This is what keeps a block construct from gluing itself
+ * onto surrounding prose -- `foo---\n` and `foo\n\n---\n` parse very
+ * differently, and only the second is a horizontal rule.
+ *
+ * `cursorOffset` is measured from the start of `text` itself, i.e. *after*
+ * the blank-line prefix this function may add -- callers do not need to know
+ * whether the prefix fired to say where in their own text the cursor
+ * belongs.
+ */
+function blockInsert(state: EditorState, text: string, cursorOffset: number): TransactionSpec {
+  const { from, to } = state.selection.main;
+  const atLineStart = state.doc.lineAt(from).from === from;
+  const prefix = atLineStart ? '' : '\n\n';
+
+  return {
+    changes: { from, to, insert: prefix + text + '\n' },
+    selection: EditorSelection.cursor(from + prefix.length + cursorOffset),
+  };
+}
+
+/**
+ * `link` and `image` differ only in the literal that surrounds the inserted
+ * text (`[…](url)` vs `![…](path)`) and the two placeholder words, so both
+ * are built from this one function rather than duplicated.
+ *
+ * Follows the same text-source cascade as `toggleInlineMark`'s add path:
+ * selection, if there is one, becomes the link text; failing that, the word
+ * under a bare cursor; failing that, `textPlaceholder`. Where this diverges
+ * from that model is what ends up selected afterwards -- because a link has
+ * two blanks to fill in, not one:
+ * - Real text was found (a selection or a word): the URL/path placeholder
+ *   comes out selected, since the text is already right and the target is
+ *   what the user still has to type.
+ * - No real text existed: the *text* placeholder comes out selected instead,
+ *   on the theory that naming the thing you're linking to comes before
+ *   deciding where it points.
+ */
+function insertReferenceCommand(options: {
+  prefix: string;
+  textPlaceholder: string;
+  targetPlaceholder: string;
+}): MarkdownCommand {
+  const { prefix, textPlaceholder, targetPlaceholder } = options;
+
+  return (state) => {
+    const ranges = state.selection.ranges;
+    if (ranges.some((range) => inFencedCode(state, range.head))) return null;
+
+    return state.changeByRange((range) => {
+      let from = range.from;
+      let to = range.to;
+      let text: string;
+      let usedTextPlaceholder = false;
+
+      if (!range.empty) {
+        text = state.doc.sliceString(from, to);
+      } else {
+        const word = state.wordAt(range.head);
+        if (word) {
+          from = word.from;
+          to = word.to;
+          text = state.doc.sliceString(from, to);
+        } else {
+          text = textPlaceholder;
+          usedTextPlaceholder = true;
+        }
+      }
+
+      // Every offset below is derived from the literal shape
+      // `${prefix}[${text}](${targetPlaceholder})`, not hard-coded, so a
+      // change to either placeholder word can't silently desync the
+      // selection from the text it's supposed to cover.
+      const textFrom = from + prefix.length + 1;
+      const textTo = textFrom + text.length;
+      const targetFrom = textTo + 2;
+      const targetTo = targetFrom + targetPlaceholder.length;
+
+      return {
+        changes: { from, to, insert: `${prefix}[${text}](${targetPlaceholder})` },
+        range: usedTextPlaceholder
+          ? EditorSelection.range(textFrom, textTo)
+          : EditorSelection.range(targetFrom, targetTo),
+      };
+    });
+  };
+}
+
+/**
+ * Inserts `[^n]` at the cursor and its matching `[^n]: ` definition at the
+ * end of the document, numbered past whatever footnote already has the
+ * highest number -- scanning the whole document rather than trusting the
+ * next integer after the last one written, since footnotes can be inserted
+ * out of order or the highest one can sit anywhere in the text.
+ *
+ * Both edits live in one `changes` array so they apply as a single
+ * transaction. Their `from` positions are both measured against the
+ * *original* document and sorted ascending (the reference's position is
+ * never after the definition's, since a cursor position can't exceed the
+ * document length it is being compared against) -- so on a cursor already at
+ * the document's end, the reference still lands before the definition
+ * instead of the two colliding in an undefined order.
+ */
+const footnote: MarkdownCommand = (state) => {
+  if (state.selection.ranges.some((range) => inFencedCode(state, range.head))) return null;
+
+  const docText = state.doc.toString();
+  let highest = 0;
+  for (const match of docText.matchAll(/\[\^(\d+)\]/g)) {
+    // Safe: the capture group is mandatory in the pattern, so a match
+    // guarantees it.
+    highest = Math.max(highest, Number(match[1]!));
+  }
+  const n = highest + 1;
+
+  const pos = state.selection.main.head;
+  const reference = `[^${n}]`;
+  const definitionLabel = `[^${n}]: `;
+
+  const changes = [
+    { from: pos, insert: reference },
+    { from: state.doc.length, insert: `\n\n${definitionLabel}\n` },
+  ].sort((a, b) => a.from - b.from);
+
+  // The reference is always inserted at or before the definition's position
+  // (`pos <= state.doc.length` always holds), so it always shifts the
+  // definition's landing spot forward by its own length -- regardless of
+  // where in the document the cursor was.
+  const cursor = state.doc.length + reference.length + `\n\n${definitionLabel}`.length;
+
+  return { changes, selection: EditorSelection.cursor(cursor) };
+};
+
+/**
+ * No fenced-code guard: unlike every other command here, `codeBlock` is the
+ * one that is supposed to work *inside* a fence too (see `activeFormats`,
+ * which reports `codeBlock` -- and nothing else -- for a cursor inside one).
+ *
+ * Wraps the selection (empty or not) in a fresh triple-backtick fence and
+ * leaves the cursor on the info string, one keystroke away from naming the
+ * language -- SPEC's original modal prompt was traded for this by the owner
+ * (recorded in the plan), since a language name is optional and a blocking
+ * dialog for an optional field is friction the feature doesn't need.
+ */
+const codeBlock: MarkdownCommand = (state) => {
+  const { from, to } = state.selection.main;
+  const inner = state.doc.sliceString(from, to);
+  return blockInsert(state, '```\n' + inner + '\n```', 3);
+};
+
+const table: MarkdownCommand = (state) => {
+  if (state.selection.ranges.some((range) => inFencedCode(state, range.head))) return null;
+  const text =
+    '| Column 1 | Column 2 | Column 3 |\n' +
+    '| --- | --- | --- |\n' +
+    '|  |  |  |\n' +
+    '|  |  |  |';
+  // Offset 2 lands the cursor right after the leading "| ", on "Column 1" --
+  // the first thing a user filling in a fresh table wants to rename.
+  return blockInsert(state, text, 2);
+};
+
+const horizontalRule: MarkdownCommand = (state) => {
+  if (state.selection.ranges.some((range) => inFencedCode(state, range.head))) return null;
+  // Offset 4 is past "---" and its trailing newline -- the whole inserted
+  // block -- since there is no meaningful position *inside* a rule to land
+  // on.
+  return blockInsert(state, '---', 4);
+};
+
 export const COMMANDS = {
   bold: toggleInlineMark('bold'),
   italic: toggleInlineMark('italic'),
@@ -331,6 +516,16 @@ export const COMMANDS = {
   heading4: toggleHeading(4),
   heading5: toggleHeading(5),
   heading6: toggleHeading(6),
+  link: insertReferenceCommand({ prefix: '', textPlaceholder: 'text', targetPlaceholder: 'url' }),
+  image: insertReferenceCommand({
+    prefix: '!',
+    textPlaceholder: 'alt',
+    targetPlaceholder: 'path',
+  }),
+  table,
+  horizontalRule,
+  footnote,
+  codeBlock,
 } satisfies Record<string, MarkdownCommand>;
 
 export type CommandId = keyof typeof COMMANDS;
