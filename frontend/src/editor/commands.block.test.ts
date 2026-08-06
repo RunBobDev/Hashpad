@@ -95,13 +95,25 @@ describe('bulletList', () => {
 
   // The other half of counting a task as a bullet. Over a mixed selection the
   // task line already qualifies, so it is left alone and only the plain line
-  // gains a marker. Regenerating it as `- ` instead would destroy the user's
-  // checked state -- losing data, not just tidying markup, which is why
-  // `regenerate` is off for every command but numberedList.
+  // gains a marker. Rewriting it as `- ` instead would destroy the user's
+  // checked state -- losing data, not just tidying markup.
   it('keeps a checked task intact when bulleting the lines around it', () => {
     expect(apply(testState('- [x] done\nplain', 0, 16), 'bulletList')?.doc).toBe(
       '- [x] done\n- plain',
     );
+  });
+
+  // A plain bullet carries no state, and CommonMark reads a change of bullet
+  // character as the start of a *new* list -- so leaving `*` alone here would
+  // hand the user two adjacent one-item lists where they asked for one list
+  // of two. This is the case that stops `regenerate` from being a blanket
+  // "never rewrite".
+  it('normalises a * bullet so the selection stays one list', () => {
+    expect(apply(testState('* one\ntwo', 0, 9), 'bulletList')?.doc).toBe('- one\n- two');
+  });
+
+  it('normalises a + bullet the same way', () => {
+    expect(apply(testState('+ one\ntwo', 0, 9), 'bulletList')?.doc).toBe('- one\n- two');
   });
 });
 

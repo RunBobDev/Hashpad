@@ -127,6 +127,14 @@ export function toggleInlineMark(mark: InlineMark): MarkdownCommand {
  * into a heading or list item by mistake is worse than doing nothing.
  */
 function toggleLinePrefix(options: {
+  /**
+   * Whether the line already carries this prefix, and if so where it ends.
+   *
+   * `indent` must be the line's **whole** leading whitespace, not part of it.
+   * Both paths measure from `line.from` and replace `indent.length +
+   * marker.length` characters, so a detector reporting a partial indent would
+   * strand the remainder after the new marker.
+   */
   detect: (lineText: string) => { indent: string; marker: string } | null;
   /**
    * The marker alone -- `"- "`, `"> "`, `"1. "` -- **without** the line's
@@ -156,21 +164,26 @@ function toggleLinePrefix(options: {
   conflict?: (lineText: string) => { indent: string; marker: string } | null;
   /**
    * Whether a line that *already* satisfies `detect` should have its marker
-   * rewritten when the command runs over a mixed selection.
+   * rewritten when the command runs over a mixed selection. Defaults to
+   * never, which is the safe answer: rewriting a marker can destroy state the
+   * old one carried, and a new command's author gets that for free.
    *
-   * Only `numberedList` wants this, and only because its marker encodes a
-   * position: adding numbering to `1. one / two` has to renumber, or the
-   * result is `1. one / 2. two` by luck and `3. one / 2. two` otherwise.
+   * The two commands that opt in do so for opposite-looking reasons, and both
+   * come down to whether the existing marker holds information the new one
+   * would not:
    *
-   * Every other command leaves such a line alone, because rewriting a marker
-   * that already matches can only lose information. `bulletList` over
-   * `- [x] done / plain` is the case that proves it: a task item *is* a
-   * bullet item, so regenerating it as `- ` silently discarded the user's
-   * checked state.
+   * - `numberedList` always rewrites, because its marker encodes a position.
+   *   Numbering `1. one / two` has to renumber or the result is wrong.
+   * - `bulletList` rewrites plain bullets but not tasks. `* one / two` must
+   *   normalise to `- one / - two`, because CommonMark reads a change of
+   *   bullet character as the start of a *new* list, so leaving the `*` gives
+   *   the user two adjacent one-item lists instead of one list of two. But
+   *   `- [x] done` must be left alone: a task item is a bullet item, and
+   *   rewriting it as `- ` discards the checked state.
    */
-  regenerate?: boolean;
+  regenerate?: (lineText: string) => boolean;
 }): MarkdownCommand {
-  const { detect, format, conflict, regenerate = false } = options;
+  const { detect, format, conflict, regenerate = () => false } = options;
 
   return (state) => {
     const ranges = state.selection.ranges;
@@ -217,10 +230,10 @@ function toggleLinePrefix(options: {
       changes: lines.flatMap((line, index) => {
         const already = own[index];
 
-        // Already exactly this prefix. Left untouched unless the command
-        // asked to regenerate -- rewriting a marker that already matches can
-        // only lose information (see the `regenerate` option).
-        if (already && !regenerate) return [];
+        // Already carries this prefix. Left untouched unless the command asks
+        // to rewrite it -- see the `regenerate` option for why that is the
+        // safe default and which two commands opt out of it.
+        if (already && !regenerate(line.text)) return [];
 
         // `conflict` is a different marker from the same family holding the
         // slot -- a plain bullet where a task is wanted, or another heading
@@ -286,13 +299,17 @@ export const COMMANDS = {
   bulletList: toggleLinePrefix({
     detect: bulletOrTaskAt,
     format: () => '- ',
+    // Normalise `*` and `+` to `-`, since CommonMark starts a new list at a
+    // change of bullet character -- but never rewrite a task, which would
+    // throw away its checked state.
+    regenerate: (text) => blockPrefixAt(text, 'taskList') === null,
   }),
   numberedList: toggleLinePrefix({
     detect: (text) => blockPrefixAt(text, 'numberedList'),
     format: (index) => `${index + 1}. `,
-    // The one command whose marker encodes a position, so the one command
-    // that must rewrite lines already carrying a number.
-    regenerate: true,
+    // The marker encodes a position, so a line already carrying a number
+    // still has to be rewritten -- unconditionally, unlike bulletList.
+    regenerate: () => true,
   }),
   // A plain bullet is replaced, not prefixed, when a task marker is added:
   // `- item` becomes `- [ ] item`, never `- - [ ] item`. `detect` alone
