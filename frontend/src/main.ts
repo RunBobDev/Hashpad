@@ -10,6 +10,7 @@ import {
   SystemThemeIsDark,
 } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
+import { COMMANDS, toEditorCommand, type CommandId } from './editor/commands';
 import { publishActiveFormats } from './editor/extensions';
 import {
   openFiles,
@@ -27,7 +28,8 @@ import {
 } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
-import { store, setEditorView } from './state/appcontext';
+import { mountToolbar } from './ui/toolbar';
+import { store, setEditorView, getEditorView } from './state/appcontext';
 import { addDocument, documentAtPosition, neighbourId, reorderDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
 import {
@@ -45,6 +47,8 @@ mountMenuBar(root);
 // Between the menu bar and the editor area, per SPEC §6.1's chrome layout --
 // the window is frameless, so this row is the only place a filename appears.
 mountTabBar(root);
+// Between the tab strip and the editor area, per the same layout.
+mountToolbar(root);
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
@@ -199,6 +203,24 @@ window.addEventListener('focus', () => {
 // commands get routed to effects.
 document.addEventListener(COMMAND_EVENT, (event) => {
   const id = (event as CustomEvent<string>).detail;
+
+  // Toolbar commands (ui/toolbar.ts) carry the command id after a 'format.'
+  // prefix, so -- like the tab-bar commands just below -- they cannot be
+  // matched by the plain-string switch. Routed through the same
+  // toEditorCommand adapter the keymap uses (editor/extensions.ts), which is
+  // what keeps a toolbar button and its keyboard shortcut running through
+  // the exact same MarkdownCommand (SPEC §6.5's "one implementation, two
+  // triggers") rather than the toolbar growing a second path into the
+  // editor. An id with no match in COMMANDS (heading and overflow are inert
+  // until Task 7's popups land, so no button ever emits one today) is
+  // ignored rather than throwing.
+  if (id.startsWith('format.')) {
+    const commandId = id.slice('format.'.length);
+    if (commandId in COMMANDS) {
+      toEditorCommand(COMMANDS[commandId as CommandId])(getEditorView());
+    }
+    return;
+  }
 
   // Tab-bar commands carry a document id (ui/tabbar.ts), so they cannot be
   // matched by the plain-string switch below -- handle them first and return.

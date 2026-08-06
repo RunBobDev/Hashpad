@@ -104,6 +104,36 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+/**
+ * ui/toolbar.ts's buttons dispatch `format.<id>` rather than calling a
+ * command directly (see its header comment for why); this is the one place
+ * that routing actually reaches a live `EditorView` rather than a bare
+ * COMMANDS lookup, which toolbar.test.ts cannot exercise since buildToolbar
+ * never touches the store or the view.
+ */
+describe('format.<id> commands', () => {
+  it('runs the named command against the active document', () => {
+    const a = cleanDoc('a', 'hello world');
+    setupDocs([a], 'a');
+    getEditorView().dispatch({ selection: { anchor: 0, head: 5 } }); // select "hello"
+
+    emit('format.bold');
+
+    expect(getEditorView().state.doc.toString()).toBe('**hello** world');
+  });
+
+  // heading and overflow are inert in this task (Task 7 owns their popups),
+  // so no button ever emits these today -- but the router must not throw if
+  // one somehow arrives, e.g. from a future caller that gets the id wrong.
+  it('does nothing for an id with no matching command, rather than throwing', () => {
+    const a = cleanDoc('a', 'hello world');
+    setupDocs([a], 'a');
+
+    expect(() => emit('format.heading')).not.toThrow();
+    expect(getEditorView().state.doc.toString()).toBe('hello world');
+  });
+});
+
 describe('tab.close command', () => {
   it('closes the active tab and switches the view to the remaining one', () => {
     const a = cleanDoc('a', 'doc A');

@@ -315,6 +315,60 @@ body {
   background: var(--bg-hover);
 }
 
+/*
+ * Formatting toolbar (SPEC §6.1, §6.5). Same drag convention as .menubar and
+ * .tabbar above: the row's own empty space drags the frameless window, and
+ * every interactive child opts back out with no-drag.
+ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 var(--h-toolbar);
+  padding: 0 6px;
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border);
+  --wails-draggable: drag;
+}
+
+.toolbar__button {
+  --wails-draggable: no-drag;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-primary);
+  cursor: default;
+}
+
+.toolbar__button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.toolbar__button:hover {
+  background: var(--bg-hover);
+}
+
+/* Active state is a filled background plus the accent foreground, never
+   colour alone -- aria-pressed above carries it for assistive tech, and the
+   fill keeps it legible for anyone who cannot distinguish the accent. */
+.toolbar__button[aria-pressed='true'] {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.toolbar__separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
 .editor-area {
   flex: 1 1 auto;
   min-height: 0;
