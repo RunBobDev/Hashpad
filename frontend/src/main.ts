@@ -10,6 +10,7 @@ import {
   SystemThemeIsDark,
 } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
+import { publishActiveFormats } from './editor/extensions';
 import {
   openFiles,
   resolveDocumentsBeforeQuit,
@@ -29,7 +30,13 @@ import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { store, setEditorView } from './state/appcontext';
 import { addDocument, documentAtPosition, neighbourId, reorderDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
-import { applyAccent, applyTheme, isValidAccent, resolveIsDark, type ThemeMode } from './theme/theme';
+import {
+  applyAccent,
+  applyTheme,
+  isValidAccent,
+  resolveIsDark,
+  type ThemeMode,
+} from './theme/theme';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('#app not found');
@@ -107,6 +114,12 @@ async function bootstrapTheme(): Promise<void> {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
   } finally {
+    // The initial document's state was installed straight into the view's
+    // constructor, not through a transaction, so no updateListener has ever
+    // run for it -- `activeFormats` would sit at its initial `''` until the
+    // user first typed. A file opened from the command line with the caret
+    // already inside `**bold**` would advertise no formatting at all.
+    publishActiveFormats(view.state);
     ShowWindow();
   }
 }

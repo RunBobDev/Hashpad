@@ -10,7 +10,7 @@ import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
-import { COMMANDS, toEditorCommand, type CommandId } from './commands';
+import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { store } from '../state/appcontext';
@@ -89,7 +89,27 @@ function syncActiveDocument(update: ViewUpdate): void {
  */
 function syncActiveFormats(update: ViewUpdate): void {
   if (!update.docChanged && !update.selectionSet) return;
-  const next = activeFormats(update.state).join('|');
+  publishActiveFormats(update.state);
+}
+
+/**
+ * The same publish, callable without a `ViewUpdate`.
+ *
+ * `EditorView.setState` reinitialises the view's plugins rather than running
+ * a transaction, so it never constructs a `ViewUpdate` and never invokes
+ * `updateListener` — see the comment in files/documentops.ts's
+ * `switchToDocument`, which relies on that for `syncActiveDocument`. What is
+ * a safeguard there is a hole here: without this, switching tabs would leave
+ * the store advertising the *previous* document's formatting until the user
+ * happened to type or move the cursor, and a file opened with the caret
+ * already inside `**bold**` would publish nothing at all. The toolbar would
+ * light the wrong buttons in both cases.
+ *
+ * So every seam that swaps the view's state without a transaction has to call
+ * this itself: `switchToDocument` and the bootstrap in main.ts.
+ */
+export function publishActiveFormats(state: EditorState): void {
+  const next = activeFormats(state).join('|');
   if (next === store.getState().activeFormats) return;
   store.setState((prev) => ({ ...prev, activeFormats: next }));
 }
@@ -202,10 +222,30 @@ export function buildExtensions(isDark: boolean): Extension[] {
         { key: 'Mod-Alt-t', run: toEditorCommand(COMMANDS.table) },
         { key: 'Mod-Shift--', run: toEditorCommand(COMMANDS.horizontalRule) },
         { key: 'Mod-Shift-f', run: toEditorCommand(COMMANDS.footnote) },
-        ...[1, 2, 3, 4, 5, 6].map((level) => ({
+        ...([1, 2, 3, 4, 5, 6] as const).map((level) => ({
           key: `Mod-${level}`,
-          run: toEditorCommand(COMMANDS[`heading${level}` as CommandId]),
+          run: toEditorCommand(COMMANDS[`heading${level}`]),
         })),
+        // Last in this array on purpose. CodeMirror merges same-key bindings
+        // into one ordered run list, so these are tried only after the real
+        // commands above have declined -- and they must live in *this* array
+        // rather than a lower-precedence one, because what they exist to beat
+        // is `defaultKeymap`, which sits between the two.
+        //
+        // A declining command returns false so the chord can fall through,
+        // but for these two what it falls through to is wrong:
+        // - `Mod-i` is `selectParentSyntax` in `defaultKeymap`, so Ctrl+I
+        //   inside a fenced block (where italic declines) expanded the
+        //   selection to the enclosing node instead of doing nothing.
+        // - `Mod-b` is bound by nothing on Windows (`emacsStyleKeymap`'s
+        //   Ctrl-b is mac-only), so no binding calls preventDefault and the
+        //   keydown reaches the DOM. `contentDOM` is a real contenteditable,
+        //   so Chromium's own bold command can act on it.
+        //
+        // Claiming the chord in both cases makes "the command declined" mean
+        // nothing happens, which is what the user expects inside code.
+        { key: 'Mod-b', run: () => true },
+        { key: 'Mod-i', run: () => true },
       ]),
     ),
     keymap.of([...defaultKeymap, ...historyKeymap]),

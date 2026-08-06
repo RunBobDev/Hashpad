@@ -91,6 +91,41 @@ describe('makeUntitledDocument', () => {
   });
 });
 
+/**
+ * `view.setState` reinitialises the view's plugins instead of running a
+ * transaction, so it constructs no `ViewUpdate` and no `updateListener` fires
+ * -- `switchToDocument` already relies on that for `syncActiveDocument`. For
+ * `syncActiveFormats` the same fact is a hole: without an explicit republish,
+ * the store would keep advertising the *outgoing* document's formatting until
+ * the user next typed, and the toolbar would light the wrong buttons on every
+ * tab switch.
+ */
+describe('switchToDocument keeps the published active formats in step', () => {
+  /** A document whose caret sits inside the given mark, ready to switch to. */
+  function docWithCaretIn(id: string, text: string, at: number): Document {
+    const base = EditorState.create({ doc: text, extensions: buildExtensions(false) });
+    const editorState = base.update({ selection: { anchor: at } }).state;
+    return { ...createUntitledDocument(base), id, editorState };
+  }
+
+  it('republishes on switch rather than leaving the previous document’s formats', () => {
+    const bolded = docWithCaretIn('bold-doc', '**bold**', 4);
+    const plain = docWithCaretIn('plain-doc', 'plain text', 3);
+    store.setState((prev) => ({ ...prev, documents: [bolded, plain], activeDocumentId: null }));
+
+    switchToDocument('bold-doc');
+    expect(store.getState().activeFormats).toBe('bold');
+
+    // The load-bearing half: switching away must clear it. Without the
+    // republish this still reads 'bold' while the caret is in plain text.
+    switchToDocument('plain-doc');
+    expect(store.getState().activeFormats).toBe('');
+
+    switchToDocument('bold-doc');
+    expect(store.getState().activeFormats).toBe('bold');
+  });
+});
+
 describe('switchToDocument', () => {
   it('swaps the view to the target document and activates it', () => {
     const a = cleanDoc('a', 'doc A');

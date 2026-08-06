@@ -13,7 +13,7 @@
  */
 import { EditorState } from '@codemirror/state';
 import { ReadFile } from '../../wailsjs/go/app/App';
-import { buildExtensions } from '../editor/extensions';
+import { buildExtensions, publishActiveFormats } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
 import { activateDocument, addDocument, closeDocument, takeReopenPath } from '../state/documents';
@@ -104,6 +104,12 @@ export function switchToDocument(id: string): void {
     // whatever `activeDocumentId` now points at.
     view.setState(incoming.editorState);
     if (incoming.scrollSnapshot) view.dispatch({ effects: incoming.scrollSnapshot });
+
+    // The other side of that same coin: `syncActiveFormats` is an
+    // updateListener too, so it does not fire here either -- and unlike
+    // `syncActiveDocument`, it needs to. Without this the toolbar keeps
+    // showing the outgoing document's active formatting until the user types.
+    publishActiveFormats(view.state);
   }
 }
 

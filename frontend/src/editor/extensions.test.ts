@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { store, setEditorView } from '../state/appcontext';
 import { createUntitledDocument, isDirty } from '../state/document';
 import { COMMAND_EVENT } from '../ui/menubar';
+import { COMMANDS, toEditorCommand } from './commands';
 import { buildExtensions } from './extensions';
 
 /**
@@ -323,10 +324,91 @@ describe('formatting command keymap', () => {
     view.destroy();
   });
 
+  // SPEC §6.5 assigns Ctrl+Shift+T to Table, but §6.2/§6.14 assign it to
+  // Reopen Closed Tab, which shipped in Checkpoint C. The owner kept
+  // reopen-tab and moved Table to Ctrl+Alt+T.
+  //
+  // `keyCode` is load-bearing here, not decoration. CodeMirror stores the
+  // binding lowercased (`Ctrl-Shift-t`) and does no case folding, so an event
+  // carrying only `key: 'T'` matches *no binding at all* -- the test would
+  // then pass even if someone bound Table to Mod-Shift-t, which is the one
+  // regression it exists to catch. A real keyboard supplies keyCode 84, and
+  // `base[84] === 't'` is what drives the match.
   it('leaves Ctrl+Shift+T to reopen-tab rather than inserting a table', () => {
     const view = mountView('x');
-    pressKey(view, { key: 'T', ctrlKey: true, shiftKey: true });
+    const { seen, stop } = captureCommands();
+    pressKey(view, { key: 'T', code: 'KeyT', keyCode: 84, ctrlKey: true, shiftKey: true });
+    stop();
+    expect(seen).toEqual(['tab.reopen']);
     expect(view.state.doc.toString()).toBe('x');
+    view.destroy();
+  });
+
+  it('inserts a table with Ctrl+Alt+T', () => {
+    const view = mountView('');
+    pressKey(view, { key: 't', code: 'KeyT', keyCode: 84, ctrlKey: true, altKey: true });
+    expect(view.state.doc.toString()).toContain('| Column 1 |');
+    view.destroy();
+  });
+
+  // The bindings not covered individually above. A transposition between two
+  // chords in the same family -- Ctrl+Shift+7 on bulletList instead of
+  // numberedList -- produces a document, so a test asserting only "something
+  // changed" would miss it. Each row pins the document the *named* command
+  // produces.
+  it.each([
+    ['italic', { key: 'i', code: 'KeyI', keyCode: 73, ctrlKey: true }, '*word*'],
+    [
+      'strikethrough',
+      { key: 'X', code: 'KeyX', keyCode: 88, ctrlKey: true, shiftKey: true },
+      '~~word~~',
+    ],
+    [
+      'highlight',
+      { key: 'H', code: 'KeyH', keyCode: 72, ctrlKey: true, shiftKey: true },
+      '==word==',
+    ],
+    ['inlineCode', { key: '`', code: 'Backquote', keyCode: 192, ctrlKey: true }, '`word`'],
+    [
+      'numberedList',
+      { key: '&', code: 'Digit7', keyCode: 55, ctrlKey: true, shiftKey: true },
+      '1. word',
+    ],
+    [
+      'taskList',
+      { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true },
+      '- [ ] word',
+    ],
+    [
+      'blockquote',
+      { key: '>', code: 'Period', keyCode: 190, ctrlKey: true, shiftKey: true },
+      '> word',
+    ],
+    ['heading3', { key: '3', code: 'Digit3', keyCode: 51, ctrlKey: true }, '### word'],
+  ] as const)('%s fires on its own chord and produces its own markup', (_name, init, expected) => {
+    const view = mountView('word');
+    view.dispatch({ selection: EditorSelection.range(0, 4) });
+    pressKey(view, init);
+    expect(view.state.doc.toString()).toBe(expected);
+    view.destroy();
+  });
+
+  // Ctrl+I inside a fence used to fall through to defaultKeymap's
+  // selectParentSyntax, expanding the selection where the user expected
+  // nothing to happen. A low-precedence binding now claims both chords so a
+  // declining command swallows the key instead of passing it on.
+  it.each([
+    ['Ctrl+B', { key: 'b', code: 'KeyB', keyCode: 66, ctrlKey: true }],
+    ['Ctrl+I', { key: 'i', code: 'KeyI', keyCode: 73, ctrlKey: true }],
+  ] as const)('%s inside a fence changes neither the document nor the selection', (_name, init) => {
+    const doc = '```js\nlet x = 1;\n```';
+    const view = mountView(doc);
+    view.dispatch({ selection: EditorSelection.cursor(doc.indexOf('let')) });
+    const before = view.state.selection.main;
+    pressKey(view, init);
+    expect(view.state.doc.toString()).toBe(doc);
+    expect(view.state.selection.main.from).toBe(before.from);
+    expect(view.state.selection.main.to).toBe(before.to);
     view.destroy();
   });
 
@@ -338,27 +420,37 @@ describe('formatting command keymap', () => {
   });
 
   /**
-   * Carried decision #2 (see task-5-report.md): `toEditorCommand` returns
-   * `false` when the wrapped command declines, and `bold` declines inside a
-   * fenced code block (commands.ts's `declinesInFence`). This pins what that
-   * actually does at the binding level: the document is untouched (no
-   * literal `**` written into someone's source), and -- unlike every
-   * `dispatchCommand`-wrapped file/tab binding just above, which always
-   * returns `true` -- the key is left *unconsumed* (`dispatchEvent` returns
-   * `true`, meaning `preventDefault` was never called), so it genuinely falls
-   * through to whatever the browser would otherwise do with it. jsdom has no
-   * native "bold this contenteditable selection" fallback to observe, so this
-   * test cannot prove what a real Chromium/WebView2 does next -- only that
-   * CodeMirror hands the key onward rather than swallowing it. See the task
-   * report for the investigation into what receives it in the real app.
+   * `toEditorCommand` must keep returning `false` when its command declines
+   * -- that is what lets a chord fall through to another binding, and an
+   * "always return true" regression would silently break every fall-through
+   * in the file.
+   *
+   * Asserted against the adapter directly rather than through a keypress.
+   * The keymap-level assertion this replaces (`pressKey` returns true, i.e.
+   * preventDefault was never called) stopped meaning what its name said the
+   * moment `Mod-b`/`Mod-i` gained their fall-through-blocking bindings: the
+   * key is now deliberately consumed even though the command declines, so a
+   * keypress can no longer distinguish "the adapter returned false" from
+   * "the adapter returned true". The two facts are now pinned separately --
+   * this test owns the adapter's return value, and the pair above owns the
+   * user-visible outcome of pressing the key.
    */
-  it('declines Ctrl+B inside a fenced code block and leaves the key unconsumed', () => {
+  it('toEditorCommand reports false when its command declines', () => {
     const doc = '```js\nlet x = 1;\n```';
     const view = mountView(doc);
     view.dispatch({ selection: EditorSelection.cursor(doc.indexOf('let')) });
-    const notHandled = pressKey(view, { key: 'b', ctrlKey: true });
+
+    expect(toEditorCommand(COMMANDS.bold)(view)).toBe(false);
     expect(view.state.doc.toString()).toBe(doc);
-    expect(notHandled).toBe(true);
+
+    // And true where the command does apply, so the test cannot pass by the
+    // adapter simply always returning false.
+    view.dispatch({ selection: EditorSelection.cursor(0) });
+    const view2 = mountView('word');
+    view2.dispatch({ selection: EditorSelection.range(0, 4) });
+    expect(toEditorCommand(COMMANDS.bold)(view2)).toBe(true);
+
     view.destroy();
+    view2.destroy();
   });
 });
