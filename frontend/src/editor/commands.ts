@@ -46,6 +46,20 @@ export function toEditorCommand(command: MarkdownCommand): Command {
 }
 
 /**
+ * Every formatting command except `codeBlock` declines inside fenced or
+ * indented code: turning someone's source into a heading or a list item by
+ * mistake is worse than doing nothing.
+ *
+ * Deliberately checks *every* range, not just the main one. Declining too
+ * often is recoverable -- the user moves the cursor and tries again -- while
+ * writing a marker into a code sample is the kind of edit people notice much
+ * later, in a diff.
+ */
+function declinesInFence(state: EditorState): boolean {
+  return state.selection.ranges.some((range) => inFencedCode(state, range.head));
+}
+
+/**
  * Toggles `mark` (bold/italic/strikethrough/highlight/inlineCode) across every
  * selection range. SPEC §6.5: "Toggle, don't just insert" and "respect
  * selection" -- both requirements live here rather than in `toEditorCommand`
@@ -61,7 +75,7 @@ export function toggleInlineMark(mark: InlineMark): MarkdownCommand {
 
   return (state) => {
     const ranges = state.selection.ranges;
-    if (ranges.some((range) => inFencedCode(state, range.head))) return null;
+    if (declinesInFence(state)) return null;
 
     const spans = ranges.map((range) => enclosingInlineMark(state, range.head, mark));
 
@@ -187,7 +201,7 @@ function toggleLinePrefix(options: {
 
   return (state) => {
     const ranges = state.selection.ranges;
-    if (ranges.some((range) => inFencedCode(state, range.head))) return null;
+    if (declinesInFence(state)) return null;
 
     // Deduped, sorted line numbers across every range -- so two cursors on
     // the same line toggle it once, and two cursors on different lines each
@@ -303,26 +317,69 @@ function bulletOrTaskAt(lineText: string): { indent: string; marker: string } | 
  */
 
 /**
- * Shared by `table`, `horizontalRule`, and `codeBlock`: replaces the main
- * selection range with `text`, prefixing a blank line when the insertion
- * point is not already at the start of a line and always appending a
- * trailing newline. This is what keeps a block construct from gluing itself
- * onto surrounding prose -- `foo---\n` and `foo\n\n---\n` parse very
- * differently, and only the second is a horizontal rule.
+ * Shared by `table`, `horizontalRule`, and `codeBlock`: inserts `text` as its
+ * own block, surrounded by however many newlines it takes to keep it one.
+ *
+ * A block construct needs a *blank line* on each side, not merely a line of
+ * its own, and getting that wrong does not produce ugly markdown -- it
+ * produces different markdown. Checked against this project's own parser:
+ *
+ *   foo\n---\nbar          -> SetextHeading2   (the rule underlines `foo`!)
+ *   foo\n\n---\n\nbar      -> Paragraph, HorizontalRule, Paragraph
+ *   foo\n<table>\nbar      -> `bar` is swallowed as a table row
+ *   foo\n\n<table>\n\nbar  -> Paragraph, Table, Paragraph
+ *
+ * So the rule is about the neighbouring *lines being blank*, not about
+ * landing on column zero: inserting at the start of a line that sits directly
+ * under a paragraph still needs a blank line opened above it.
+ *
+ * `replaceSelection` distinguishes the two kinds of caller. `codeBlock`
+ * consumes the selection -- the selected text becomes the fence's contents --
+ * while `table` and `horizontalRule` have no use for it and must leave it
+ * alone. Replacing it there silently deleted whatever the user had selected.
  *
  * `cursorOffset` is measured from the start of `text` itself, i.e. *after*
- * the blank-line prefix this function may add -- callers do not need to know
- * whether the prefix fired to say where in their own text the cursor
- * belongs.
+ * any prefix this function adds, so callers need not know whether it fired.
  */
-function blockInsert(state: EditorState, text: string, cursorOffset: number): TransactionSpec {
+function blockInsert(
+  state: EditorState,
+  text: string,
+  cursorOffset: number,
+  options: { replaceSelection?: boolean; selectLength?: number } = {},
+): TransactionSpec {
+  const { doc } = state;
   const { from, to } = state.selection.main;
-  const atLineStart = state.doc.lineAt(from).from === from;
-  const prefix = atLineStart ? '' : '\n\n';
 
+  // Where the construct goes. A caller that does not consume the selection
+  // inserts after it rather than over it, so nothing is destroyed.
+  const start = options.replaceSelection ? from : to;
+  const end = options.replaceSelection ? to : to;
+
+  const { selectLength = 0 } = options;
+  const line = doc.lineAt(start);
+  const column = start - line.from;
+  const restOfLine = line.text.slice(column);
+  const previousBlank = line.number === 1 || doc.line(line.number - 1).text.trim() === '';
+  const nextBlank = line.number === doc.lines || doc.line(line.number + 1).text.trim() === '';
+
+  // Enough newlines to leave a blank line above, given what is already there.
+  let prefix = '';
+  if (start > 0) {
+    if (column > 0) prefix = '\n\n';
+    else if (!previousBlank) prefix = '\n';
+  }
+
+  // And below. Text still to come on this line becomes its own paragraph, so
+  // it needs the blank line too.
+  let suffix = '\n';
+  if (end < doc.length && (restOfLine !== '' || !nextBlank)) suffix = '\n\n';
+
+  const caret = start + prefix.length + cursorOffset;
   return {
-    changes: { from, to, insert: prefix + text + '\n' },
-    selection: EditorSelection.cursor(from + prefix.length + cursorOffset),
+    changes: { from: start, to: end, insert: prefix + text + suffix },
+    // A zero `selectLength` collapses to a plain cursor, so callers with no
+    // placeholder to offer say nothing and get one.
+    selection: EditorSelection.range(caret, caret + selectLength),
   };
 }
 
@@ -351,8 +408,7 @@ function insertReferenceCommand(options: {
   const { prefix, textPlaceholder, targetPlaceholder } = options;
 
   return (state) => {
-    const ranges = state.selection.ranges;
-    if (ranges.some((range) => inFencedCode(state, range.head))) return null;
+    if (declinesInFence(state)) return null;
 
     return state.changeByRange((range) => {
       let from = range.from;
@@ -409,7 +465,7 @@ function insertReferenceCommand(options: {
  * instead of the two colliding in an undefined order.
  */
 const footnote: MarkdownCommand = (state) => {
-  if (state.selection.ranges.some((range) => inFencedCode(state, range.head))) return null;
+  if (declinesInFence(state)) return null;
 
   const docText = state.doc.toString();
   let highest = 0;
@@ -452,27 +508,30 @@ const footnote: MarkdownCommand = (state) => {
 const codeBlock: MarkdownCommand = (state) => {
   const { from, to } = state.selection.main;
   const inner = state.doc.sliceString(from, to);
-  return blockInsert(state, '```\n' + inner + '\n```', 3);
+  // The one caller that consumes the selection: the selected text becomes the
+  // fence's contents, so replacing the range is the point rather than a bug.
+  return blockInsert(state, '```\n' + inner + '\n```', 3, { replaceSelection: true });
 };
 
 const table: MarkdownCommand = (state) => {
-  if (state.selection.ranges.some((range) => inFencedCode(state, range.head))) return null;
+  if (declinesInFence(state)) return null;
   const text =
     '| Column 1 | Column 2 | Column 3 |\n' +
     '| --- | --- | --- |\n' +
     '|  |  |  |\n' +
     '|  |  |  |';
-  // Offset 2 lands the cursor right after the leading "| ", on "Column 1" --
-  // the first thing a user filling in a fresh table wants to rename.
-  return blockInsert(state, text, 2);
+  // Selects "Column 1" rather than parking a bare cursor before it, so the
+  // first thing a user does with a fresh table -- rename the first header --
+  // is one keystroke. A cursor there would have made typing produce
+  // `| NameColumn 1 |`. Same convention as link/image's placeholders.
+  return blockInsert(state, text, '| '.length, { selectLength: 'Column 1'.length });
 };
 
 const horizontalRule: MarkdownCommand = (state) => {
-  if (state.selection.ranges.some((range) => inFencedCode(state, range.head))) return null;
-  // Offset 4 is past "---" and its trailing newline -- the whole inserted
-  // block -- since there is no meaningful position *inside* a rule to land
-  // on.
-  return blockInsert(state, '---', 4);
+  if (declinesInFence(state)) return null;
+  // Past the rule and its newline: there is no meaningful position *inside*
+  // a rule to land on, so the cursor goes after it, ready to keep typing.
+  return blockInsert(state, '---', '---\n'.length);
 };
 
 export const COMMANDS = {

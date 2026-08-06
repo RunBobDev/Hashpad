@@ -141,15 +141,60 @@ describe('footnote with the cursor mid-document', () => {
   });
 });
 
-describe('blockInsert: already at the start of a line', () => {
-  // The brief's own "separates itself" cases only prove the blank-line
-  // prefix appears when it's needed (cursor mid-line). They don't prove it
-  // is withheld when it isn't: a wrong implementation that always prefixes
-  // `\n\n` would still pass the empty-document case in the verbatim block
-  // above (an empty document's cursor is trivially "at the start of a
-  // line"), but would fail here, where the cursor sits at the start of a
-  // line that has real content above it.
-  it('does not add a blank line when the cursor already starts a non-empty line', () => {
-    expect(apply(testState('foo\nbar', 4), 'horizontalRule')?.doc).toBe('foo\n---\nbar');
+// A block construct needs a blank line on each side, not merely a line of its
+// own. Getting that wrong does not produce ugly markdown, it produces
+// *different* markdown -- each case below was checked against this project's
+// own parser, and the wrong output parses as the wrong construct.
+describe('blockInsert surrounds the construct with blank lines', () => {
+  // The original rule keyed off column zero and emitted `foo\n---\nbar`,
+  // which @lezer/markdown parses as SetextHeading2: the rule underlines
+  // `foo` and turns it into a heading. The user asked for a horizontal rule
+  // and got an H2.
+  it('opens a blank line above when inserting at the start of a line under text', () => {
+    expect(apply(testState('foo\nbar', 4), 'horizontalRule')?.doc).toBe('foo\n\n---\n\nbar');
+  });
+
+  it('adds no blank line where one already exists', () => {
+    expect(apply(testState('foo\n\nbar', 5), 'horizontalRule')?.doc).toBe('foo\n\n---\n\nbar');
+  });
+
+  // Only one trailing newline let the following line be swallowed as a table
+  // row, since a table's rows are simply the lines beneath it.
+  it('closes a blank line below so the next line is not absorbed', () => {
+    const doc = apply(testState('foo\nbar', 4), 'table')?.doc ?? '';
+    expect(doc.endsWith('\n\nbar')).toBe(true);
+  });
+
+  it('adds no leading blank line at the very start of the document', () => {
+    expect(apply(testState('bar', 0), 'horizontalRule')?.doc).toBe('---\n\nbar');
+  });
+});
+
+// `codeBlock` consumes the selection -- that is the feature. The other two
+// have no use for it, and replacing the range deleted whatever the user had
+// selected: a toolbar click that silently ate a paragraph.
+describe('table and horizontalRule leave a selection intact', () => {
+  it('horizontalRule does not delete the selected text', () => {
+    const result = apply(testState('keep this text', 0, 14), 'horizontalRule');
+    expect(result?.doc).toContain('keep this text');
+  });
+
+  it('table does not delete the selected text', () => {
+    const result = apply(testState('keep this text', 0, 14), 'table');
+    expect(result?.doc).toContain('keep this text');
+  });
+
+  it('codeBlock still consumes the selection, because it wraps it', () => {
+    expect(apply(testState('let x = 1;', 0, 10), 'codeBlock')?.doc).toBe('```\nlet x = 1;\n```\n');
+  });
+});
+
+describe('table places the cursor ready to type', () => {
+  // A bare cursor before "Column 1" made typing produce `| NameColumn 1 |`.
+  // Selecting the placeholder means the first keystroke replaces it, the same
+  // convention link and image already follow.
+  it('selects the first column heading', () => {
+    const result = apply(testState('', 0), 'table');
+    expect(result?.doc.slice(result.from, result.to)).toBe('Column 1');
   });
 });
