@@ -22,7 +22,12 @@ describe('syncActiveDocument update listener', () => {
   afterEach(() => {
     // Reset the shared appcontext store so this file's writes don't leak
     // into other tests that happen to run in the same worker.
-    store.setState(() => ({ documents: [], activeDocumentId: null, isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [],
+      activeDocumentId: null,
+      isDark: false,
+      closedPaths: [],
+    }));
   });
 
   it('writes a document change back into the store, flipping the active document dirty', () => {
@@ -85,7 +90,12 @@ describe('syncActiveDocument update listener', () => {
  */
 describe('tab command keymap', () => {
   afterEach(() => {
-    store.setState(() => ({ documents: [], activeDocumentId: null, isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [],
+      activeDocumentId: null,
+      isDark: false,
+      closedPaths: [],
+    }));
   });
 
   function buildView(): EditorView {
@@ -107,7 +117,9 @@ describe('tab command keymap', () => {
 
   /** Dispatches a real keydown on the view's editable root; returns whether it was left unhandled. */
   function press(view: EditorView, key: string, modifiers: KeyboardEventInit = {}): boolean {
-    return view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true, ...modifiers }));
+    return view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key, cancelable: true, ...modifiers }),
+    );
   }
 
   it('dispatches tab.close on Mod-w and consumes the key', () => {

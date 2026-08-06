@@ -104,11 +104,46 @@ export function blockPrefixAt(
   return match ? { indent: match[1]!, marker: match[2]! } : null;
 }
 
-// CommonMark ATX headings: 1-6 `#` characters, then a space or end of line --
-// `#nospace` is a literal word and `#######` (seven) is not a heading at all.
+/**
+ * CommonMark ATX headings: up to three spaces of indent, then 1-6 `#`
+ * characters, then a space or end of line. `#nospace` is a literal word and
+ * `#######` (seven) is not a heading at all.
+ *
+ * Three spaces, not any indent: a fourth would make the line an indented code
+ * block, so `    # x` is code and must not read as a heading. Tabs are
+ * excluded for the same reason -- a leading tab is already four columns.
+ *
+ * The one definition of this pattern. `headingMarkerAt` below reads the same
+ * match, because the level and the marker's width have to agree: a heading
+ * command that detected the level with one regex and deleted the marker with
+ * another would eat or leave a character the moment the two drifted.
+ */
+// No `g` or `y` flag, so this carries no `lastIndex` state and is safe to
+// share between the two readers below.
+const ATX_HEADING = /^( {0,3})(#{1,6})(\s|$)/;
+
 export function headingLevelAt(lineText: string): number | null {
-  const match = /^(#{1,6})(\s|$)/.exec(lineText);
-  return match ? match[1]!.length : null;
+  const match = ATX_HEADING.exec(lineText);
+  // Safe: group 2 is non-optional, so a match guarantees the index.
+  return match ? match[2]!.length : null;
+}
+
+/**
+ * The ATX marker actually present on a line -- its indent and its full width,
+ * as opposed to `headingLevelAt`'s level alone.
+ *
+ * The width is sliced from the match rather than computed as
+ * `'#'.repeat(level) + ' '`, because CommonMark allows the hashes with no
+ * trailing space at end of line (`##` is a valid empty heading). Assuming the
+ * space would delete one character too many on exactly that input.
+ */
+export function headingMarkerAt(lineText: string): { indent: string; marker: string } | null {
+  const match = ATX_HEADING.exec(lineText);
+  if (!match) return null;
+
+  // Safe: all three groups are non-optional, so a match guarantees the index.
+  const indent = match[1]!;
+  return { indent, marker: match[0].slice(indent.length) };
 }
 
 export function inFencedCode(state: EditorState, pos: number): boolean {

@@ -16,6 +16,7 @@ import {
   blockPrefixAt,
   enclosingInlineMark,
   headingLevelAt,
+  headingMarkerAt,
   inFencedCode,
   type InlineMark,
   type MarkSpan,
@@ -127,7 +128,22 @@ export function toggleInlineMark(mark: InlineMark): MarkdownCommand {
  */
 function toggleLinePrefix(options: {
   detect: (lineText: string) => { indent: string; marker: string } | null;
-  format: (indent: string, index: number) => string;
+  /**
+   * The marker alone -- `"- "`, `"> "`, `"1. "` -- **without** the line's
+   * indent. `toggleLinePrefix` re-emits the indent itself around every call.
+   *
+   * That split is deliberate and was a bug once: when `format` owned the
+   * whole prefix, every one of the three add branches had to remember to
+   * include the indent, and `toggleHeading` -- the one caller that isn't a
+   * `blockPrefixAt` wrapper -- forgot. It deleted the leading whitespace on
+   * every heading toggle and turned `  # Title` into `# # Title`. With the
+   * indent out of `format`'s hands there is nothing left for a caller to
+   * forget.
+   *
+   * `index` is the line's position within the affected block, so an ordered
+   * list can number 1., 2., 3. from it.
+   */
+  format: (index: number) => string;
   /**
    * A different marker from the same family that already occupies the slot
    * this prefix wants, and so should be replaced rather than prefixed
@@ -174,53 +190,32 @@ function toggleLinePrefix(options: {
     }
 
     // At least one line lacks the prefix: give it to all of them.
+    //
+    // Each branch replaces the run from `line.from` through whatever occupies
+    // the prefix slot -- the indent, plus any marker being replaced -- and
+    // writes back the same indent followed by the new marker. Preserving the
+    // indent is this function's job, not `format`'s (see the option's doc).
     return {
       changes: lines.map((line, index) => {
-        const match = own[index];
-        // `format` returns the *whole* prefix, indent included, so every
-        // branch below replaces starting at `line.from` -- inserting it
-        // after the existing indent (as opposed to replacing the indent with
-        // its own text) would double it.
-        if (match) {
-          // Already has this exact prefix. Regenerate it through `format`
-          // rather than leaving it alone, so numberedList can renumber a
-          // line that already carries *a* number but the wrong one.
-          return {
-            from: line.from,
-            to: line.from + match.indent.length + match.marker.length,
-            insert: format(match.indent, index),
-          };
-        }
+        // Already has this exact prefix. Regenerate rather than leave alone,
+        // so numberedList renumbers a line carrying *a* number but the wrong
+        // one. `conflict` is a different marker from the same family
+        // occupying the slot -- a plain bullet where a task is wanted, or
+        // another heading level. Falling through to neither means the slot
+        // holds nothing but indent.
+        // Safe on both: each is null-checked before its properties are read.
+        const occupant = own[index] ?? conflict?.(line.text) ?? null;
+        const indent = occupant ? occupant.indent : /^\s*/.exec(line.text)![0];
+        const occupiedTo = indent.length + (occupant ? occupant.marker.length : 0);
 
-        const other = conflict?.(line.text);
-        if (other) {
-          // A different marker from the same family sits in the slot this
-          // prefix wants -- replace it instead of prefixing alongside it.
-          return {
-            from: line.from,
-            to: line.from + other.indent.length + other.marker.length,
-            insert: format(other.indent, index),
-          };
-        }
-
-        const indent = /^\s*/.exec(line.text)![0];
-        return { from: line.from, to: line.from + indent.length, insert: format(indent, index) };
+        return {
+          from: line.from,
+          to: line.from + occupiedTo,
+          insert: indent + format(index),
+        };
       }),
     };
   };
-}
-
-/**
- * ATX heading marker actually present on a line, at any level -- distinct
- * from `headingLevelAt`, which only reports the level. CommonMark allows the
- * hashes with no trailing space at end of line, so the marker's real width
- * on the page isn't always `level + 1`; slicing the matched text (rather
- * than assuming `'#'.repeat(level) + ' '`) keeps the remove/replace paths
- * from eating or leaving behind a character on that edge case.
- */
-function headingMarkerAt(lineText: string): { indent: string; marker: string } | null {
-  const match = /^(#{1,6})(\s|$)/.exec(lineText);
-  return match ? { indent: '', marker: lineText.slice(0, match[1]!.length + match[2]!.length) } : null;
 }
 
 /**
@@ -241,6 +236,17 @@ function toggleHeading(level: number): MarkdownCommand {
   });
 }
 
+/**
+ * `- [ ] item` is a bullet item too, so removing "the bullet" from it has to
+ * take the checkbox with it. Matching only `- ` would delete the dash and
+ * leave `[ ] item` behind as literal text -- visibly not what the button
+ * says it does. Task markers are therefore tried first, and only a line that
+ * is not a task falls through to the plain bullet pattern.
+ */
+function bulletOrTaskAt(lineText: string): { indent: string; marker: string } | null {
+  return blockPrefixAt(lineText, 'taskList') ?? blockPrefixAt(lineText, 'bulletList');
+}
+
 export const COMMANDS = {
   bold: toggleInlineMark('bold'),
   italic: toggleInlineMark('italic'),
@@ -248,12 +254,12 @@ export const COMMANDS = {
   highlight: toggleInlineMark('highlight'),
   inlineCode: toggleInlineMark('inlineCode'),
   bulletList: toggleLinePrefix({
-    detect: (text) => blockPrefixAt(text, 'bulletList'),
-    format: (indent) => `${indent}- `,
+    detect: bulletOrTaskAt,
+    format: () => '- ',
   }),
   numberedList: toggleLinePrefix({
     detect: (text) => blockPrefixAt(text, 'numberedList'),
-    format: (indent, index) => `${indent}${index + 1}. `,
+    format: (index) => `${index + 1}. `,
   }),
   // A plain bullet is replaced, not prefixed, when a task marker is added:
   // `- item` becomes `- [ ] item`, never `- - [ ] item`. `detect` alone
@@ -262,12 +268,12 @@ export const COMMANDS = {
   // here rather than folded into one regex that tries to cover both shapes.
   taskList: toggleLinePrefix({
     detect: (text) => blockPrefixAt(text, 'taskList'),
-    format: (indent) => `${indent}- [ ] `,
+    format: () => '- [ ] ',
     conflict: (text) => blockPrefixAt(text, 'bulletList'),
   }),
   blockquote: toggleLinePrefix({
     detect: (text) => blockPrefixAt(text, 'blockquote'),
-    format: (indent) => `${indent}> `,
+    format: () => '> ',
   }),
   heading1: toggleHeading(1),
   heading2: toggleHeading(2),
