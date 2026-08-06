@@ -10,6 +10,8 @@ import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
+import { COMMANDS, toEditorCommand, type CommandId } from './commands';
+import { activeFormats } from './marks';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { store } from '../state/appcontext';
 
@@ -68,6 +70,28 @@ function syncActiveDocument(update: ViewUpdate): void {
       doc.id === activeId ? { ...doc, editorState: update.state } : doc,
     ),
   }));
+}
+
+/**
+ * Publishes which formatting the cursor sits inside, for the toolbar's active
+ * state (SPEC §6.5). Stored as a sorted, `|`-joined string rather than a Set
+ * or array because store.ts's `isEqual` compares one level and falls back to
+ * reference equality — a freshly built collection would never compare equal,
+ * so the toolbar would rebuild on every keystroke. ui/tabbar.ts's
+ * tabStripSummary solves the same problem the same way.
+ *
+ * A separate listener from `syncActiveDocument` rather than folded into it:
+ * this one cares about selection-only moves (arrowing into or out of bold
+ * text with nothing typed), which `syncActiveDocument` deliberately ignores
+ * because they don't affect dirty state. Folding the two together would mean
+ * either running this on every keystroke `syncActiveDocument` already
+ * filters out, or teaching `syncActiveDocument` a second reason to fire.
+ */
+function syncActiveFormats(update: ViewUpdate): void {
+  if (!update.docChanged && !update.selectionSet) return;
+  const next = activeFormats(update.state).join('|');
+  if (next === store.getState().activeFormats) return;
+  store.setState((prev) => ({ ...prev, activeFormats: next }));
 }
 
 /**
@@ -152,6 +176,36 @@ export function buildExtensions(isDark: boolean): Extension[] {
           key: `Mod-Alt-${i + 1}`,
           run: dispatchCommand(`tab.goto${i + 1}`),
         })),
+        // The sixteen formatting commands (commands.ts), each bound through
+        // `toEditorCommand` -- the same adapter the toolbar will wrap its
+        // buttons in (SPEC §6.5's "one implementation, two triggers"). Unlike
+        // every `dispatchCommand` binding above, these can decline (a command
+        // returns `false` when it does not apply, e.g. inside a fenced code
+        // block) and are spelled out individually rather than generated,
+        // since each maps to a different, spec-fixed chord.
+        { key: 'Mod-b', run: toEditorCommand(COMMANDS.bold) },
+        { key: 'Mod-i', run: toEditorCommand(COMMANDS.italic) },
+        { key: 'Mod-Shift-x', run: toEditorCommand(COMMANDS.strikethrough) },
+        { key: 'Mod-Shift-h', run: toEditorCommand(COMMANDS.highlight) },
+        { key: 'Mod-`', run: toEditorCommand(COMMANDS.inlineCode) },
+        { key: 'Mod-Shift-k', run: toEditorCommand(COMMANDS.codeBlock) },
+        { key: 'Mod-Shift-8', run: toEditorCommand(COMMANDS.bulletList) },
+        { key: 'Mod-Shift-7', run: toEditorCommand(COMMANDS.numberedList) },
+        { key: 'Mod-Shift-9', run: toEditorCommand(COMMANDS.taskList) },
+        { key: 'Mod-Shift-.', run: toEditorCommand(COMMANDS.blockquote) },
+        { key: 'Mod-k', run: toEditorCommand(COMMANDS.link) },
+        { key: 'Mod-Shift-i', run: toEditorCommand(COMMANDS.image) },
+        // Ctrl+Alt+T, not SPEC §6.5's Ctrl+Shift+T: that chord is already Reopen
+        // Closed Tab (SPEC §6.2/§6.14), shipped since Checkpoint C. The spec collides
+        // with itself here; the owner chose to keep reopen-tab and move Table into
+        // the Ctrl+Alt namespace this project already uses for tab positions.
+        { key: 'Mod-Alt-t', run: toEditorCommand(COMMANDS.table) },
+        { key: 'Mod-Shift--', run: toEditorCommand(COMMANDS.horizontalRule) },
+        { key: 'Mod-Shift-f', run: toEditorCommand(COMMANDS.footnote) },
+        ...[1, 2, 3, 4, 5, 6].map((level) => ({
+          key: `Mod-${level}`,
+          run: toEditorCommand(COMMANDS[`heading${level}` as CommandId]),
+        })),
       ]),
     ),
     keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -164,5 +218,6 @@ export function buildExtensions(isDark: boolean): Extension[] {
     hashpadTheme,
     darkThemeCompartment.of(EditorView.darkTheme.of(isDark)),
     EditorView.updateListener.of(syncActiveDocument),
+    EditorView.updateListener.of(syncActiveFormats),
   ];
 }

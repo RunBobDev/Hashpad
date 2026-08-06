@@ -53,7 +53,9 @@ vi.mock('../wailsjs/go/app/App', () => ({
   // bootstrapTheme's settings-failed catch branch instead of the tab/document
   // routing this suite actually exercises. Only the fields main.ts's
   // bootstrap reads are present -- this is not a full app.Settings.
-  LoadSettings: vi.fn().mockResolvedValue({ appearance: { theme: 'system', accentColor: '#0078d4' } }),
+  LoadSettings: vi
+    .fn()
+    .mockResolvedValue({ appearance: { theme: 'system', accentColor: '#0078d4' } }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
@@ -79,7 +81,13 @@ function emit(command: string): void {
  * "outgoing" document by view identity afterward.
  */
 function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = []): void {
-  store.setState(() => ({ documents: docs, activeDocumentId: activeId, isDark: false, closedPaths }));
+  store.setState(() => ({
+    documents: docs,
+    activeDocumentId: activeId,
+    isDark: false,
+    closedPaths,
+    activeFormats: '',
+  }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);
 }

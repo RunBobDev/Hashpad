@@ -285,4 +285,27 @@ describe('activeFormats', () => {
     const state = testState(doc, doc.indexOf('# comment'));
     expect(activeFormats(state)).toEqual(['codeBlock']);
   });
+
+  /**
+   * Checkpoint E, Task 5's carried decision: a fenced code block nested
+   * inside a blockquote parses as `Blockquote > FencedCode` (confirmed
+   * against this grammar directly -- `Document[Blockquote[QuoteMark
+   * Paragraph QuoteMark FencedCode[...]]]`, and the code line's own text is
+   * `'> code'`, which `blockPrefixAt(_, 'blockquote')` does match). So this
+   * is not a hypothetical: without `activeFormats`'s fence early-return, the
+   * cursor here would report `['blockquote', 'codeBlock']`.
+   *
+   * Pinned as `['codeBlock']` alone, deliberately, because the toolbar's
+   * active state is a promise about what the buttons *do*: every command
+   * except `codeBlock` calls `declinesInFence`, including `blockquote`
+   * itself, so `COMMANDS.blockquote` refuses to run here regardless of the
+   * quote marks on screen. Lighting the blockquote button anyway would show
+   * a button the user could press for no effect -- worse than not lighting
+   * it, since it invites a click that visibly does nothing.
+   */
+  it('reports only codeBlock inside a fence nested in a blockquote, not blockquote too', () => {
+    const doc = '> quote\n> ```\n> code\n> ```';
+    const state = testState(doc, doc.indexOf('code'));
+    expect(activeFormats(state)).toEqual(['codeBlock']);
+  });
 });

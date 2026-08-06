@@ -35,6 +35,15 @@ export interface AppState {
    * SPEC §6.3 requires to be gone.
    */
   closedPaths: string[];
+  /**
+   * Which formatting commands apply at the main selection's head, for the
+   * toolbar's active-button state (SPEC §6.5) — sorted command ids joined by
+   * `|`, `''` when none apply. Published by editor/extensions.ts's
+   * `syncActiveFormats`. A string rather than a `Set`/array: see that
+   * function's doc comment for why (store.ts's `isEqual` and the toolbar
+   * rebuilding on every keystroke otherwise).
+   */
+  activeFormats: string;
 }
 
 export function isDirty(doc: Document): boolean {

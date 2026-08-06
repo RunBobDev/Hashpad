@@ -28,6 +28,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     activeDocumentId: activeId ?? documents[0]?.id ?? null,
     isDark: false,
     closedPaths: [],
+    activeFormats: '',
   };
 }
 
@@ -54,7 +55,11 @@ describe('closeDocument', () => {
   });
 
   it('activates the tab to the right when closing the active one', () => {
-    const next = closeDocument(stateWith([doc('a'), doc('b'), doc('c')], 'b'), 'b', untitledFactory);
+    const next = closeDocument(
+      stateWith([doc('a'), doc('b'), doc('c')], 'b'),
+      'b',
+      untitledFactory,
+    );
     expect(next.activeDocumentId).toBe('c');
   });
 
@@ -75,7 +80,11 @@ describe('closeDocument', () => {
   });
 
   it('remembers a closed document that had a file path', () => {
-    const next = closeDocument(stateWith([doc('a', 'C:\\notes\\a.md'), doc('b')]), 'a', untitledFactory);
+    const next = closeDocument(
+      stateWith([doc('a', 'C:\\notes\\a.md'), doc('b')]),
+      'a',
+      untitledFactory,
+    );
     expect(next.closedPaths).toEqual(['C:\\notes\\a.md']);
   });
 

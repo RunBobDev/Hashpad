@@ -107,7 +107,7 @@ function stubRect(el: HTMLElement, left: number, width: number): void {
 
 /** A minimal AppState for exercising reorderDocument directly (state/documents.ts). */
 function stateOf(documents: Document[], activeDocumentId: string | null): AppState {
-  return { documents, activeDocumentId, isDark: false, closedPaths: [] };
+  return { documents, activeDocumentId, isDark: false, closedPaths: [], activeFormats: '' };
 }
 
 describe('buildTabStrip', () => {
@@ -315,7 +315,13 @@ describe('dropIndex', () => {
     [3, 0, false, 0, 'last tab dragged before the first'],
     [3, 0, true, 1, 'last tab dragged after the first'],
     [1, 2, true, 2, 'dragged one step right, dropped after the target'],
-    [1, 2, false, 1, 'dragged one step right, dropped before the target (already adjacent -- no-op)'],
+    [
+      1,
+      2,
+      false,
+      1,
+      'dragged one step right, dropped before the target (already adjacent -- no-op)',
+    ],
     [2, 1, true, 2, 'dragged one step left, dropped after the target (already adjacent -- no-op)'],
     [2, 1, false, 1, 'dragged one step left, dropped before the target'],
     [1, 3, true, 3, 'dragged right past an intervening tab, dropped after the target'],
@@ -328,14 +334,22 @@ describe('dropIndex', () => {
     [2, 2, false, 2, 'dropped on itself: middle tab, before-half'],
     [3, 3, true, 3, 'dropped on itself: last tab, after-half'],
     [3, 3, false, 3, 'dropped on itself: last tab, before-half'],
-  ])('fromIndex=%i overIndex=%i afterMidpoint=%s -> toIndex=%i (%s)', (fromIndex, overIndex, afterMidpoint, expected) => {
-    expect(dropIndex(fromIndex, overIndex, afterMidpoint)).toBe(expected);
-  });
+  ])(
+    'fromIndex=%i overIndex=%i afterMidpoint=%s -> toIndex=%i (%s)',
+    (fromIndex, overIndex, afterMidpoint, expected) => {
+      expect(dropIndex(fromIndex, overIndex, afterMidpoint)).toBe(expected);
+    },
+  );
 
   it('feeds the real reorderDocument correctly for a representative rightward drag', () => {
     // A cross-check against the actual consumer, not just the arithmetic
     // above: drag tab 'a' onto the right half of tab 'd' in [a,b,c,d].
-    const docs = [docWith({ id: 'a' }), docWith({ id: 'b' }), docWith({ id: 'c' }), docWith({ id: 'd' })];
+    const docs = [
+      docWith({ id: 'a' }),
+      docWith({ id: 'b' }),
+      docWith({ id: 'c' }),
+      docWith({ id: 'd' }),
+    ];
     const state = stateOf(docs, 'a');
     const toIndex = dropIndex(0, 3, true);
 
@@ -348,7 +362,12 @@ describe('dropIndex', () => {
   });
 
   it('feeds the real reorderDocument correctly for a representative leftward drag', () => {
-    const docs = [docWith({ id: 'a' }), docWith({ id: 'b' }), docWith({ id: 'c' }), docWith({ id: 'd' })];
+    const docs = [
+      docWith({ id: 'a' }),
+      docWith({ id: 'b' }),
+      docWith({ id: 'c' }),
+      docWith({ id: 'd' }),
+    ];
     const state = stateOf(docs, 'a');
     const toIndex = dropIndex(3, 0, false);
 

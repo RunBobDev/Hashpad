@@ -63,7 +63,13 @@ beforeEach(() => {
     parent: document.createElement('div'),
   });
   setEditorView(view);
-  store.setState(() => ({ documents: [], activeDocumentId: null, isDark: false, closedPaths: [] }));
+  store.setState(() => ({
+    documents: [],
+    activeDocumentId: null,
+    isDark: false,
+    closedPaths: [],
+    activeFormats: '',
+  }));
   vi.clearAllMocks();
 });
 
@@ -89,7 +95,13 @@ describe('switchToDocument', () => {
   it('swaps the view to the target document and activates it', () => {
     const a = cleanDoc('a', 'doc A');
     const b = cleanDoc('b', 'doc B');
-    store.setState(() => ({ documents: [a, b], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a, b],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     switchToDocument('b');
@@ -100,7 +112,13 @@ describe('switchToDocument', () => {
 
   it('is a no-op for an unknown id', () => {
     const a = cleanDoc('a', 'doc A');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     switchToDocument('does-not-exist');
@@ -111,7 +129,13 @@ describe('switchToDocument', () => {
 
   it('does nothing extra when switching to the tab already on screen', () => {
     const a = cleanDoc('a', 'doc A');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     switchToDocument('a');
@@ -125,7 +149,13 @@ describe('switchToDocument', () => {
   it('captures a scroll snapshot for the outgoing document and can replay it on the way back', () => {
     const a = cleanDoc('a', 'doc A');
     const b = cleanDoc('b', 'doc B');
-    store.setState(() => ({ documents: [a, b], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a, b],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     switchToDocument('b');
@@ -142,7 +172,13 @@ describe('switchToDocument', () => {
   it('preserves undo history across a round trip through another tab', () => {
     const a = cleanDoc('a', 'doc A');
     const b = cleanDoc('b', 'doc B');
-    store.setState(() => ({ documents: [a, b], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a, b],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
     expect(view.state.doc.toString()).toBe('doc A!');
@@ -160,7 +196,13 @@ describe('switchToDocument', () => {
 describe('openDocumentInNewTab', () => {
   it('adds a new tab, activates it, and loads its text into the view', () => {
     const a = cleanDoc('a', 'doc A');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     openDocumentInNewTab({
@@ -187,7 +229,13 @@ describe('openDocumentInNewTab', () => {
     // "outgoing" by reading activeDocumentId instead of view identity, it
     // would file the snapshot against the new tab instead of 'a'.
     const a = cleanDoc('a', 'doc A');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     openDocumentInNewTab({ path: 'b.md', content: 'doc B', encoding: 'utf-8', lineEnding: 'lf' });
@@ -201,7 +249,13 @@ describe('closeDocumentWithPrompt', () => {
   it('closes a clean document without prompting', async () => {
     const a = cleanDoc('a', 'doc A');
     const b = cleanDoc('b', 'doc B');
-    store.setState(() => ({ documents: [a, b], activeDocumentId: 'b', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a, b],
+      activeDocumentId: 'b',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(b.editorState);
 
     const result = await closeDocumentWithPrompt('b');
@@ -213,7 +267,13 @@ describe('closeDocumentWithPrompt', () => {
 
   it('returns true immediately for an id that is already gone', async () => {
     const a = cleanDoc('a', 'doc A');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     const result = await closeDocumentWithPrompt('does-not-exist');
@@ -224,7 +284,13 @@ describe('closeDocumentWithPrompt', () => {
 
   it('returns false and leaves the document open when the user cancels', async () => {
     const a = dirtyDoc('a');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
 
@@ -238,7 +304,13 @@ describe('closeDocumentWithPrompt', () => {
   it("closes without saving when the user picks Don't Save", async () => {
     const a = dirtyDoc('a');
     const b = cleanDoc('b', 'doc B');
-    store.setState(() => ({ documents: [a, b], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a, b],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
 
@@ -251,7 +323,13 @@ describe('closeDocumentWithPrompt', () => {
 
   it('aborts and leaves the document open when Save is chosen but the write fails', async () => {
     const a = dirtyDoc('a', 'C:\\notes\\a.md');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
     vi.mocked(WriteFile).mockRejectedValue(new Error('disk full'));
@@ -269,7 +347,13 @@ describe('closeDocumentWithPrompt', () => {
   it('saves then closes when Save is chosen and the write succeeds', async () => {
     const a = dirtyDoc('a', 'C:\\notes\\a.md');
     const b = cleanDoc('b', 'doc B');
-    store.setState(() => ({ documents: [a, b], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a, b],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
     vi.mocked(WriteFile).mockResolvedValue(undefined);
@@ -296,6 +380,7 @@ describe('closeDocumentWithPrompt', () => {
       activeDocumentId: 'active',
       isDark: false,
       closedPaths: [],
+      activeFormats: '',
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -315,7 +400,13 @@ describe('closeDocumentWithPrompt', () => {
 describe('reopenLastClosed', () => {
   it('does nothing when the reopen stack is empty', async () => {
     const a = cleanDoc('a', 'x');
-    store.setState(() => ({ documents: [a], activeDocumentId: 'a', isDark: false, closedPaths: [] }));
+    store.setState(() => ({
+      documents: [a],
+      activeDocumentId: 'a',
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+    }));
     view.setState(a.editorState);
 
     await reopenLastClosed();
@@ -331,6 +422,7 @@ describe('reopenLastClosed', () => {
       activeDocumentId: 'a',
       isDark: false,
       closedPaths: ['C:\\notes\\b.md'],
+      activeFormats: '',
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -355,6 +447,7 @@ describe('reopenLastClosed', () => {
       activeDocumentId: 'a',
       isDark: false,
       closedPaths: ['C:\\notes\\gone.md'],
+      activeFormats: '',
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));
