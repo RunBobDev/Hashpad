@@ -59,6 +59,21 @@ describe('openPopupMenu', () => {
     expect(items[1]?.getAttribute('aria-checked')).toBe('false');
   });
 
+  // Both dismissal paths return focus to the trigger, matching menubar.ts.
+  // On the choose path this is only observable for a caller that runs no
+  // editor command -- the toolbar's pin/unpin menu -- because elsewhere
+  // toEditorCommand's own view.focus() would mask a drop to <body>.
+  it('returns focus to the anchor after an item is chosen, not just after Escape', () => {
+    const anchor = anchorInDocument();
+    anchor.focus();
+    openPopupMenu({ anchor, items: [{ id: 'a', label: 'A', checked: false }], onChoose: () => {} });
+    document.querySelector<HTMLButtonElement>('[role="menuitemcheckbox"]')!.focus();
+
+    document.querySelector<HTMLButtonElement>('[role="menuitemcheckbox"]')!.click();
+
+    expect(document.activeElement).toBe(anchor);
+  });
+
   it('closes on Escape', () => {
     openPopupMenu({
       anchor: anchorInDocument(),

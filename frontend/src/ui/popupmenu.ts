@@ -58,12 +58,6 @@ let outsideClickListener: ((event: MouseEvent) => void) | null = null;
 let documentEscapeListener: ((event: KeyboardEvent) => void) | null = null;
 
 /**
- * Closes whatever popup is open, if any. Idempotent: an item's own click
- * handler already calls this before `openMenu` is cleared, so the same click
- * event's later arrival at the document-level outside-click listener (see
- * `openPopupMenu`) must be a harmless no-op rather than a second removal.
- */
-/**
  * Whether `anchor` is the trigger that owns the currently open popup. A
  * trigger uses this to *toggle*: without it, clicking Heading a second time
  * closes and immediately reopens the same menu, so the button can never
@@ -73,6 +67,12 @@ export function isPopupOpenFor(anchor: HTMLElement): boolean {
   return openMenu !== null && openAnchor === anchor;
 }
 
+/**
+ * Closes whatever popup is open, if any. Idempotent: an item's own click
+ * handler already calls this before `openMenu` is cleared, so the same click
+ * event's later arrival at the document-level outside-click listener (see
+ * `openPopupMenu`) must be a harmless no-op rather than a second removal.
+ */
 export function closePopupMenu(): void {
   if (!openMenu) return;
 
@@ -86,7 +86,19 @@ export function closePopupMenu(): void {
   openAnchor = null;
 }
 
-/** Closes the popup and returns focus to its trigger -- the Escape path only. */
+/**
+ * Closes the popup and puts focus back on the trigger that opened it.
+ *
+ * Used on both the Escape path and the choose-an-item path, matching
+ * ui/menubar.ts's `closePopup`, whose default is likewise to refocus the
+ * trigger on activation. Bare `closePopupMenu()` on activation would drop
+ * focus to <body>: for the heading and overflow popups that is masked,
+ * because the command that runs next calls `view.focus()` and rescues it
+ * into the editor -- but the pin/unpin menu runs no command, so a keyboard
+ * user who opened it with Shift+F10 and picked an item would be stranded.
+ * Returning focus to the button also makes `mountToolbar`'s rebuild see
+ * `hadFocus`, so the Tab stop travels into the new row with them.
+ */
 function closeAndReturnFocus(): void {
   const anchor = openAnchor;
   closePopupMenu();
@@ -127,7 +139,9 @@ function buildItem(item: PopupItem, onChoose: (id: string) => void): HTMLButtonE
   }
 
   button.addEventListener('click', () => {
-    closePopupMenu();
+    // Focus first, then act: `onChoose` may replace the row the anchor lives
+    // in, and a detached button cannot take focus.
+    closeAndReturnFocus();
     onChoose(item.id);
   });
 
