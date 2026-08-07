@@ -10,7 +10,9 @@
  * standing in for a drawing. SPEC §6.1's mock uses placeholders like `❝ 🔗 🖼`
  * to describe *what* to draw, not what to ship.
  */
-export const ICONS: Record<string, string> = {
+import type { ToolbarCommandId } from './toolbar';
+
+export const ICONS: Record<ToolbarCommandId, string> = {
   bold: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3h4.2a2.8 2.8 0 0 1 1.6 5.1A3 3 0 0 1 8.4 13H4V3zm2 2v3h2.1a1.5 1.5 0 0 0 0-3H6zm0 5v3h2.4a1.5 1.5 0 0 0 0-3H6z"/></svg>',
 
   italic:

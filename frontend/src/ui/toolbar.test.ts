@@ -77,7 +77,9 @@ describe('TOOLBAR_COMMANDS', () => {
 
   // The exemption itself, so "heading has no COMMANDS entry" stays a
   // deliberate fact rather than something the loop above quietly tolerates.
-  it('heading is the only id without a command, because it opens a picker', () => {
+  // Task 7 giving `heading` a real COMMANDS entry would turn that loop's
+  // `continue` into a silent skip; this is what would catch it.
+  it('heading has no command of its own, and all six levels do', () => {
     expect('heading' in COMMANDS).toBe(false);
     for (const level of [1, 2, 3, 4, 5, 6]) expect(`heading${level}` in COMMANDS).toBe(true);
   });
@@ -97,6 +99,19 @@ describe('buildToolbar', () => {
   // §6.5), so it must survive even an empty pinned list.
   it('renders the overflow button when nothing is pinned', () => {
     expect(buildToolbar([], '').querySelector('[data-overflow]')).not.toBeNull();
+  });
+
+  // `role="toolbar"` would promise the WAI-ARIA toolbar pattern -- one Tab
+  // stop, arrow keys between the buttons -- which these eleven individual Tab
+  // stops do not implement. `role="group"` claims no keyboard contract while
+  // still supporting the accessible name; a bare div's implicit `generic`
+  // role does not, so dropping the role entirely would silently lose the
+  // label. Pinned so Task 7 cannot restore `toolbar` without also adding the
+  // roving tabindex that would make it true.
+  it('groups the buttons without claiming the ARIA toolbar keyboard pattern', () => {
+    const bar = buildToolbar(['bold'], '');
+    expect(bar.getAttribute('role')).toBe('group');
+    expect(bar.getAttribute('aria-label')).toBe('Formatting');
   });
 
   it('labels every icon-only button for assistive tech', () => {

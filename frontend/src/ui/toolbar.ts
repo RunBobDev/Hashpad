@@ -57,7 +57,7 @@ export interface ToolbarCommand {
  * order `pinned` happens to list them, because pinning is a visibility
  * choice (SPEC §6.5's "pin or unpin"), not a reordering one.
  */
-export const TOOLBAR_COMMANDS: readonly ToolbarCommand[] = [
+export const TOOLBAR_COMMANDS = [
   // Group 1: inline marks, plus the two "insert code" commands and heading.
   { id: 'bold', label: 'Bold', shortcut: 'Ctrl+B', group: 1 },
   { id: 'italic', label: 'Italic', shortcut: 'Ctrl+I', group: 1 },
@@ -81,7 +81,19 @@ export const TOOLBAR_COMMANDS: readonly ToolbarCommand[] = [
   { id: 'table', label: 'Table', shortcut: 'Ctrl+Alt+T', group: 3 },
   { id: 'horizontalRule', label: 'Horizontal rule', shortcut: 'Ctrl+Shift+-', group: 3 },
   { id: 'footnote', label: 'Footnote', shortcut: 'Ctrl+Shift+F', group: 3 },
-];
+  // `as const satisfies` rather than a plain `readonly ToolbarCommand[]`
+  // annotation: the annotation widens each `id` back to the full union and
+  // makes the members mutable, while this keeps the literal ids -- which is
+  // what `ToolbarCommandId` below is derived from, and what lets `ICONS` be
+  // typed against exactly this set in both directions.
+] as const satisfies readonly ToolbarCommand[];
+
+/**
+ * Exactly the ids the row renders. `ICONS` is keyed by this, so an icon for a
+ * command that no longer exists -- or a command with no icon -- is a compile
+ * error rather than dead bytes in the bundle.
+ */
+export type ToolbarCommandId = (typeof TOOLBAR_COMMANDS)[number]['id'];
 
 /**
  * The commands the toolbar starts with pinned, before Task 8 wires this to
@@ -151,7 +163,16 @@ function buildSeparator(): HTMLElement {
   return separator;
 }
 
-function buildButton(command: ToolbarCommand, active: string): HTMLButtonElement {
+/**
+ * Takes an element of `TOOLBAR_COMMANDS` rather than the wider
+ * `ToolbarCommand`, so `command.id` is one of the sixteen ids the row
+ * actually renders -- which is what lets `ICONS` be indexed without a
+ * fallback, since it is keyed by exactly that set.
+ */
+function buildButton(
+  command: (typeof TOOLBAR_COMMANDS)[number],
+  active: string,
+): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'toolbar__button';
@@ -169,7 +190,7 @@ function buildButton(command: ToolbarCommand, active: string): HTMLButtonElement
   icon.setAttribute('aria-hidden', 'true');
   // ICONS holds our own compile-time SVG constants (ui/icons.ts) -- never
   // user content -- so assigning it via innerHTML cannot inject anything.
-  icon.innerHTML = ICONS[command.id] ?? '';
+  icon.innerHTML = ICONS[command.id];
   button.append(icon);
 
   // Heading opens a level-picker dropdown (Task 7); left inert here rather
