@@ -58,9 +58,17 @@ type WindowSettings struct {
 	PreviewSplitRatio float64 `json:"previewSplitRatio"`
 }
 
-// Settings is comparable with == (no slices or maps), which keeps the tests
-// simple. Toolbar.Pinned is deliberately deferred to Checkpoint E, which is the
-// checkpoint that introduces the toolbar and therefore knows what belongs in it.
+// ToolbarSettings carries SPEC §6.13's toolbar block. Pinned is a slice, which
+// is what stops Settings being comparable with == — see settings_test.go, where
+// the comparisons use reflect.DeepEqual for exactly this reason.
+type ToolbarSettings struct {
+	Visible bool     `json:"visible"`
+	Pinned  []string `json:"pinned"`
+}
+
+// Settings is no longer comparable with == — ToolbarSettings.Pinned is a
+// slice, and a struct containing one is not comparable. Tests must use
+// reflect.DeepEqual instead of == or !=.
 type Settings struct {
 	Version    int                `json:"version"`
 	Appearance AppearanceSettings `json:"appearance"`
@@ -68,6 +76,7 @@ type Settings struct {
 	Preview    PreviewSettings    `json:"preview"`
 	Files      FilesSettings      `json:"files"`
 	Window     WindowSettings     `json:"window"`
+	Toolbar    ToolbarSettings    `json:"toolbar"`
 }
 
 func DefaultSettings() Settings {
@@ -91,6 +100,13 @@ func DefaultSettings() Settings {
 		Window: WindowSettings{
 			Width: 1000, Height: 700, Maximized: false,
 			OutlineVisible: false, StatusBarVisible: true, PreviewSplitRatio: 0.5,
+		},
+		Toolbar: ToolbarSettings{
+			Visible: true,
+			Pinned: []string{
+				"bold", "italic", "strikethrough", "inlineCode", "heading",
+				"bulletList", "numberedList", "taskList", "link", "table",
+			},
 		},
 	}
 }

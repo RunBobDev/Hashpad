@@ -44,6 +44,20 @@ export interface AppState {
    * rebuilding on every keystroke otherwise).
    */
   activeFormats: string;
+  /**
+   * The commands currently pinned to the toolbar row (SPEC §6.13), kept in
+   * sync with `settings.toolbar.pinned` by main.ts's `hashpad:command`
+   * routing of `toolbar.pin:<id>`/`toolbar.unpin:<id>` -- see that file's
+   * `setToolbarPinned`. Starts empty: the real value is only known once
+   * main.ts's bootstrap has loaded and validated settings (ui/toolbar.ts's
+   * `validatePinned`), the same reason `documents` starts empty above.
+   * `ui/toolbar.ts`'s `mountToolbar` does not read this reactively -- it is
+   * seeded once, from a plain argument, at the moment main.ts mounts it, so
+   * this field's role is bootstrap seeding and persistence bookkeeping, not
+   * driving the toolbar's own re-render (that stays local, via its
+   * `onTogglePin` callback -- see that function's header comment for why).
+   */
+  pinnedToolbarCommands: readonly string[];
 }
 
 export function isDirty(doc: Document): boolean {

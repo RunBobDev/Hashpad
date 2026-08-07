@@ -85,3 +85,78 @@ Automation cannot drive a real Windows theme change, a real cold-start paint, or
   ``` ````
   and confirm the code inside is coloured (keywords, strings, etc. rendered distinctly from plain text), not shown as one undifferentiated colour. If it briefly renders unhighlighted right after opening, click into the document or type a character -- this task's own investigation found CodeMirror's lazy-grammar-loading path needs some follow-up document activity to redraw the block once the language finishes loading; it is not expected to require repeated edits or a long wait once you interact with the document at all.
 - [ ] In that same document, confirm the fence markers (` ``` `) are still visible on their own lines, and that elsewhere in the document `#` (headings), `**` (bold), and `>` (blockquote) markers remain visible as dim-but-readable text rather than disappearing -- source mode (SPEC §6.6) keeps every marker on screen; only their colour changes.
+
+## Checkpoint E manual checks
+
+Automation cannot press a real key on a real keyboard layout, judge whether a
+16×16 icon reads at a glance, or drive a real right-click, so the following
+need a human running `build/bin/hashpad.exe`.
+
+**Icons.** Sixteen were hand-drawn and never rendered by the agent that drew
+them. Four pairs were flagged as most at risk of looking alike at this size —
+check these first:
+
+- [ ] Inline code vs Code block are distinguishable at a glance.
+- [ ] Horizontal rule vs Strikethrough are distinguishable at a glance.
+- [ ] Bullet list vs Task list are distinguishable at a glance.
+- [ ] Numbered list vs Footnote are distinguishable at a glance.
+- [ ] Every icon is legible at 100% zoom in **both** light and dark themes.
+- [ ] The `···` overflow button sits comfortably beside the icon set. It is a
+      text glyph at the UI font size, not a 16px SVG, so it may read as
+      optically lighter or smaller than its neighbours.
+
+**Keyboard.** The shifted-punctuation chords are matched through CodeMirror's
+base-layout fallback, which the tests exercise with synthetic keycodes. Only a
+real keyboard proves the real path.
+
+- [ ] Ctrl+Shift+8 inserts a bullet list; Ctrl+Shift+7 a numbered list;
+      Ctrl+Shift+9 a task list.
+- [ ] Ctrl+Shift+. inserts a blockquote; Ctrl+Shift+- a horizontal rule;
+      Ctrl+` wraps in inline code.
+- [ ] Ctrl+Alt+T inserts a 3×3 table. This is the deviation recorded in design
+      §4.12, and it is the one chord `@codemirror/view` deliberately refuses to
+      resolve through the base layout (its AltGr guard), so a non-US layout is
+      where it would fail.
+- [ ] Ctrl+Shift+T still reopens a closed tab rather than inserting a table.
+- [ ] Ctrl+Shift+I inserts an image reference rather than opening DevTools. (A
+      release build strips the inspector; on a `wails build -debug` binary
+      expect DevTools to win, and do not treat that as a bug.)
+- [ ] Ctrl+B and Ctrl+I inside a fenced code block do nothing at all — no
+      asterisks inserted, and no selection jump. The selection-jump half was a
+      real bug: the chord used to fall through to CodeMirror's
+      `selectParentSyntax`.
+- [ ] Tab moves into the toolbar as a **single** stop, then Left/Right/Home/End
+      move between buttons. Press Enter on one: the format applies and focus
+      stays on that same button rather than returning to the top of the
+      document.
+
+**Pinning.**
+
+- [ ] Right-click the toolbar, untick two commands, and confirm they vanish
+      from the row and are still listed in the `···` menu.
+- [ ] Restart and confirm the layout persisted.
+- [ ] Untick every command. The `···` button must remain, and every command
+      must still be reachable through it.
+- [ ] Right-click near the right-hand end of the row: the menu should appear at
+      the button you clicked, not at the row's far left.
+- [ ] Open the pin menu with Shift+F10 and choose an item with Enter — focus
+      should land back on a toolbar button, not vanish to the page.
+- [ ] Set `toolbar.pinned` in `settings.json` (see `internal/app/settings.go`'s
+      `SettingsPath` for its location) to a list containing a nonsense id,
+      restart, and confirm the app starts with that id ignored rather than
+      failing.
+- [ ] Set `toolbar.visible` to `false`, restart, and confirm the row is absent
+      entirely — not present-but-empty.
+
+**Active state and formatting.**
+
+- [ ] Put the cursor inside bold text: the B button fills. Move out: it clears.
+- [ ] Switch tabs between a document whose caret is inside `**bold**` and one
+      in plain text — the active buttons must update on the switch, without
+      typing anything.
+- [ ] Type `==marked==` and confirm the wash renders and the `==` characters
+      stay visible but dimmer than the text they wrap.
+- [ ] Select two lines, one already a bullet and one not, and press Ctrl+Shift+8 —
+      both end up bulleted, rather than the marker alternating.
+- [ ] With `- [x] done` selected alongside a plain line, apply Bullet list and
+      confirm the checkbox survives.

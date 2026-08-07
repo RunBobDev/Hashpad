@@ -23,6 +23,7 @@ function resetStore(): void {
     isDark: false,
     closedPaths: [],
     activeFormats: '',
+    pinnedToolbarCommands: [],
   }));
 }
 

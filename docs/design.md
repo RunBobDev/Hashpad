@@ -265,6 +265,63 @@ a deliberate second window bypasses it while Explorer double-clicks still route 
 primary. Deferred by agreement; it would overturn SPEC §8's multi-window decision, which
 is the owner's call to make.
 
+### 4.12 Table is Ctrl+Alt+T, not Ctrl+Shift+T
+
+**Added during Checkpoint E planning. SPEC collides with itself here.**
+
+SPEC §6.5's command table gives Table the shortcut **Ctrl+Shift+T**. SPEC §6.2 and
+§6.14 give that same chord to **Reopen Closed Tab**, which shipped in Checkpoint C and
+is bound in `editor/extensions.ts` today.
+
+**Decision: Reopen Closed Tab keeps Ctrl+Shift+T. Table moves to Ctrl+Alt+T.**
+
+Reopen-tab wins because it is universal muscle memory — every browser and every editor
+binds it — and because reassigning a working, shipped binding to a command a user
+invokes far less often is the worse trade. `Ctrl+Alt` is already this project's
+secondary namespace: §2.1 put tab positions on `Ctrl+Alt+1`…`Ctrl+Alt+9` for exactly
+this kind of reason, and `Alt+T` was free, so Table keeps its `T` mnemonic.
+
+Rejected: giving Table no shortcut at all. SPEC §6.5 lists a chord for every one of the
+sixteen commands, and silently dropping one is the kind of quiet deviation §11.4 exists
+to prevent.
+
+**Known limitation, recorded rather than fixed:** `@codemirror/view` deliberately skips
+its base-layout fallback when `windows && ctrlKey && altKey` (an AltGr guard), so this
+chord matches only via `event.key === 't'`. On a layout where AltGr+T produces a
+different character it will not fire. This is the same exposure the pre-existing
+`Ctrl+Alt+1`…`9` bindings already carry, and it is on the manual-check list.
+
+### 4.13 The code block command does not prompt for a language
+
+SPEC §6.5 says the Code block command inserts a "fenced block, language prompt".
+
+**Decision: no prompt. The fence is inserted with the cursor on the info string.**
+
+Typing the language is then the natural next keystroke, and Enter or Down moves into the
+block. A modal interrupting a formatting keystroke is worse than the friction it
+removes, and jsdom has no `<dialog>` support at all (established in Checkpoint B), so a
+prompt would be the one part of the command that no test could exercise.
+
+Rejected: a dropdown of the languages `@codemirror/language-data` can highlight. That is
+roughly 140 entries and would need filtering and search — a lot of UI for one command,
+and it would still interrupt the keystroke.
+
+### 4.14 SPEC §6.14's menu-reachability is satisfied by the overflow menu
+
+SPEC §6.14 requires every keyboard shortcut to be reachable through a menu with the
+shortcut displayed beside it. The sixteen formatting commands all have shortcuts.
+
+**Decision: the `···` overflow menu is that menu.**
+
+It is a menu, SPEC §6.5 already requires it to contain the full set of sixteen, it
+displays each command's shortcut, and it is where a user looks for formatting. The
+alternative — sixteen more entries in the Edit menu — would take that menu from four
+flat items to twenty, in a bar SPEC §6.1 fixes at exactly four menus and which
+`ui/menubar.ts` gives no submenu support.
+
+Rejected: putting them in both places. Two surfaces to keep in sync, and the Edit menu
+still ends up with twenty flat items.
+
 ### 4.9 GitHub Actions workflow deferred
 
 SPEC §9 asks for a release workflow. There is no repository yet, so this is deferred by
@@ -418,6 +475,23 @@ Markdown: `markdown-it`, `markdown-it-mark`, `markdown-it-footnote`, `dompurify`
 
 Sizes are to be measured, not estimated — a per-package bundle report is produced at
 Checkpoint A.
+
+### 6.2.1 `==highlight==` in the editor: an addition, at no dependency cost
+
+Added during Checkpoint E. SPEC §6.8 lists `==highlight==` as supported markdown and
+§6.5 gives it a toolbar button and a shortcut, but `@lezer/markdown` has no node for it —
+CommonMark and GFM both stop at `~~`. Without one, the editor could not style it and the
+Highlight button could not show active state the way the other four inline marks do.
+
+**Roughly 25 lines of our own code** against `@lezer/markdown`'s public `MarkdownConfig`
+API, modelled on that package's own `Strikethrough` extension. **No package added** —
+which is precisely why no `markdown-it-mark` equivalent appears on the editor side; the
+preview will use the real plugin at Checkpoint F, but the editor's grammar is ours.
+
+Three packages were promoted from transitive to direct dependencies at the same time
+(`@codemirror/language`, `@lezer/markdown`, `@lezer/highlight`). All three were already
+bundled — the promotion makes an existing dependency explicit and costs zero bytes,
+the same situation as `golang.org/x/sys` in Checkpoint D.
 
 ### 6.3 Dependencies declined
 

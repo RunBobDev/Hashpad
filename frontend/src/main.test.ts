@@ -31,7 +31,8 @@ import { buildExtensions } from './editor/extensions';
 import { createUntitledDocument, type Document } from './state/document';
 import { getEditorView, store } from './state/appcontext';
 import { COMMAND_EVENT } from './ui/menubar';
-import { ReadFile, SaveSettings, SystemThemeIsDark } from '../wailsjs/go/app/App';
+import { DEFAULT_PINNED } from './ui/toolbar';
+import { ReadFile, SaveSettings, ShowWindow, SystemThemeIsDark } from '../wailsjs/go/app/App';
 
 vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
@@ -48,14 +49,35 @@ vi.mock('../wailsjs/go/app/App', () => ({
   // from a frontend that never got this far -- see App.showWindowEventually.
   ShowWindow: vi.fn(),
   // Resolved, not left as a bare vi.fn(): main.ts's bootstrap awaits this and
-  // reads .appearance straight off the result, so leaving it `undefined`
-  // (vi.fn()'s default) would push every test in this file through
-  // bootstrapTheme's settings-failed catch branch instead of the tab/document
-  // routing this suite actually exercises. Only the fields main.ts's
-  // bootstrap reads are present -- this is not a full app.Settings.
-  LoadSettings: vi
-    .fn()
-    .mockResolvedValue({ appearance: { theme: 'system', accentColor: '#0078d4' } }),
+  // reads .appearance and .toolbar straight off the result, so leaving it
+  // `undefined` (vi.fn()'s default) would push every test in this file
+  // through bootstrap's settings-failed catch branch instead of the
+  // tab/document routing this suite actually exercises. Only the fields
+  // main.ts's bootstrap reads are present -- this is not a full app.Settings.
+  // The pinned list is spelled out literally, not imported from
+  // ui/toolbar.ts's DEFAULT_PINNED: vi.mock factories are hoisted above every
+  // import in the file, so a reference to an imported binding here would hit
+  // the temporal dead zone. It is still the same ten ids -- see the
+  // 'defaults to the pinned set SPEC §6.13 names' test in toolbar.test.ts,
+  // which is what pins DEFAULT_PINNED to this exact list.
+  LoadSettings: vi.fn().mockResolvedValue({
+    appearance: { theme: 'system', accentColor: '#0078d4' },
+    toolbar: {
+      visible: true,
+      pinned: [
+        'bold',
+        'italic',
+        'strikethrough',
+        'inlineCode',
+        'heading',
+        'bulletList',
+        'numberedList',
+        'taskList',
+        'link',
+        'table',
+      ],
+    },
+  }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
@@ -87,6 +109,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     isDark: false,
     closedPaths,
     activeFormats: '',
+    pinnedToolbarCommands: [],
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);
@@ -98,6 +121,12 @@ beforeAll(async () => {
   // evaluated, so the element above must exist before that happens -- a
   // static top-level import would run before this callback's body does.
   await import('./main');
+  // bootstrap() (main.ts) is fire-and-forget (`void bootstrap()`), and since
+  // Task 8 it resolves settings.toolbar before mounting anything, so its
+  // work is not necessarily done the instant the import above settles.
+  // ShowWindow() is the last thing bootstrap's finally block does, so
+  // waiting for it is waiting for bootstrap to have fully finished.
+  await vi.waitFor(() => expect(ShowWindow).toHaveBeenCalled());
 });
 
 beforeEach(() => {
@@ -131,6 +160,72 @@ describe('format.<id> commands', () => {
 
     expect(() => emit('format.heading')).not.toThrow();
     expect(getEditorView().state.doc.toString()).toBe('hello world');
+  });
+});
+
+/**
+ * ui/toolbar.ts's right-click pin/unpin popup emits these on the shared bus
+ * (`choosePinItem`) for this router to persist -- see setToolbarPinned's own
+ * comment for why the toolbar's own redraw does not wait for any of this.
+ */
+describe('toolbar.pin: / toolbar.unpin: commands', () => {
+  beforeEach(() => {
+    store.setState((prev) => ({ ...prev, pinnedToolbarCommands: [...DEFAULT_PINNED] }));
+  });
+
+  // A wrong implementation that persists but forgets to update the store
+  // (e.g. only ever calling LoadSettings/SaveSettings) would still get
+  // 'italic' onto disk eventually, but the store -- SPEC §6.13's "every
+  // setting takes effect immediately" -- would lag behind, which is what
+  // this catches by asserting with no `await`.
+  it('adds the command to pinnedToolbarCommands immediately, before any persistence round trip', () => {
+    expect(store.getState().pinnedToolbarCommands).not.toContain('highlight');
+
+    emit('toolbar.pin:highlight');
+
+    expect(store.getState().pinnedToolbarCommands).toContain('highlight');
+  });
+
+  it('removes the command from pinnedToolbarCommands immediately when unpinned', () => {
+    expect(store.getState().pinnedToolbarCommands).toContain('bold');
+
+    emit('toolbar.unpin:bold');
+
+    expect(store.getState().pinnedToolbarCommands).not.toContain('bold');
+  });
+
+  // Pins the *set*, not just membership: a wrong implementation that always
+  // appended on 'pin' -- even to an id already present -- would leave 'bold'
+  // twice in the list. buildToolbar itself would render that harmlessly (it
+  // asks "is this id pinned", not "how many times"), so only a length
+  // assertion on the raw list catches the duplicate.
+  it('does not duplicate an id that is already pinned when told to pin it again', () => {
+    emit('toolbar.pin:bold'); // 'bold' is already in DEFAULT_PINNED
+
+    const pinned = store.getState().pinnedToolbarCommands;
+    expect(pinned.filter((id) => id === 'bold')).toHaveLength(1);
+  });
+
+  it('persists the updated pinned list through SaveSettings', async () => {
+    emit('toolbar.pin:highlight');
+
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    const saved = vi.mocked(SaveSettings).mock.calls[0]![0];
+    expect(saved.toolbar.pinned).toContain('highlight');
+  });
+
+  // Same ordering and error handling as setThemeMode: the visible change
+  // (the store update above) already happened, so a disk error must be
+  // logged, not thrown, and must not undo it.
+  it('logs, but does not throw or revert the store, when the persistence round trip fails', async () => {
+    vi.mocked(SaveSettings).mockRejectedValueOnce(new Error('disk full'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => emit('toolbar.pin:highlight')).not.toThrow();
+    await vi.waitFor(() => expect(consoleError).toHaveBeenCalled());
+
+    expect(store.getState().pinnedToolbarCommands).toContain('highlight');
+    consoleError.mockRestore();
   });
 });
 

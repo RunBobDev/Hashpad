@@ -118,6 +118,39 @@ export const DEFAULT_PINNED: readonly string[] = [
 ];
 
 /**
+ * Validates a `settings.toolbar.pinned` value read off disk (Task 8, SPEC
+ * §6.13). A hand-edited `settings.json` is untrusted input in two different
+ * ways, handled differently:
+ *
+ * - Wrong *shape* entirely (not present, not an array, an array of numbers) —
+ *   there is nothing salvageable, so this falls back to `DEFAULT_PINNED`.
+ * - Right shape, wrong *contents* (an id from a future or renamed command) —
+ *   the rest of the list is still meaningful, so only the unknown id is
+ *   dropped, silently, the same way `buildToolbar` already tolerates a stale
+ *   pinned id rather than throwing.
+ *
+ * An empty array is deliberately not treated as "wrong shape": unpinning
+ * every command is a legitimate choice (everything stays reachable through
+ * the `···` overflow menu), so it is honoured rather than replaced with
+ * defaults.
+ */
+export function validatePinned(raw: unknown): string[] {
+  if (!Array.isArray(raw) || !raw.every((item): item is string => typeof item === 'string')) {
+    return [...DEFAULT_PINNED];
+  }
+
+  const knownIds = new Set<string>(TOOLBAR_COMMANDS.map((command) => command.id));
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const id of raw) {
+    if (!knownIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return result;
+}
+
+/**
  * The commands whose cursor position can make them "active" -- these are the
  * only buttons that get `aria-pressed` at all. `link`, `image`, `table`,
  * `horizontalRule`, and `footnote` insert a construct rather than toggling
@@ -510,17 +543,25 @@ export function buildToolbar(
  * Subscribes to the store and mounts the row, rebuilding it whole on every
  * `activeFormats` change -- `mountTabBar`'s pattern.
  *
- * Also owns the pinned-command list for the running session. Settings
- * persistence is Task 8's job; `choosePinItem` still emits
- * `toolbar.pin:<id>`/`toolbar.unpin:<id>` on the shared bus for Task 8 to
- * listen for, but the in-session toggle travels a **direct callback** rather
- * than a second listener on that bus. A module that both emits and consumes
- * the same event is a self-loop: it makes main.ts stop being the one place
- * to look when tracing `hashpad:command`, and it would react to those ids
- * from any future dispatcher, not just its own popup.
+ * Also owns the pinned-command list for the running session, seeded once
+ * from `initialPinned` (Task 8: main.ts passes the validated
+ * `settings.toolbar.pinned`; every existing caller that omits the argument,
+ * including this file's own tests, keeps the old `DEFAULT_PINNED` seed).
+ * `choosePinItem` emits `toolbar.pin:<id>`/`toolbar.unpin:<id>` on the shared
+ * bus, which is main.ts's seam for *persisting* a toggle back to
+ * settings.json -- but the in-session redraw here travels a **direct
+ * callback**, not a second listener on that bus. A module that both emits
+ * and consumes the same event is a self-loop: it makes main.ts stop being
+ * the one place to look when tracing `hashpad:command`, and it would react
+ * to those ids from any future dispatcher, not just its own popup. That is
+ * why this function has no `hashpad:command` listener of its own, and must
+ * not grow one.
  */
-export function mountToolbar(parent: HTMLElement): void {
-  let pinned: string[] = [...DEFAULT_PINNED];
+export function mountToolbar(
+  parent: HTMLElement,
+  initialPinned: readonly string[] = DEFAULT_PINNED,
+): void {
+  let pinned: string[] = [...initialPinned];
 
   /**
    * Which button held the Tab stop, so a rebuild can put it back. Read from

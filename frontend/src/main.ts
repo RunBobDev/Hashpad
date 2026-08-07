@@ -28,7 +28,7 @@ import {
 } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
-import { mountToolbar } from './ui/toolbar';
+import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
 import { addDocument, documentAtPosition, neighbourId, reorderDocument } from './state/documents';
 import { createUntitledDocument, isDirty, type Document } from './state/document';
@@ -47,15 +47,18 @@ mountMenuBar(root);
 // Between the menu bar and the editor area, per SPEC §6.1's chrome layout --
 // the window is frameless, so this row is the only place a filename appears.
 mountTabBar(root);
-// Between the tab strip and the editor area, per the same layout.
-mountToolbar(root);
+// The toolbar mounts later, from bootstrap() below, once settings.toolbar is
+// known: SPEC §6.13's `visible: false` means it must not appear at all
+// (Task 8 brief, ambiguity #3), and that can only be decided once
+// LoadSettings has resolved. It still lands between the tab strip and the
+// editor area, per the same layout, whenever it does mount.
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
 root.append(editorArea);
 
-// Starts light; bootstrapTheme() below replaces this the moment settings and
-// the system preference are known, before the (still-hidden) window shows.
+// Starts light; bootstrap() below replaces this the moment settings and the
+// system preference are known, before the (still-hidden) window shows.
 const view = createEditor(editorArea, '', false);
 setEditorView(view);
 
@@ -85,12 +88,21 @@ function isThemeMode(value: string): value is ThemeMode {
  * bootstrap script that would otherwise pick a theme before first paint, so
  * the window starts hidden (main.go's StartHidden) and this is what shows it.
  *
+ * Named `bootstrap`, not `bootstrapTheme` -- Task 8 added the toolbar's
+ * layout (its visibility and pinned set) to what a single settings load
+ * resolves before the window shows, and the old name would mislead a reader
+ * six months from now into thinking this is still theme-only.
+ *
  * Wrapped in try/finally: a settings file that fails to load must still
- * result in a visible window, in the compiled-in default theme (light --
- * `resolveIsDark('system', null)`), rather than an app that appears to hang
- * on launch.
+ * result in a visible window, in the compiled-in default theme
+ * (`resolveIsDark('system', null)`) and the compiled-in default toolbar
+ * (visible, `DEFAULT_PINNED`), rather than an app that appears to hang on
+ * launch or silently loses its formatting row over an IPC error.
  */
-async function bootstrapTheme(): Promise<void> {
+async function bootstrap(): Promise<void> {
+  let toolbarVisible = true;
+  let pinnedCommands: string[] = [...DEFAULT_PINNED];
+
   try {
     const settings = await LoadSettings();
     themeMode = isThemeMode(settings.appearance.theme) ? settings.appearance.theme : 'system';
@@ -114,10 +126,23 @@ async function bootstrapTheme(): Promise<void> {
       applyAccent(settings.appearance.accentColor);
     }
     applyTheme(resolveIsDark(themeMode, systemIsDark));
+
+    toolbarVisible = settings.toolbar.visible;
+    // A hand-edited settings.json naming an unknown or renamed command must
+    // not brick the toolbar (Task 8 brief, ambiguity #2) -- validatePinned
+    // drops what it doesn't recognise and falls back to DEFAULT_PINNED only
+    // when the value isn't even an array of strings.
+    pinnedCommands = validatePinned(settings.toolbar.pinned);
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
   } finally {
+    store.setState((prev) => ({ ...prev, pinnedToolbarCommands: pinnedCommands }));
+    // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
+    // with Checkpoint H's settings dialog, and MenuItem has no checkmark
+    // support to render its state honestly in the meantime.
+    if (toolbarVisible) mountToolbar(root!, pinnedCommands);
+
     // The initial document's state was installed straight into the view's
     // constructor, not through a transaction, so no updateListener has ever
     // run for it -- `activeFormats` would sit at its initial `''` until the
@@ -127,7 +152,7 @@ async function bootstrapTheme(): Promise<void> {
     ShowWindow();
   }
 }
-void bootstrapTheme();
+void bootstrap();
 
 /**
  * Routes a View > Theme menu choice. `themeMode` is updated first and
@@ -152,7 +177,7 @@ async function setThemeMode(mode: ThemeMode): Promise<void> {
     try {
       systemIsDark = await SystemThemeIsDark();
     } catch {
-      // Same fallback as bootstrapTheme: undeterminable is expected (SPEC
+      // Same fallback as bootstrap(): undeterminable is expected (SPEC
       // §6.12), worth one log line, and resolveIsDark's null handling covers
       // the rest without further action.
       console.info('hashpad: system theme preference is undeterminable; falling back');
@@ -170,6 +195,42 @@ async function setThemeMode(mode: ThemeMode): Promise<void> {
     // fails here means the choice won't survive a restart, not that it
     // silently didn't apply.
     console.error('hashpad: failed to persist theme choice', err);
+  }
+}
+
+/**
+ * Persists a pin/unpin toggle from the toolbar's right-click menu
+ * (ui/toolbar.ts's `choosePinItem`, routed here below as `toolbar.pin:<id>` /
+ * `toolbar.unpin:<id>` on the shared `hashpad:command` bus -- the seam
+ * mountToolbar's own header comment says Task 8 was always meant to use).
+ *
+ * The toolbar's own *visible* redraw does not wait for any of this: it
+ * already happened, synchronously, through mountToolbar's `onTogglePin`
+ * callback, by the time this function's caller even runs. What this does is
+ * make the choice a real setting -- `pinnedToolbarCommands` is updated first
+ * and unconditionally (SPEC §6.13's "every setting takes effect
+ * immediately"), so the store reflects the change right away and so a second
+ * toggle in the same session computes its diff against this one's result
+ * rather than a stale settings-file snapshot. `SaveSettings` runs after, with
+ * the same ordering and the same error handling `setThemeMode` above uses for
+ * the theme: a failed write is logged, never thrown, because the choice
+ * already took effect and a disk error must not silently un-toggle it.
+ */
+async function setToolbarPinned(commandId: string, pinned: boolean): Promise<void> {
+  const current = store.getState().pinnedToolbarCommands;
+  const next = pinned
+    ? current.includes(commandId)
+      ? [...current]
+      : [...current, commandId]
+    : current.filter((id) => id !== commandId);
+  store.setState((prev) => ({ ...prev, pinnedToolbarCommands: next }));
+
+  try {
+    const settings = await LoadSettings();
+    settings.toolbar.pinned = next;
+    await SaveSettings(settings);
+  } catch (err) {
+    console.error('hashpad: failed to persist the toolbar layout', err);
   }
 }
 
@@ -222,6 +283,19 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     if (commandId in COMMANDS) {
       toEditorCommand(COMMANDS[commandId as CommandId])(getEditorView());
     }
+    return;
+  }
+
+  // The toolbar's right-click pin/unpin menu (ui/toolbar.ts's
+  // choosePinItem) -- see setToolbarPinned's own comment for why the
+  // toolbar's visible redraw does not wait for this; this is the persistence
+  // half of that same toggle.
+  if (id.startsWith('toolbar.pin:')) {
+    void setToolbarPinned(id.slice('toolbar.pin:'.length), true);
+    return;
+  }
+  if (id.startsWith('toolbar.unpin:')) {
+    void setToolbarPinned(id.slice('toolbar.unpin:'.length), false);
     return;
   }
 

@@ -98,6 +98,20 @@ export namespace app {
 	        this.syncScroll = source["syncScroll"];
 	    }
 	}
+	export class ToolbarSettings {
+	    visible: boolean;
+	    pinned: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolbarSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.visible = source["visible"];
+	        this.pinned = source["pinned"];
+	    }
+	}
 	export class WindowSettings {
 	    width: number;
 	    height: number;
@@ -127,6 +141,7 @@ export namespace app {
 	    preview: PreviewSettings;
 	    files: FilesSettings;
 	    window: WindowSettings;
+	    toolbar: ToolbarSettings;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -140,6 +155,7 @@ export namespace app {
 	        this.preview = this.convertValues(source["preview"], PreviewSettings);
 	        this.files = this.convertValues(source["files"], FilesSettings);
 	        this.window = this.convertValues(source["window"], WindowSettings);
+	        this.toolbar = this.convertValues(source["toolbar"], ToolbarSettings);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -160,6 +176,7 @@ export namespace app {
 		    return a;
 		}
 	}
+	
 
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ func TestLoadSettingsFromMissingFileReturnsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != DefaultSettings() {
+	if !reflect.DeepEqual(got, DefaultSettings()) {
 		t.Errorf("got %+v, want defaults", got)
 	}
 }
@@ -36,7 +37,7 @@ func TestLoadSettingsFromValidFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
@@ -54,7 +55,7 @@ func TestLoadSettingsFromMalformedFileBacksUpAndFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("malformed settings must not return an error, got %v", err)
 	}
-	if got != DefaultSettings() {
+	if !reflect.DeepEqual(got, DefaultSettings()) {
 		t.Errorf("got %+v, want defaults", got)
 	}
 
@@ -85,7 +86,7 @@ func TestLoadSettingsFromUnreadablePathReturnsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an unreadable settings path must not return an error, got %v", err)
 	}
-	if got != DefaultSettings() {
+	if !reflect.DeepEqual(got, DefaultSettings()) {
 		t.Errorf("got %+v, want defaults", got)
 	}
 }
@@ -140,7 +141,7 @@ func TestSaveThenLoadRoundTripsNonDefaultValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("round trip changed settings:\n got %+v\nwant %+v", got, want)
 	}
 }
@@ -249,5 +250,17 @@ func TestSavedSettingsAreReadableJSON(t *testing.T) {
 		if _, found := preview["loadRemoteImages"]; found {
 			t.Error("loadRemoteImages must not be in the settings schema")
 		}
+	}
+}
+
+// Pins SPEC §6.13's default pinned list so a later edit to DefaultSettings
+// cannot quietly change what a fresh install starts with.
+func TestDefaultPinnedToolbarCommands(t *testing.T) {
+	want := []string{
+		"bold", "italic", "strikethrough", "inlineCode", "heading",
+		"bulletList", "numberedList", "taskList", "link", "table",
+	}
+	if got := DefaultSettings().Toolbar.Pinned; !reflect.DeepEqual(got, want) {
+		t.Errorf("default pinned = %v, want %v", got, want)
 	}
 }

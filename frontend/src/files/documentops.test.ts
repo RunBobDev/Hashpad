@@ -69,6 +69,7 @@ beforeEach(() => {
     isDark: false,
     closedPaths: [],
     activeFormats: '',
+    pinnedToolbarCommands: [],
   }));
   vi.clearAllMocks();
 });
@@ -136,6 +137,7 @@ describe('switchToDocument', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -153,6 +155,7 @@ describe('switchToDocument', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -170,6 +173,7 @@ describe('switchToDocument', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -190,6 +194,7 @@ describe('switchToDocument', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -213,6 +218,7 @@ describe('switchToDocument', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
@@ -237,6 +243,7 @@ describe('openDocumentInNewTab', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -270,6 +277,7 @@ describe('openDocumentInNewTab', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -290,6 +298,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(b.editorState);
 
@@ -308,6 +317,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -325,6 +335,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
@@ -345,6 +356,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
@@ -364,6 +376,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -388,6 +401,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -416,6 +430,7 @@ describe('closeDocumentWithPrompt', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -441,6 +456,7 @@ describe('reopenLastClosed', () => {
       isDark: false,
       closedPaths: [],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
 
@@ -458,6 +474,7 @@ describe('reopenLastClosed', () => {
       isDark: false,
       closedPaths: ['C:\\notes\\b.md'],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -483,6 +500,7 @@ describe('reopenLastClosed', () => {
       isDark: false,
       closedPaths: ['C:\\notes\\gone.md'],
       activeFormats: '',
+      pinnedToolbarCommands: [],
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));

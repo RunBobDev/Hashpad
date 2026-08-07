@@ -2,7 +2,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { store } from '../state/appcontext';
 import { COMMAND_EVENT } from './menubar';
-import { buildToolbar, DEFAULT_PINNED, mountToolbar, TOOLBAR_COMMANDS } from './toolbar';
+import {
+  buildToolbar,
+  DEFAULT_PINNED,
+  mountToolbar,
+  TOOLBAR_COMMANDS,
+  validatePinned,
+} from './toolbar';
 import { ICONS } from './icons';
 import { COMMANDS } from '../editor/commands';
 import { closePopupMenu } from './popupmenu';
@@ -89,6 +95,47 @@ describe('TOOLBAR_COMMANDS', () => {
   it('heading has no command of its own, and all six levels do', () => {
     expect('heading' in COMMANDS).toBe(false);
     for (const level of [1, 2, 3, 4, 5, 6]) expect(`heading${level}` in COMMANDS).toBe(true);
+  });
+});
+
+describe('validatePinned', () => {
+  it('drops unknown ids from a hand-edited settings file', () => {
+    expect(validatePinned(['bold', 'nonsense', 'italic'])).toEqual(['bold', 'italic']);
+  });
+
+  it('deduplicates', () => {
+    expect(validatePinned(['bold', 'bold'])).toEqual(['bold']);
+  });
+
+  it('falls back to the defaults when the value is not an array of strings', () => {
+    expect(validatePinned(null)).toEqual([...DEFAULT_PINNED]);
+    expect(validatePinned('bold')).toEqual([...DEFAULT_PINNED]);
+    expect(validatePinned([1, 2])).toEqual([...DEFAULT_PINNED]);
+  });
+
+  // Unpinning everything is a legitimate choice -- everything stays reachable
+  // through the overflow menu -- so an empty array is honoured, not overridden.
+  it('honours an empty array', () => {
+    expect(validatePinned([])).toEqual([]);
+  });
+
+  // A wrong implementation that dedupes by keeping the *last* occurrence
+  // rather than the first would still pass every test above (all of them use
+  // ids that dedupe to a single trivial survivor) -- this is the one case
+  // where first-vs-last actually produces different output, since 'bold'
+  // stays put and 'italic' would move.
+  it('keeps the first occurrence of a repeated id, not the last', () => {
+    expect(validatePinned(['bold', 'italic', 'bold'])).toEqual(['bold', 'italic']);
+  });
+
+  // A wrong implementation could plausibly filter unknown ids by checking
+  // against DEFAULT_PINNED (the ten ids a fresh install starts with) instead
+  // of the full sixteen-command TOOLBAR_COMMANDS set -- both pass every test
+  // above, since none of them pin a real command that is outside
+  // DEFAULT_PINNED. 'footnote' is real (TOOLBAR_COMMANDS) but not one of the
+  // ten defaults, so only the correct source list keeps it.
+  it('accepts a real command that is not in DEFAULT_PINNED', () => {
+    expect(validatePinned(['footnote'])).toEqual(['footnote']);
   });
 });
 
@@ -325,6 +372,22 @@ describe('mountToolbar', () => {
       'true',
     );
     expect(parent.querySelector('[data-command="bulletList"]')).not.toBeNull();
+  });
+
+  // Task 8: main.ts passes the settings-validated pinned list explicitly
+  // rather than mountToolbar reaching for DEFAULT_PINNED itself. A wrong
+  // implementation that kept the old hard-coded seed would still pass every
+  // other test in this describe block (none of them pass a second argument),
+  // so only a test that does is able to tell the two apart.
+  it('seeds from the given pinned list instead of DEFAULT_PINNED when one is passed', () => {
+    store.setState((prev) => ({ ...prev, activeFormats: '' }));
+    const parent = document.createElement('div');
+
+    mountToolbar(parent, ['footnote']);
+
+    expect(parent.querySelector('[data-command="footnote"]')).not.toBeNull();
+    // 'bold' is in DEFAULT_PINNED but not in the list just passed in.
+    expect(parent.querySelector('[data-command="bold"]')).toBeNull();
   });
 
   // Proves the row is rebuilt from a live subscription, not rendered once

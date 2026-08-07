@@ -107,7 +107,14 @@ function stubRect(el: HTMLElement, left: number, width: number): void {
 
 /** A minimal AppState for exercising reorderDocument directly (state/documents.ts). */
 function stateOf(documents: Document[], activeDocumentId: string | null): AppState {
-  return { documents, activeDocumentId, isDark: false, closedPaths: [], activeFormats: '' };
+  return {
+    documents,
+    activeDocumentId,
+    isDark: false,
+    closedPaths: [],
+    activeFormats: '',
+    pinnedToolbarCommands: [],
+  };
 }
 
 describe('buildTabStrip', () => {

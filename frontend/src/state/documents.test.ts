@@ -29,6 +29,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     isDark: false,
     closedPaths: [],
     activeFormats: '',
+    pinnedToolbarCommands: [],
   };
 }
 

@@ -29,6 +29,7 @@ export const store: Store<AppState> = createStore<AppState>({
   isDark: false,
   closedPaths: [],
   activeFormats: '',
+  pinnedToolbarCommands: [],
 });
 
 let editorView: EditorView | undefined;
