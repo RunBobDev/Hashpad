@@ -545,9 +545,11 @@ export function buildToolbar(
  * `activeFormats` change -- `mountTabBar`'s pattern.
  *
  * Also owns the pinned-command list for the running session, seeded once
- * from `initialPinned` (Task 8: main.ts passes the validated
- * `settings.toolbar.pinned`; every existing caller that omits the argument,
- * including this file's own tests, keeps the old `DEFAULT_PINNED` seed).
+ * from `initialPinned` -- required, not defaulted: main.ts passes the
+ * validated `settings.toolbar.pinned`, and a default would let a future
+ * caller that forgot the argument silently fall back to the compiled-in list
+ * instead of the user's settings, which is exactly the bug
+ * `main.toolbarSeed.test.ts` exists to catch.
  * `choosePinItem` emits `toolbar.pin:<id>`/`toolbar.unpin:<id>` on the shared
  * bus, which is main.ts's seam for *persisting* a toggle back to
  * settings.json -- but the in-session redraw here travels a **direct

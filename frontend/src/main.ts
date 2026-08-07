@@ -142,7 +142,17 @@ async function bootstrap(): Promise<void> {
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog, and MenuItem has no checkmark
     // support to render its state honestly in the meantime.
-    if (toolbarVisible) mountToolbar(root!, pinnedCommands, editorArea);
+    // Guarded independently of the try above. This whole block exists to
+    // guarantee ShowWindow runs, and main.go's StartHidden means a throw
+    // between here and it leaves the window permanently invisible -- the
+    // failure mode Checkpoint D hit and had to add a Go-side backstop for.
+    // `insertBefore` throws NotFoundError if handed a node that is not a
+    // child of `root`, so this one call is worth its own guard.
+    try {
+      if (toolbarVisible) mountToolbar(root!, pinnedCommands, editorArea);
+    } catch (err) {
+      console.error('hashpad: failed to mount the toolbar; continuing without it', err);
+    }
 
     // The initial document's state was installed straight into the view's
     // constructor, not through a transaction, so no updateListener has ever

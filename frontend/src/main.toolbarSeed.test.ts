@@ -18,7 +18,8 @@
  * mock happens to use the same ten ids as DEFAULT_PINNED -- it would only
  * fail here, where the mocked pinned list is deliberately disjoint from it.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { store } from './state/appcontext';
 import { ShowWindow } from '../wailsjs/go/app/App';
 
 vi.mock('../wailsjs/runtime/runtime', () => ({
@@ -48,26 +49,53 @@ vi.mock('../wailsjs/go/app/App', () => ({
 }));
 
 describe('bootstrap seeding the toolbar from settings', () => {
-  it('renders the pinned commands settings.json named, not the compiled-in default', async () => {
+  // Bootstrapped once, in beforeAll, then queried by independent tests --
+  // the shape main.test.ts already uses. Within one test file the ESM
+  // registry is shared, so a second `await import('./main')` returns the
+  // cached module and re-runs no side effects; bootstrapping inside each
+  // `it` would leave the second one querying an empty `#app`. Splitting the
+  // assertions this way keeps a seeding regression from short-circuiting the
+  // test before the position assertion is ever evaluated.
+  beforeAll(async () => {
     document.body.innerHTML = '<div id="app"></div>';
     await import('./main');
     await vi.waitFor(() => expect(ShowWindow).toHaveBeenCalled());
+  });
 
+  it('renders the pinned commands settings.json named, not the compiled-in default', () => {
     expect(document.querySelector('[data-command="blockquote"]')).not.toBeNull();
     expect(document.querySelector('[data-command="footnote"]')).not.toBeNull();
     // 'bold' is in DEFAULT_PINNED but not in this settings file's list --
     // its presence here would mean the seed came from the compiled-in
     // default instead of settings.toolbar.pinned.
     expect(document.querySelector('[data-command="bold"]')).toBeNull();
+  });
 
-    // Position, not just presence. The toolbar mounts from bootstrap's async
-    // `finally`, which runs long after `editorArea` is in the tree -- so
-    // `parent.append` put SPEC §6.1's formatting row *below the editor*, at
-    // the bottom of the window. `#app` is a plain flex column with no `order`
-    // anywhere, so DOM order is visual order, and nothing caught it: every
-    // other toolbar assertion tests presence, and both builds were silent.
-    // Asserted here rather than in its own `it` because vitest caches the
-    // module, so only the first `import('./main')` in a file bootstraps.
+  // The toolbar mounts from bootstrap's async `finally`, which runs long
+  // after `editorArea` is in the tree -- so `parent.append` put SPEC §6.1's
+  // formatting row *below the editor*, at the bottom of the window. `#app`
+  // is a plain flex column with no `order` anywhere, so DOM order is visual
+  // order, and nothing caught it: every other toolbar assertion tests
+  // presence, and both builds were silent.
+  it('sits between the tab strip and the editor area', () => {
+    const app = document.querySelector('#app')!;
+    expect([...app.children].map((child) => child.className)).toEqual([
+      'menubar',
+      'tabbar',
+      'toolbar',
+      'editor-area',
+    ]);
+  });
+
+  // The row is replaced on every activeFormats change. `replaceWith`
+  // substitutes at the same index so position survives -- but the assertion
+  // above only ever observes the *mount* path, because the initial document
+  // is empty and republishes '' against a store already holding '', so no
+  // rebuild has happened by then. Switching `replaceWith` to `append` would
+  // send the row to the bottom on the first keystroke, unnoticed.
+  it('stays there after a rebuild', () => {
+    store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
+
     const app = document.querySelector('#app')!;
     expect([...app.children].map((child) => child.className)).toEqual([
       'menubar',
