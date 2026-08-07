@@ -4,6 +4,7 @@ import { store } from '../state/appcontext';
 import { COMMAND_EVENT } from './menubar';
 import { buildToolbar, DEFAULT_PINNED, mountToolbar, TOOLBAR_COMMANDS } from './toolbar';
 import { ICONS } from './icons';
+import { COMMANDS } from '../editor/commands';
 
 /** Listeners registered by captureCommands, torn down after each test. */
 const captured: ((event: Event) => void)[] = [];
@@ -57,8 +58,28 @@ describe('TOOLBAR_COMMANDS', () => {
   });
 
   it('every default pin is a real command', () => {
-    const ids = new Set(TOOLBAR_COMMANDS.map((c) => c.id));
+    const ids = new Set<string>(TOOLBAR_COMMANDS.map((c) => c.id));
     for (const id of DEFAULT_PINNED) expect(ids.has(id)).toBe(true);
+  });
+
+  // A toolbar button dispatches `format.<id>`, and main.ts's router guards
+  // with `id in COMMANDS` -- necessary, because `heading` deliberately has no
+  // entry, but it turns any *other* mismatch into a button that silently does
+  // nothing: no throw, no warning, no failing test. `ToolbarCommand.id` is
+  // typed against `CommandId` so a typo is a compile error, and this asserts
+  // the same thing at runtime for the one id the type deliberately exempts.
+  it('names a real command for every id that dispatches one', () => {
+    for (const command of TOOLBAR_COMMANDS) {
+      if (command.id === 'heading') continue;
+      expect(command.id in COMMANDS, `no COMMANDS entry for ${command.id}`).toBe(true);
+    }
+  });
+
+  // The exemption itself, so "heading has no COMMANDS entry" stays a
+  // deliberate fact rather than something the loop above quietly tolerates.
+  it('heading is the only id without a command, because it opens a picker', () => {
+    expect('heading' in COMMANDS).toBe(false);
+    for (const level of [1, 2, 3, 4, 5, 6]) expect(`heading${level}` in COMMANDS).toBe(true);
   });
 });
 

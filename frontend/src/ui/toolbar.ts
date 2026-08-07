@@ -23,9 +23,25 @@ import { store } from '../state/appcontext';
 import type { AppState } from '../state/document';
 import { COMMAND_EVENT } from './menubar';
 import { ICONS } from './icons';
+import type { CommandId } from '../editor/commands';
+
+/**
+ * The one id in the row that is not a `CommandId`. `heading` is a single
+ * button standing for six commands (`heading1`..`heading6`), so it dispatches
+ * nothing itself -- Task 7's dropdown picks the level.
+ */
+type HeadingButtonId = 'heading';
 
 export interface ToolbarCommand {
-  id: string;
+  /**
+   * Typed against `COMMANDS`' own keys rather than `string`, so a typo or a
+   * later rename of a command is a compile error here instead of a button
+   * that silently does nothing. `main.ts`'s router has to guard with `in
+   * COMMANDS` anyway (for `heading`, which deliberately has no entry), and
+   * that guard would otherwise turn every mismatch into a dead button with
+   * no throw, no warning, and no failing test.
+   */
+  id: CommandId | HeadingButtonId;
   label: string;
   /** Displayed form of the shortcut bound in editor/extensions.ts's keymap. */
   shortcut: string;
@@ -41,7 +57,7 @@ export interface ToolbarCommand {
  * order `pinned` happens to list them, because pinning is a visibility
  * choice (SPEC §6.5's "pin or unpin"), not a reordering one.
  */
-export const TOOLBAR_COMMANDS: ToolbarCommand[] = [
+export const TOOLBAR_COMMANDS: readonly ToolbarCommand[] = [
   // Group 1: inline marks, plus the two "insert code" commands and heading.
   { id: 'bold', label: 'Bold', shortcut: 'Ctrl+B', group: 1 },
   { id: 'italic', label: 'Italic', shortcut: 'Ctrl+I', group: 1 },
@@ -197,7 +213,13 @@ function buildOverflowButton(): HTMLButtonElement {
 export function buildToolbar(pinned: readonly string[], active: string): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'toolbar';
-  bar.setAttribute('role', 'toolbar');
+  // `role="group"`, not `role="toolbar"`. The WAI-ARIA toolbar pattern
+  // promises a single Tab stop with arrow keys moving between the buttons,
+  // and these are eleven individual Tab stops -- declaring the role without
+  // the roving tabindex behind it tells assistive tech something untrue.
+  // Task 7 adds keyboard handling for the popups and is the place to add the
+  // roving pattern and restore the role together.
+  bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Formatting');
 
   const pinnedIds = new Set(pinned);

@@ -356,7 +356,15 @@ body {
 
 /* Active state is a filled background plus the accent foreground, never
    colour alone -- aria-pressed above carries it for assistive tech, and the
-   fill keeps it legible for anyone who cannot distinguish the accent. */
+   fill keeps it legible for anyone who cannot distinguish the accent.
+
+   This is the first consumer of --accent-subtle, so its contrast pairing is
+   recorded here per variables.css's house rule. The icon is --accent over
+   --accent-subtle composited on --bg-app: with the default #0078d4 that
+   resolves to about 3.4:1 in the light theme. An icon is non-text content,
+   so the applicable floor is WCAG 1.4.11's 3:1 rather than 4.5:1, and this
+   clears it -- but only just, and a paler accent would not. Checkpoint H's
+   picker has to guard this surface, not only --accent on white. */
 .toolbar__button[aria-pressed='true'] {
   background: var(--accent-subtle);
   color: var(--accent);
