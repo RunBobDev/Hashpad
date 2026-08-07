@@ -70,7 +70,7 @@ function declinesInFence(state: EditorState): boolean {
  * block: inserting `**`/`~~`/etc. there would add literal punctuation to the
  * user's source rather than formatting rendered prose.
  */
-export function toggleInlineMark(mark: InlineMark): MarkdownCommand {
+function toggleInlineMark(mark: InlineMark): MarkdownCommand {
   const delimiter = INLINE_MARK_DELIMITERS[mark];
 
   return (state) => {

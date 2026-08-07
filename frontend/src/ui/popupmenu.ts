@@ -3,9 +3,11 @@
  * `···` overflow list, and its pin/unpin context menu all render through this
  * one implementation rather than three near-identical ones.
  *
- * Deliberately a plain absolutely-positioned `<div>`, not `<dialog>` -- jsdom
- * has no `<dialog>` support at all, and `ui/menubar.ts` (the house reference
- * for this convention) uses the same plain-div approach for the same reason.
+ * Deliberately a plain absolutely-positioned `<div>`, not `<dialog>`. jsdom
+ * implements `<dialog>` only partially -- the element exists but `showModal()`
+ * does not (see ui/confirmdialog.ts, which works around exactly that) -- so a
+ * `<dialog>`-based popup's open path would be untestable. `ui/menubar.ts`, the
+ * house reference for this convention, uses the same plain-div approach.
  *
  * DOM shape and keyboard handling mirror `ui/menubar.ts`'s popup exactly, and
  * for the same reasons documented there: items are `<button role="menuitem">`
@@ -24,6 +26,8 @@
  * deferred to whenever a third caller, e.g. Checkpoint H's settings dialog,
  * makes the shared shape worth finding).
  */
+
+import { announcePopupOpening, POPUP_OPENING_EVENT } from './menubar';
 
 export interface PopupItem {
   id: string;
@@ -56,6 +60,13 @@ let openMenu: HTMLElement | null = null;
 let openAnchor: HTMLElement | null = null;
 let outsideClickListener: ((event: MouseEvent) => void) | null = null;
 let documentEscapeListener: ((event: KeyboardEvent) => void) | null = null;
+
+// The other half of the one-popup-at-a-time seam: the menu bar announces
+// before it opens, and this closes whatever this module has on screen.
+// Registered once at module scope rather than per popup, because it must be
+// listening even while nothing of ours is open. `closePopupMenu` is
+// idempotent, so a stray announcement costs nothing.
+document.addEventListener(POPUP_OPENING_EVENT, () => closePopupMenu());
 
 /**
  * Whether `anchor` is the trigger that owns the currently open popup. A
@@ -154,6 +165,9 @@ function buildItem(item: PopupItem, onChoose: (id: string) => void): HTMLButtonE
  * `ui/menubar.ts`'s `buildPopup` for the keyboard conventions mirrored below.
  */
 export function openPopupMenu(options: OpenPopupMenuOptions): void {
+  // Closes the menu bar's popup, if one is open. Fired before this popup is
+  // built, so the listener registered below cannot close what it just opened.
+  announcePopupOpening();
   closePopupMenu();
 
   const { anchor, items, onChoose } = options;

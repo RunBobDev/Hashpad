@@ -14,13 +14,40 @@
  *  - Whichever popup is open manages Up/Down/Home/End navigation among its
  *    own items, and Left/Right hands off to the neighbouring top-level menu.
  */
-import {
-  Quit,
-  WindowMinimise,
-  WindowToggleMaximise,
-} from '../../wailsjs/runtime/runtime';
+import { Quit, WindowMinimise, WindowToggleMaximise } from '../../wailsjs/runtime/runtime';
 
 export const COMMAND_EVENT = 'hashpad:command';
+
+/**
+ * Announced by any module about to open a popup, so every *other* popup can
+ * close itself first.
+ *
+ * This exists because both popup owners stop propagation on their own trigger
+ * clicks -- they have to, or the click that opens a popup immediately reaches
+ * the document-level listener that closes it. The side effect is that neither
+ * module's outside-click listener ever sees a click on the other's trigger,
+ * so before this, opening the File menu and then the `···` overflow left both
+ * on screen at once. Escape happened to clear both (neither Escape listener
+ * stops propagation); a click did not.
+ *
+ * A dispatcher must fire this *before* opening its own popup, so it does not
+ * immediately close what it just opened.
+ */
+export const POPUP_OPENING_EVENT = 'hashpad:popup-opening';
+
+/** Fires POPUP_OPENING_EVENT. See that constant for why this seam exists. */
+export function announcePopupOpening(): void {
+  document.dispatchEvent(new CustomEvent(POPUP_OPENING_EVENT));
+}
+
+/**
+ * Dispatches a `hashpad:command`. Shared rather than redefined per module --
+ * ui/tabbar.ts, ui/toolbar.ts and editor/extensions.ts all dispatch the same
+ * event, and all three already import COMMAND_EVENT from here.
+ */
+export function emitCommand(id: string): void {
+  document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: id }));
+}
 
 interface MenuItem {
   id: string;
@@ -224,6 +251,9 @@ export function mountMenuBar(parent: HTMLElement): void {
     const button = topButtons[index];
     if (!menu || !button) return;
 
+    // Before opening, not after: this closes the toolbar's popups, and firing
+    // it afterwards would close the one being opened here.
+    announcePopupOpening();
     removeOpenPopup();
     const { popup, items } = buildPopup(menu, button, index);
     document.body.append(popup);
@@ -435,6 +465,10 @@ export function mountMenuBar(parent: HTMLElement): void {
   // landed (e.g. the maximise button); closePopup()'s default would yank
   // focus back to the trigger, so this path opts out via focusTrigger: false.
   document.addEventListener('click', () => closePopup({ focusTrigger: false }));
+  // Another module is opening a popup; only one may be on screen at a time.
+  // focusTrigger: false because focus belongs wherever the new popup puts it,
+  // not yanked back to this menu's trigger.
+  document.addEventListener(POPUP_OPENING_EVENT, () => closePopup({ focusTrigger: false }));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closePopup();
   });

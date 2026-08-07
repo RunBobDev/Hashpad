@@ -133,6 +133,15 @@ func TestSaveThenLoadRoundTripsNonDefaultValues(t *testing.T) {
 	want.Files.Autosave = true
 	want.Window.PreviewSplitRatio = 0.35
 	want.Window.Maximized = true
+	// The Toolbar block is the one this checkpoint added, and an empty Pinned
+	// is its most dangerous value: unpinning everything is a legitimate choice
+	// (the overflow menu still reaches all sixteen commands), so a round trip
+	// that quietly restored the ten defaults would undo the user's setting on
+	// every restart. json.Unmarshal of `[]` over the default ten-element slice
+	// yields a non-nil empty slice, so this compares meaningfully rather than
+	// passing on a nil/empty technicality.
+	want.Toolbar.Visible = false
+	want.Toolbar.Pinned = []string{}
 
 	if err := SaveSettingsTo(path, want); err != nil {
 		t.Fatalf("save: %v", err)

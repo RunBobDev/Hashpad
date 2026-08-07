@@ -135,8 +135,13 @@ real keyboard proves the real path.
       `selectParentSyntax`.
 - [ ] Tab moves into the toolbar as a **single** stop, then Left/Right/Home/End
       move between buttons. Press Enter on one: the format applies and focus
-      stays on that same button rather than returning to the top of the
-      document.
+      lands **in the editor**, ready to keep typing — not back at the top of
+      the document's tab order. (Every formatting command ends with
+      `view.focus()`, so the editor is the intended destination here.)
+- [ ] Open the pin/unpin menu with Shift+F10 and choose an item. **No command
+      runs on this path**, so nothing pulls focus into the editor — focus must
+      come back to a toolbar button. This is the path where the Tab stop is
+      genuinely at risk.
 
 **Pinning.**
 
@@ -150,6 +155,11 @@ real keyboard proves the real path.
       boundary to catch it.
 - [ ] Right-click near the right-hand end of the row: the menu should appear at
       the button you clicked, not at the row's far left.
+- [ ] Right-click the row's *empty space* rather than a button, then press
+      Escape. Known gap: the menu falls back to anchoring on the row itself,
+      which is a div with no tabindex, so focus lands on the page rather than
+      on a toolbar button. Confirm it is only mildly annoying rather than
+      trapping you.
 - [ ] Open the pin menu with Shift+F10 and choose an item with Enter — focus
       should land back on a toolbar button, not vanish to the page.
 - [ ] Set `toolbar.pinned` in `settings.json` (see `internal/app/settings.go`'s

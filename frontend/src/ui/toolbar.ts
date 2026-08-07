@@ -24,7 +24,7 @@
  * who's listening.
  */
 import { store } from '../state/appcontext';
-import { COMMAND_EVENT } from './menubar';
+import { emitCommand } from './menubar';
 import { ICONS } from './icons';
 import { closePopupMenu, isPopupOpenFor, openPopupMenu, type PopupItem } from './popupmenu';
 import type { CommandId } from '../editor/commands';
@@ -36,7 +36,7 @@ import type { CommandId } from '../editor/commands';
  */
 type HeadingButtonId = 'heading';
 
-export interface ToolbarCommand {
+interface ToolbarCommand {
   /**
    * Typed against `COMMANDS`' own keys rather than `string`, so a typo or a
    * later rename of a command is a compile error here instead of a button
@@ -173,10 +173,6 @@ const TOGGLE_COMMAND_IDS = new Set([
   'blockquote',
 ]);
 
-function emit(command: string): void {
-  document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: command }));
-}
-
 /**
  * Whether `commandId` is "active" against the store's `activeFormats` string
  * (state/document.ts: sorted command ids joined by `|`, `''` when none
@@ -225,10 +221,10 @@ function headingPopupItems(): PopupItem[] {
 function chooseHeadingItem(id: string, active: string): void {
   if (id === 'normal') {
     const current = activeHeadingId(active);
-    if (current) emit(`format.${current}`);
+    if (current) emitCommand(`format.${current}`);
     return;
   }
-  emit(`format.${id}`);
+  emitCommand(`format.${id}`);
 }
 
 /**
@@ -297,7 +293,7 @@ function buildButton(
       openHeadingPopup(button, active);
     });
   } else {
-    button.addEventListener('click', () => emit(`format.${command.id}`));
+    button.addEventListener('click', () => emitCommand(`format.${command.id}`));
   }
 
   return button;
@@ -324,7 +320,7 @@ function chooseOverflowItem(id: string, anchor: HTMLElement, active: string): vo
     openHeadingPopup(anchor, active);
     return;
   }
-  emit(`format.${id}`);
+  emitCommand(`format.${id}`);
 }
 
 function buildOverflowButton(active: string): HTMLButtonElement {
@@ -386,7 +382,7 @@ function choosePinItem(
   pinnedIds: ReadonlySet<string>,
   onTogglePin?: (id: string) => void,
 ): void {
-  emit(pinnedIds.has(id) ? `toolbar.unpin:${id}` : `toolbar.pin:${id}`);
+  emitCommand(pinnedIds.has(id) ? `toolbar.unpin:${id}` : `toolbar.pin:${id}`);
   onTogglePin?.(id);
 }
 
@@ -594,11 +590,13 @@ export function mountToolbar(
     current.replaceWith(next);
     current = next;
 
-    // Activating a toolbar button republishes `activeFormats`, so the row is
-    // replaced out from under the button the user just pressed. Without this
-    // the focused node is detached and focus falls to <body>, dumping a
-    // keyboard user back at the top of the document's tab order on every
-    // single use of the toolbar.
+    // Restores focus when the outgoing row held it. On the *command* path
+    // this is invisible: `toEditorCommand` ends with `view.focus()`, which
+    // runs after the synchronous store notification and so wins -- focus
+    // lands in the editor, which is what you want when you press a format
+    // button and keep typing. The path this exists for is pin/unpin, where
+    // no command runs and nothing else would rescue focus, and where without
+    // it the user is dropped to <body> with the Tab stop reset.
     if (hadFocus) {
       const buttons = [...next.querySelectorAll<HTMLButtonElement>('button')];
       buttons.find((button) => button.tabIndex === 0)?.focus();

@@ -15,7 +15,7 @@
 import { displayName } from '../files/fileops';
 import { isDirty, type AppState, type Document } from '../state/document';
 import { store } from '../state/appcontext';
-import { COMMAND_EVENT } from './menubar';
+import { emitCommand } from './menubar';
 
 const TAB_ACTIVATE_PREFIX = 'tab.activate:';
 const TAB_CLOSE_PREFIX = 'tab.close:';
@@ -89,10 +89,6 @@ export function dropIndex(fromIndex: number, overIndex: number, afterMidpoint: b
   if (overIndex === fromIndex) return fromIndex;
   const shifted = overIndex > fromIndex ? overIndex - 1 : overIndex;
   return afterMidpoint ? shifted + 1 : shifted;
-}
-
-function emit(command: string): void {
-  document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: command }));
 }
 
 // Drag-to-reorder state (SPEC §6.2), module-local rather than read back from
@@ -192,7 +188,7 @@ function buildTab(doc: Document, isActive: boolean): HTMLDivElement {
     // Without this, the click bubbles to the tab's own listener below and
     // activates the very tab it was just asked to close.
     event.stopPropagation();
-    emit(tabCloseCommand(doc.id));
+    emitCommand(tabCloseCommand(doc.id));
   });
   indicator.append(close);
 
@@ -202,7 +198,7 @@ function buildTab(doc: Document, isActive: boolean): HTMLDivElement {
 
   tab.append(indicator, label);
 
-  tab.addEventListener('click', () => emit(tabActivateCommand(doc.id)));
+  tab.addEventListener('click', () => emitCommand(tabActivateCommand(doc.id)));
 
   // Restores what dropping <button> cost us. Space is excluded deliberately —
   // it scrolls by default and a tab strip is not a place users expect that, but
@@ -212,7 +208,7 @@ function buildTab(doc: Document, isActive: boolean): HTMLDivElement {
   tab.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' || event.target !== tab) return;
     event.preventDefault();
-    emit(tabActivateCommand(doc.id));
+    emitCommand(tabActivateCommand(doc.id));
   });
 
   // Middle-click closes (SPEC §6.2). A real middle-click fires 'auxclick' in
@@ -223,7 +219,7 @@ function buildTab(doc: Document, isActive: boolean): HTMLDivElement {
   tab.addEventListener('mousedown', (event) => {
     if (event.button === 1) {
       event.preventDefault();
-      emit(tabCloseCommand(doc.id));
+      emitCommand(tabCloseCommand(doc.id));
     }
   });
 
@@ -312,7 +308,7 @@ export function buildTabStrip(documents: Document[], activeId: string | null): H
     if (fromIndex === -1 || overIndex === -1) return;
 
     const toIndex = dropIndex(fromIndex, overIndex, isPastMidpoint(event, target));
-    emit(tabReorderCommand(dragged, toIndex));
+    emitCommand(tabReorderCommand(dragged, toIndex));
   });
 
   const newTab = document.createElement('button');
@@ -323,7 +319,7 @@ export function buildTabStrip(documents: Document[], activeId: string | null): H
   // Reuses the existing file.new command (already wired in main.ts) rather
   // than inventing a separate "new tab" one — a fresh untitled tab is
   // exactly what File > New / Ctrl+N already produce.
-  newTab.addEventListener('click', () => emit('file.new'));
+  newTab.addEventListener('click', () => emitCommand('file.new'));
 
   bar.append(tabs, newTab);
   return bar;

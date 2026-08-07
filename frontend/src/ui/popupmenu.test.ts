@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { closePopupMenu, openPopupMenu } from './popupmenu';
+import { mountMenuBar } from './menubar';
 
 afterEach(() => {
   closePopupMenu();
@@ -221,5 +222,55 @@ describe('openPopupMenu', () => {
     openPopupMenu({ anchor, items: [{ id: 'a', label: 'A' }], onChoose: () => {} });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(document.activeElement).toBe(anchor);
+  });
+});
+
+/**
+ * The menu bar and this module are separate popup owners, and both stop
+ * propagation on their own trigger clicks -- they have to, or the click that
+ * opens a popup immediately reaches the document listener that closes it. The
+ * side effect was that neither one's outside-click listener ever saw a click
+ * on the other's trigger, so opening the File menu and then the toolbar's
+ * overflow left *both* on screen with the File trigger still
+ * aria-expanded="true". Escape happened to clear both; a click did not.
+ */
+describe('one popup at a time, across both popup owners', () => {
+  it('closes the menu bar’s popup when this module opens one', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    mountMenuBar(host);
+
+    host.querySelector<HTMLButtonElement>('#menubar-trigger-file')!.click();
+    expect(document.querySelector('.menu-popup')).not.toBeNull();
+
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [{ id: 'a', label: 'A' }],
+      onChoose: () => {},
+    });
+
+    expect(document.querySelector('.menu-popup')).toBeNull();
+    expect(document.querySelector('.popup-menu')).not.toBeNull();
+    expect(host.querySelector('#menubar-trigger-file')!.getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+  });
+
+  it('closes this module’s popup when the menu bar opens one', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    mountMenuBar(host);
+
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [{ id: 'a', label: 'A' }],
+      onChoose: () => {},
+    });
+    expect(document.querySelector('.popup-menu')).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('#menubar-trigger-file')!.click();
+
+    expect(document.querySelector('.popup-menu')).toBeNull();
+    expect(document.querySelector('.menu-popup')).not.toBeNull();
   });
 });

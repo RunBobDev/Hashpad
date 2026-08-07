@@ -12,7 +12,7 @@ import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
-import { COMMAND_EVENT } from '../ui/menubar';
+import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
 
 /**
@@ -28,7 +28,7 @@ import { store } from '../state/appcontext';
  */
 function dispatchCommand(id: string): () => boolean {
   return () => {
-    document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: id }));
+    emitCommand(id);
     return true;
   };
 }

@@ -85,7 +85,7 @@ export function enclosingInlineMark(
 
 export type BlockPrefix = 'bulletList' | 'numberedList' | 'taskList' | 'blockquote';
 
-export const BLOCK_PREFIX_PATTERNS: Record<BlockPrefix, RegExp> = {
+const BLOCK_PREFIX_PATTERNS: Record<BlockPrefix, RegExp> = {
   // A task item is a bullet item with a checkbox, so this deliberately
   // matches `- [ ] task` too -- see the test that pins that down.
   bulletList: /^(\s*)([-*+] )/,
