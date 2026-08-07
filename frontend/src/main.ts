@@ -48,10 +48,11 @@ mountMenuBar(root);
 // the window is frameless, so this row is the only place a filename appears.
 mountTabBar(root);
 // The toolbar mounts later, from bootstrap() below, once settings.toolbar is
-// known: SPEC §6.13's `visible: false` means it must not appear at all
-// (Task 8 brief, ambiguity #3), and that can only be decided once
-// LoadSettings has resolved. It still lands between the tab strip and the
-// editor area, per the same layout, whenever it does mount.
+// known: SPEC §6.13's `visible: false` means it must not appear at all, and
+// that can only be decided once LoadSettings has resolved. Because that is
+// after `editorArea` is already in the tree, bootstrap passes it as the node
+// to insert before -- appending would drop the formatting row below the
+// editor, at the bottom of the window, since #app is a plain flex column.
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
@@ -141,7 +142,7 @@ async function bootstrap(): Promise<void> {
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog, and MenuItem has no checkmark
     // support to render its state honestly in the meantime.
-    if (toolbarVisible) mountToolbar(root!, pinnedCommands);
+    if (toolbarVisible) mountToolbar(root!, pinnedCommands, editorArea);
 
     // The initial document's state was installed straight into the view's
     // constructor, not through a transaction, so no updateListener has ever

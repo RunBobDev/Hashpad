@@ -201,6 +201,11 @@ SPEC §6.4 does not cover files containing both CRLF and LF. **Decision:** detec
 ending found, preserve it uniformly on save, and surface "mixed" in the status bar tooltip
 so the flattening is visible rather than silent.
 
+### 4.9 GitHub Actions workflow deferred
+
+SPEC §9 asks for a release workflow. There is no repository yet, so this is deferred by
+agreement. Checkpoint I still produces the portable exe and the NSIS installer.
+
 ### 4.10 The save prompt is an in-app modal, not a native dialog
 
 **Added during Checkpoint B planning. Supersedes the note in §5.1.**
@@ -298,9 +303,16 @@ SPEC §6.5 says the Code block command inserts a "fenced block, language prompt"
 **Decision: no prompt. The fence is inserted with the cursor on the info string.**
 
 Typing the language is then the natural next keystroke, and Enter or Down moves into the
-block. A modal interrupting a formatting keystroke is worse than the friction it
-removes, and jsdom has no `<dialog>` support at all (established in Checkpoint B), so a
-prompt would be the one part of the command that no test could exercise.
+block. A modal interrupting a formatting keystroke is worse than the friction it removes:
+Bold does not stop to ask anything, and Code block is reached the same way, from the same
+row, in the middle of the same sentence.
+
+An earlier draft of this section justified the decision partly on jsdom being unable to
+test a `<dialog>` at all. That was wrong and is corrected here rather than left standing:
+jsdom implements `<dialog>` as a bare element without `close()`, which is partial rather
+than absent, and Checkpoint B ships a real `<dialog>` save prompt whose builder was split
+out from `confirmSave` precisely so it *is* testable under jsdom (see
+`frontend/src/ui/confirmdialog.ts`). Testability is a mild argument here, not the reason.
 
 Rejected: a dropdown of the languages `@codemirror/language-data` can highlight. That is
 roughly 140 entries and would need filtering and search — a lot of UI for one command,
@@ -321,11 +333,6 @@ flat items to twenty, in a bar SPEC §6.1 fixes at exactly four menus and which
 
 Rejected: putting them in both places. Two surfaces to keep in sync, and the Edit menu
 still ends up with twenty flat items.
-
-### 4.9 GitHub Actions workflow deferred
-
-SPEC §9 asks for a release workflow. There is no repository yet, so this is deferred by
-agreement. Checkpoint I still produces the portable exe and the NSIS installer.
 
 ---
 

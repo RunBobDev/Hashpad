@@ -92,6 +92,14 @@ Automation cannot press a real key on a real keyboard layout, judge whether a
 16×16 icon reads at a glance, or drive a real right-click, so the following
 need a human running `build/bin/hashpad.exe`.
 
+**Layout.**
+
+- [ ] The formatting row sits **between the tab strip and the editor**, per
+      SPEC §6.1 — not below the editor at the bottom of the window. The row
+      mounts from an async bootstrap once settings are known, so its position
+      depends on being inserted rather than appended; that shipped wrong once
+      and every test was silent on it.
+
 **Icons.** Sixteen were hand-drawn and never rendered by the agent that drew
 them. Four pairs were flagged as most at risk of looking alike at this size —
 check these first:
@@ -136,7 +144,10 @@ real keyboard proves the real path.
       from the row and are still listed in the `···` menu.
 - [ ] Restart and confirm the layout persisted.
 - [ ] Untick every command. The `···` button must remain, and every command
-      must still be reachable through it.
+      must still be reachable through it. **Then restart.** The empty list is a
+      legitimate choice and must survive: coming back with all ten defaults
+      restored is the failure mode, and no automated test crosses the Go↔TS
+      boundary to catch it.
 - [ ] Right-click near the right-hand end of the row: the menu should appear at
       the button you clicked, not at the row's far left.
 - [ ] Open the pin menu with Shift+F10 and choose an item with Enter — focus

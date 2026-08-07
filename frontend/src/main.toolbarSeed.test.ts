@@ -59,5 +59,21 @@ describe('bootstrap seeding the toolbar from settings', () => {
     // its presence here would mean the seed came from the compiled-in
     // default instead of settings.toolbar.pinned.
     expect(document.querySelector('[data-command="bold"]')).toBeNull();
+
+    // Position, not just presence. The toolbar mounts from bootstrap's async
+    // `finally`, which runs long after `editorArea` is in the tree -- so
+    // `parent.append` put SPEC §6.1's formatting row *below the editor*, at
+    // the bottom of the window. `#app` is a plain flex column with no `order`
+    // anywhere, so DOM order is visual order, and nothing caught it: every
+    // other toolbar assertion tests presence, and both builds were silent.
+    // Asserted here rather than in its own `it` because vitest caches the
+    // module, so only the first `import('./main')` in a file bootstraps.
+    const app = document.querySelector('#app')!;
+    expect([...app.children].map((child) => child.className)).toEqual([
+      'menubar',
+      'tabbar',
+      'toolbar',
+      'editor-area',
+    ]);
   });
 });

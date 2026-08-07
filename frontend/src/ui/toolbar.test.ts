@@ -366,7 +366,7 @@ describe('mountToolbar', () => {
     store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
     const parent = document.createElement('div');
 
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
 
     expect(parent.querySelector('[data-command="bold"]')?.getAttribute('aria-pressed')).toBe(
       'true',
@@ -395,7 +395,7 @@ describe('mountToolbar', () => {
   it('rebuilds when activeFormats changes after mounting', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
     expect(parent.querySelector('[data-command="italic"]')?.getAttribute('aria-pressed')).toBe(
       'false',
     );
@@ -590,7 +590,7 @@ describe('mountToolbar pin/unpin', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
     document.body.append(parent);
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
     expect(parent.querySelector('[data-command="highlight"]')).toBeNull();
 
     togglePinVia(parent, 'Highlight');
@@ -602,7 +602,7 @@ describe('mountToolbar pin/unpin', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
     document.body.append(parent);
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
     expect(parent.querySelector('[data-command="bold"]')).not.toBeNull();
 
     togglePinVia(parent, 'Bold');
@@ -616,7 +616,7 @@ describe('mountToolbar pin/unpin', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
     document.body.append(parent);
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
     const seen = captureCommands();
 
     togglePinVia(parent, 'Highlight');
@@ -633,7 +633,7 @@ describe('mountToolbar pin/unpin', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
     document.body.append(parent);
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
 
     const buttons = () => [...parent.querySelectorAll<HTMLButtonElement>('.toolbar button')];
     const third = buttons()[2]!;
@@ -653,7 +653,7 @@ describe('mountToolbar pin/unpin', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
     document.body.append(parent);
-    mountToolbar(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
 
     store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
 

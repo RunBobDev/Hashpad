@@ -100,8 +100,9 @@ export const TOOLBAR_COMMANDS = [
 export type ToolbarCommandId = (typeof TOOLBAR_COMMANDS)[number]['id'];
 
 /**
- * The commands the toolbar starts with pinned, before Task 8 wires this to
- * settings. Order here is irrelevant -- `buildToolbar` always renders in
+ * The compiled-in fallback pinned set, used when settings.json carries no
+ * usable list (see `validatePinned`). main.ts seeds the real one from
+ * settings at bootstrap. Order here is irrelevant -- `buildToolbar` always renders in
  * `TOOLBAR_COMMANDS` order regardless of how this list is written.
  */
 export const DEFAULT_PINNED: readonly string[] = [
@@ -368,7 +369,7 @@ function pinPopupItems(pinnedIds: ReadonlySet<string>): PopupItem[] {
 }
 
 /**
- * Toggles `id`'s pinned state: announces it on the shared bus for Task 8 to
+ * Toggles `id`'s pinned state: announces it on the shared bus for main.ts to
  * persist, and tells the caller so the row can rebuild now.
  *
  * The split matters. `buildToolbar` stays a pure function of plain arguments
@@ -559,7 +560,8 @@ export function buildToolbar(
  */
 export function mountToolbar(
   parent: HTMLElement,
-  initialPinned: readonly string[] = DEFAULT_PINNED,
+  initialPinned: readonly string[],
+  before: HTMLElement | null = null,
 ): void {
   let pinned: string[] = [...initialPinned];
 
@@ -577,7 +579,12 @@ export function mountToolbar(
   }
 
   let current = buildToolbar(pinned, store.getState().activeFormats, 0, togglePin);
-  parent.append(current);
+  // Inserted *before* `before`, not appended. `#app` is a plain flex column
+  // with no `order` anywhere, so DOM order is visual order -- and this mounts
+  // from main.ts's async bootstrap, by which time the editor area is already
+  // in the tree. Appending would put SPEC §6.1's formatting row underneath
+  // the editor, at the bottom of the window.
+  parent.insertBefore(current, before);
 
   function rerender(active: string): void {
     const { index, hadFocus } = currentTabStop(current);
