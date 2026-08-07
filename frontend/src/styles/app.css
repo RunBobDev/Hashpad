@@ -147,6 +147,56 @@ body {
 }
 
 /*
+ * The generic popup (ui/popupmenu.ts, Task 7): the toolbar's heading picker,
+ * its overflow list, and its pin/unpin context menu. Deliberately the same
+ * variables and the same rules as .menu-popup above, so the two look
+ * identical to a user despite being two separate implementations (see
+ * popupmenu.ts's header comment for why they are not shared).
+ */
+.popup-menu {
+  --wails-draggable: no-drag;
+  position: absolute;
+  z-index: 100;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popup);
+}
+
+.popup-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.popup-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.popup-menu kbd {
+  color: var(--fg-muted);
+  font: inherit;
+}
+
+/* Fixed-width so an unchecked item's label lines up with a checked one's,
+   rather than the label shifting left by the tick's width when absent. */
+.popup-menu__check {
+  display: inline-block;
+  width: 14px;
+}
+
+/*
  * Tab strip (SPEC §6.2). Same drag convention as .menubar above: the row's
  * own empty space drags the frameless window, and every interactive child
  * opts back out with no-drag. `.tabbar__tabs` itself is left un-opted-out

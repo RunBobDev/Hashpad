@@ -15,14 +15,18 @@
  * path into the editor.
  *
  * The heading button and the `···` overflow button are the two exceptions:
- * both open a popup in Task 7 (a heading-level menu, and the full command
- * list respectively) and are deliberately inert here -- clicking them does
- * nothing yet. Building that popup is out of scope for this task.
+ * neither dispatches a command of its own. Both open a popup (ui/popupmenu.ts)
+ * instead -- a heading-level menu, and the full sixteen-command list
+ * respectively -- and it is *choosing an item* in that popup that dispatches
+ * `format.<id>`. `contextmenu` anywhere on the row opens a third popup, the
+ * pin/unpin list, which does not dispatch a `format.*` command at all but
+ * `toolbar.pin:<id>`/`toolbar.unpin:<id>` -- see `mountToolbar`'s comment for
+ * who's listening.
  */
 import { store } from '../state/appcontext';
-import type { AppState } from '../state/document';
 import { COMMAND_EVENT } from './menubar';
 import { ICONS } from './icons';
+import { openPopupMenu, type PopupItem } from './popupmenu';
 import type { CommandId } from '../editor/commands';
 
 /**
@@ -155,6 +159,52 @@ function isActive(commandId: string, active: string): boolean {
   return formats.includes(commandId);
 }
 
+/**
+ * The currently active heading level's raw id (e.g. `'heading3'`), or `null`
+ * when no heading applies at the cursor. Used only by the heading popup's
+ * "Normal text" entry: `toggleHeading(level)` (editor/commands.ts) only
+ * *removes* a heading when the line already carries that exact level, so
+ * "turn the heading off" has to name the level that is currently on rather
+ * than emitting a fixed one.
+ */
+function activeHeadingId(active: string): string | null {
+  if (active === '') return null;
+  return active.split('|').find((format) => format.startsWith('heading')) ?? null;
+}
+
+/** Heading 1..6 (shortcuts Ctrl+1..6) plus the entry that turns a heading off. */
+function headingPopupItems(): PopupItem[] {
+  const items: PopupItem[] = [];
+  for (let level = 1; level <= 6; level++) {
+    items.push({ id: `heading${level}`, label: `Heading ${level}`, shortcut: `Ctrl+${level}` });
+  }
+  items.push({ id: 'normal', label: 'Normal text' });
+  return items;
+}
+
+/**
+ * `'normal'` is not a real command id -- it is this popup's own placeholder
+ * for "whatever heading level is currently active, turn it off". Every other
+ * id here is already `heading<n>`, matching a `COMMANDS` key directly, so it
+ * is emitted as-is.
+ */
+function chooseHeadingItem(id: string, active: string): void {
+  if (id === 'normal') {
+    const current = activeHeadingId(active);
+    if (current) emit(`format.${current}`);
+    return;
+  }
+  emit(`format.${id}`);
+}
+
+function openHeadingPopup(anchor: HTMLElement, active: string): void {
+  openPopupMenu({
+    anchor,
+    items: headingPopupItems(),
+    onChoose: (id) => chooseHeadingItem(id, active),
+  });
+}
+
 function buildSeparator(): HTMLElement {
   const separator = document.createElement('div');
   separator.className = 'toolbar__separator';
@@ -193,16 +243,46 @@ function buildButton(
   icon.innerHTML = ICONS[command.id];
   button.append(icon);
 
-  // Heading opens a level-picker dropdown (Task 7); left inert here rather
-  // than dispatching a command that does not exist.
-  if (command.id !== 'heading') {
+  if (command.id === 'heading') {
+    button.addEventListener('click', (event) => {
+      // Without this, the same click that opens the popup would immediately
+      // bubble to document and hit popupmenu.ts's outside-click listener,
+      // closing the popup it just opened -- see that module's header comment.
+      event.stopPropagation();
+      openHeadingPopup(button, active);
+    });
+  } else {
     button.addEventListener('click', () => emit(`format.${command.id}`));
   }
 
   return button;
 }
 
-function buildOverflowButton(): HTMLButtonElement {
+/** All sixteen `TOOLBAR_COMMANDS`, in their fixed order, as popup items. */
+function overflowPopupItems(): PopupItem[] {
+  return TOOLBAR_COMMANDS.map((command) => ({
+    id: command.id,
+    label: command.label,
+    shortcut: command.shortcut,
+  }));
+}
+
+/**
+ * `'heading'` is one of the sixteen ids listed here but, like the pinned
+ * heading button, names no `COMMANDS` entry of its own (TOOLBAR_COMMANDS's
+ * comment) -- so choosing it opens the level-picker popup instead of
+ * dispatching a command that does not exist. Every other id is a real
+ * `CommandId` and is emitted as `format.<id>` directly.
+ */
+function chooseOverflowItem(id: string, anchor: HTMLElement, active: string): void {
+  if (id === 'heading') {
+    openHeadingPopup(anchor, active);
+    return;
+  }
+  emit(`format.${id}`);
+}
+
+function buildOverflowButton(active: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'toolbar__button';
@@ -215,8 +295,101 @@ function buildOverflowButton(): HTMLButtonElement {
   glyph.textContent = '···';
   button.append(glyph);
 
-  // Opens the full command list (Task 7); inert here, same as heading above.
+  button.addEventListener('click', (event) => {
+    // Same reason as the heading button's own listener above: without this,
+    // this click would immediately close the popup it just opened.
+    event.stopPropagation();
+    openPopupMenu({
+      anchor: button,
+      items: overflowPopupItems(),
+      onChoose: (id) => chooseOverflowItem(id, button, active),
+    });
+  });
+
   return button;
+}
+
+/** Every command listed as a checkbox, ticked for the ones currently pinned. */
+function pinPopupItems(pinnedIds: ReadonlySet<string>): PopupItem[] {
+  return TOOLBAR_COMMANDS.map((command) => ({
+    id: command.id,
+    label: command.label,
+    checked: pinnedIds.has(command.id),
+  }));
+}
+
+/**
+ * Toggles `id`'s pinned state. Never touches the pinned list itself -- that
+ * would make `buildToolbar` (and its test suite) depend on which popup a
+ * click came from, breaking the "pure function of plain arguments" contract
+ * the rest of this file relies on. Emitting the event and letting
+ * `mountToolbar`'s listener apply it keeps that contract intact; see that
+ * function's comment for who is on the other end.
+ */
+function choosePinItem(id: string, pinnedIds: ReadonlySet<string>): void {
+  emit(pinnedIds.has(id) ? `toolbar.unpin:${id}` : `toolbar.pin:${id}`);
+}
+
+/**
+ * WAI-ARIA toolbar pattern: exactly one button is ever a Tab stop, and
+ * Left/Right/Home/End move it among the row's buttons -- the overflow button
+ * included, since it is as much a part of the row as any pinned command.
+ * This is what makes `role="toolbar"` (below, in `buildToolbar`) true rather
+ * than aspirational; see that attribute's own comment for why Task 6 could
+ * not claim it and Task 7 can.
+ *
+ * Rebuilt fresh on every `buildToolbar` call, same as everything else in this
+ * file -- there is no cross-render memory of which button last had the Tab
+ * stop, because the whole row (and every button in it) is a new set of DOM
+ * nodes on every rebuild regardless.
+ */
+function applyRovingTabindex(bar: HTMLElement, buttons: readonly HTMLButtonElement[]): void {
+  buttons.forEach((button, index) => {
+    button.tabIndex = index === 0 ? 0 : -1;
+  });
+
+  // Keeps the Tab stop in sync with whichever button last received focus, by
+  // *any* means -- a keyboard move below, a mouse click (ui/menubar.ts's own
+  // top-level buttons update their roving index on click too, for the same
+  // reason: a click that landed on button 3 but left button 1 as the lone Tab
+  // stop would make a following Tab jump backwards), or Tab landing on the
+  // row for the first time. `focusin` bubbles (plain `focus` does not), so
+  // one delegated listener on the row covers every button without each
+  // needing its own.
+  bar.addEventListener('focusin', (event) => {
+    const index = buttons.indexOf(event.target as HTMLButtonElement);
+    if (index === -1) return;
+    for (const button of buttons) button.tabIndex = -1;
+    buttons[index]!.tabIndex = 0;
+  });
+
+  bar.addEventListener('keydown', (event) => {
+    const currentIndex = buttons.findIndex((button) => button === document.activeElement);
+    // Focus is somewhere else entirely (e.g. inside an open popup) -- not
+    // this row's concern.
+    if (currentIndex === -1) return;
+
+    switch (event.key) {
+      case 'ArrowRight':
+        event.preventDefault();
+        buttons[(currentIndex + 1) % buttons.length]?.focus();
+        break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        buttons[(currentIndex - 1 + buttons.length) % buttons.length]?.focus();
+        break;
+      case 'Home':
+        event.preventDefault();
+        buttons[0]?.focus();
+        break;
+      case 'End':
+        event.preventDefault();
+        buttons[buttons.length - 1]?.focus();
+        break;
+      default:
+        break;
+    }
+  });
 }
 
 /**
@@ -234,17 +407,18 @@ function buildOverflowButton(): HTMLButtonElement {
 export function buildToolbar(pinned: readonly string[], active: string): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'toolbar';
-  // `role="group"`, not `role="toolbar"`. The WAI-ARIA toolbar pattern
-  // promises a single Tab stop with arrow keys moving between the buttons,
-  // and these are eleven individual Tab stops -- declaring the role without
-  // the roving tabindex behind it tells assistive tech something untrue.
-  // Task 7 adds keyboard handling for the popups and is the place to add the
-  // roving pattern and restore the role together.
-  bar.setAttribute('role', 'group');
+  // `role="toolbar"`, restored here: Task 6 downgraded this to `role="group"`
+  // because the WAI-ARIA toolbar pattern promises a single Tab stop with
+  // arrow keys moving between the buttons, and back then these were eleven
+  // individual Tab stops -- declaring the role without the roving tabindex
+  // behind it would have told assistive tech something untrue.
+  // `applyRovingTabindex` below is what makes the promise true again.
+  bar.setAttribute('role', 'toolbar');
   bar.setAttribute('aria-label', 'Formatting');
 
   const pinnedIds = new Set(pinned);
   let lastGroup: number | null = null;
+  const focusable: HTMLButtonElement[] = [];
 
   for (const command of TOOLBAR_COMMANDS) {
     if (!pinnedIds.has(command.id)) continue;
@@ -255,40 +429,83 @@ export function buildToolbar(pinned: readonly string[], active: string): HTMLEle
     if (lastGroup !== null && command.group !== lastGroup) {
       bar.append(buildSeparator());
     }
-    bar.append(buildButton(command, active));
+    const button = buildButton(command, active);
+    bar.append(button);
+    focusable.push(button);
     lastGroup = command.group;
   }
 
   // Always present, even with nothing pinned (SPEC §6.5): it is how every
   // unpinned command stays reachable, so an empty row must still offer a way
   // in.
-  bar.append(buildOverflowButton());
+  const overflowButton = buildOverflowButton(active);
+  bar.append(overflowButton);
+  focusable.push(overflowButton);
+
+  applyRovingTabindex(bar, focusable);
+
+  bar.addEventListener('contextmenu', (event) => {
+    // Without this, WebView2 shows its own context menu on top of ours
+    // (ambiguity #3 in the task brief).
+    event.preventDefault();
+    openPopupMenu({
+      anchor: bar,
+      items: pinPopupItems(pinnedIds),
+      onChoose: (id) => choosePinItem(id, pinnedIds),
+    });
+  });
 
   return bar;
 }
 
 /**
- * The fields that determine what the row looks like, reduced to primitives
- * -- see tabbar.ts's `tabStripSummary` for why that matters to store.ts's
- * `isEqual`. `pinned` is a constant today (Task 8 gives it a real, settings-
- * backed source), joined the same way so the shape here does not have to
- * change once it stops being one.
- */
-function toolbarSummary(state: AppState): { pinned: string; active: string } {
-  return { pinned: DEFAULT_PINNED.join('|'), active: state.activeFormats };
-}
-
-/**
  * Subscribes to the store and mounts the row, rebuilding it whole on every
- * change `toolbarSummary` detects -- `mountTabBar`'s pattern exactly.
+ * `activeFormats` change -- `mountTabBar`'s pattern.
+ *
+ * Also owns the pinned-command list for the running session. Settings
+ * persistence is Task 8's job (ambiguity #4 in the task brief: "the store is
+ * the source of truth" here, not settings.json), and main.ts is not this
+ * task's to modify -- so rather than routing `toolbar.pin:<id>`/
+ * `toolbar.unpin:<id>` through main.ts's central COMMAND_EVENT switch, this
+ * closure listens for them directly and is itself the in-memory source of
+ * truth `buildToolbar`'s pin/unpin popup (`choosePinItem` above) emits those
+ * events for. Task 8 can listen for the same two event names to persist them
+ * without this function needing to change.
  */
 export function mountToolbar(parent: HTMLElement): void {
-  let current = buildToolbar(DEFAULT_PINNED, store.getState().activeFormats);
+  let pinned: string[] = [...DEFAULT_PINNED];
+  let current = buildToolbar(pinned, store.getState().activeFormats);
   parent.append(current);
 
-  store.subscribe(toolbarSummary, ({ pinned, active }) => {
-    const next = buildToolbar(pinned.split('|'), active);
+  function rerender(active: string): void {
+    const next = buildToolbar(pinned, active);
     current.replaceWith(next);
     current = next;
+  }
+
+  store.subscribe(
+    (state) => state.activeFormats,
+    (active) => rerender(active),
+  );
+
+  document.addEventListener(COMMAND_EVENT, (event) => {
+    const id = (event as CustomEvent<string>).detail;
+
+    if (id.startsWith('toolbar.pin:')) {
+      const commandId = id.slice('toolbar.pin:'.length);
+      if (!pinned.includes(commandId)) {
+        pinned = [...pinned, commandId];
+        rerender(store.getState().activeFormats);
+      }
+      return;
+    }
+
+    if (id.startsWith('toolbar.unpin:')) {
+      const commandId = id.slice('toolbar.unpin:'.length);
+      if (pinned.includes(commandId)) {
+        pinned = pinned.filter((existing) => existing !== commandId);
+        rerender(store.getState().activeFormats);
+      }
+    }
   });
 }
