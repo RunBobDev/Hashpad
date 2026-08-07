@@ -53,7 +53,6 @@ interface OpenPopupMenuOptions {
  * fields' worth of state alive at once.
  */
 let openMenu: HTMLElement | null = null;
-let openItems: HTMLButtonElement[] = [];
 let openAnchor: HTMLElement | null = null;
 let outsideClickListener: ((event: MouseEvent) => void) | null = null;
 let documentEscapeListener: ((event: KeyboardEvent) => void) | null = null;
@@ -64,6 +63,16 @@ let documentEscapeListener: ((event: KeyboardEvent) => void) | null = null;
  * event's later arrival at the document-level outside-click listener (see
  * `openPopupMenu`) must be a harmless no-op rather than a second removal.
  */
+/**
+ * Whether `anchor` is the trigger that owns the currently open popup. A
+ * trigger uses this to *toggle*: without it, clicking Heading a second time
+ * closes and immediately reopens the same menu, so the button can never
+ * dismiss what it opened.
+ */
+export function isPopupOpenFor(anchor: HTMLElement): boolean {
+  return openMenu !== null && openAnchor === anchor;
+}
+
 export function closePopupMenu(): void {
   if (!openMenu) return;
 
@@ -74,7 +83,6 @@ export function closePopupMenu(): void {
 
   openMenu.remove();
   openMenu = null;
-  openItems = [];
   openAnchor = null;
 }
 
@@ -202,7 +210,6 @@ export function openPopupMenu(options: OpenPopupMenuOptions): void {
   document.body.append(menu);
 
   openMenu = menu;
-  openItems = buttons;
   openAnchor = anchor;
 
   outsideClickListener = () => closePopupMenu();
@@ -218,5 +225,5 @@ export function openPopupMenu(options: OpenPopupMenuOptions): void {
   // or keyboard, per its FocusTarget parameter), every caller here has a
   // single, simple "open" action, so there is only one sensible place for
   // focus to land.
-  openItems[0]?.focus();
+  buttons[0]?.focus();
 }

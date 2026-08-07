@@ -235,6 +235,26 @@ describe('buildToolbar', () => {
 });
 
 describe('the heading popup', () => {
+  // The overflow menu is what discharges SPEC §6.14 for the sixteen
+  // formatting shortcuts -- the owner chose it over adding sixteen entries to
+  // the Edit menu, and §6.14 asks for the shortcut to be *displayed* beside
+  // the label. `PopupItem.shortcut` is optional, so dropping the mapping
+  // would be a silent regression with a green suite.
+  it('displays a shortcut beside every command in the overflow menu', () => {
+    const bar = buildToolbar(['bold'], '');
+    document.body.append(bar);
+    bar.querySelector<HTMLButtonElement>('[data-overflow]')!.click();
+
+    const items = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+    expect(items).toHaveLength(16);
+    for (const item of items) {
+      expect(
+        item.querySelector('kbd')?.textContent,
+        `no shortcut shown for ${item.textContent}`,
+      ).toBeTruthy();
+    }
+  });
+
   it('lists the six heading levels plus Normal text, with Ctrl+1..6 shown', () => {
     const bar = buildToolbar(['heading'], '');
     document.body.append(bar);
@@ -487,34 +507,93 @@ describe('the pin/unpin context menu', () => {
 });
 
 describe('mountToolbar pin/unpin', () => {
-  // Settings persistence is Task 8's job; this only proves that within a
-  // running session, choosing an item in the pin/unpin popup actually
-  // changes what the mounted row shows -- "the store is the source of truth"
-  // (ambiguity #4 in the task brief) would be an empty claim if the emitted
-  // event reached no listener at all.
-  it('adds a button when toolbar.pin:<id> is dispatched for a command outside the default set', () => {
+  /** Right-clicks the mounted row and clicks the popup item labelled `label`. */
+  function togglePinVia(parent: HTMLElement, label: string): void {
+    const bar = parent.querySelector('.toolbar')!;
+    bar.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    const item = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+    ].find((button) => button.textContent?.includes(label));
+    expect(item, `no pin/unpin item labelled ${label}`).toBeDefined();
+    item!.click();
+  }
+
+  // Drives the real path a user takes -- right-click, choose an item -- rather
+  // than dispatching `toolbar.pin:<id>` on the bus. The bus version passed
+  // against a `mountToolbar` that listened to its own emitted events, a
+  // self-loop that also fired for any other dispatcher of those ids; the row
+  // now updates through a direct callback, so only the user path proves it.
+  it('adds a button when an unpinned command is chosen in the pin menu', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
+    document.body.append(parent);
     mountToolbar(parent);
     expect(parent.querySelector('[data-command="highlight"]')).toBeNull();
 
-    document.dispatchEvent(
-      new CustomEvent<string>(COMMAND_EVENT, { detail: 'toolbar.pin:highlight' }),
-    );
+    togglePinVia(parent, 'Highlight');
 
     expect(parent.querySelector('[data-command="highlight"]')).not.toBeNull();
   });
 
-  it('removes a button when toolbar.unpin:<id> is dispatched for a currently pinned command', () => {
+  it('removes a button when a pinned command is chosen in the pin menu', () => {
     store.setState((prev) => ({ ...prev, activeFormats: '' }));
     const parent = document.createElement('div');
+    document.body.append(parent);
     mountToolbar(parent);
     expect(parent.querySelector('[data-command="bold"]')).not.toBeNull();
 
-    document.dispatchEvent(
-      new CustomEvent<string>(COMMAND_EVENT, { detail: 'toolbar.unpin:bold' }),
-    );
+    togglePinVia(parent, 'Bold');
 
     expect(parent.querySelector('[data-command="bold"]')).toBeNull();
+  });
+
+  // Task 8 persists these, so the announcement has to survive the move off
+  // the bus for the in-session toggle.
+  it('still announces the change on the shared bus for settings to persist', () => {
+    store.setState((prev) => ({ ...prev, activeFormats: '' }));
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    mountToolbar(parent);
+    const seen = captureCommands();
+
+    togglePinVia(parent, 'Highlight');
+
+    expect(seen).toContain('toolbar.pin:highlight');
+  });
+
+  // The Critical this task shipped and had to fix: the row is replaced whole
+  // on every activeFormats change -- which includes every use of a toolbar
+  // button -- so a Tab stop seated unconditionally on button 0 reset itself
+  // the moment the user activated anything else, and the focused node was
+  // detached with focus falling back to <body>.
+  it('keeps the Tab stop and focus on the same button across a rebuild', () => {
+    store.setState((prev) => ({ ...prev, activeFormats: '' }));
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    mountToolbar(parent);
+
+    const buttons = () => [...parent.querySelectorAll<HTMLButtonElement>('.toolbar button')];
+    const third = buttons()[2]!;
+    const thirdCommand = third.dataset.command;
+    third.focus();
+
+    store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
+
+    const rebuilt = buttons()[2]!;
+    expect(rebuilt.dataset.command).toBe(thirdCommand);
+    expect(rebuilt.tabIndex).toBe(0);
+    expect(document.activeElement).toBe(rebuilt);
+    expect(buttons().filter((button) => button.tabIndex === 0)).toHaveLength(1);
+  });
+
+  it('leaves focus alone when the rebuild happens while the row is unfocused', () => {
+    store.setState((prev) => ({ ...prev, activeFormats: '' }));
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    mountToolbar(parent);
+
+    store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
+
+    expect(parent.contains(document.activeElement)).toBe(false);
   });
 });

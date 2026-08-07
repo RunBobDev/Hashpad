@@ -211,9 +211,12 @@ document.addEventListener(COMMAND_EVENT, (event) => {
   // what keeps a toolbar button and its keyboard shortcut running through
   // the exact same MarkdownCommand (SPEC §6.5's "one implementation, two
   // triggers") rather than the toolbar growing a second path into the
-  // editor. An id with no match in COMMANDS (heading and overflow are inert
-  // until Task 7's popups land, so no button ever emits one today) is
-  // ignored rather than throwing.
+  // editor. The `in COMMANDS` guard is for `heading`, which is one button
+  // standing for six commands and so has no entry of its own -- it opens a
+  // level picker instead of emitting `format.heading`, and ui/toolbar.ts's
+  // test suite pins that exemption. Every other toolbar id is bound to a real
+  // command at compile time (`ToolbarCommand.id` is `CommandId | 'heading'`),
+  // so this guard cannot quietly swallow a typo.
   if (id.startsWith('format.')) {
     const commandId = id.slice('format.'.length);
     if (commandId in COMMANDS) {

@@ -26,7 +26,7 @@
 import { store } from '../state/appcontext';
 import { COMMAND_EVENT } from './menubar';
 import { ICONS } from './icons';
-import { openPopupMenu, type PopupItem } from './popupmenu';
+import { closePopupMenu, isPopupOpenFor, openPopupMenu, type PopupItem } from './popupmenu';
 import type { CommandId } from '../editor/commands';
 
 /**
@@ -197,7 +197,18 @@ function chooseHeadingItem(id: string, active: string): void {
   emit(`format.${id}`);
 }
 
+/**
+ * Toggles the picker rather than always reopening it. A trigger whose click
+ * unconditionally calls `openPopupMenu` closes and immediately reopens its
+ * own menu, so clicking Heading a second time can never dismiss it -- and
+ * because the click is stopped from propagating, the outside-click listener
+ * does not get the chance either.
+ */
 function openHeadingPopup(anchor: HTMLElement, active: string): void {
+  if (isPopupOpenFor(anchor)) {
+    closePopupMenu();
+    return;
+  }
   openPopupMenu({
     anchor,
     items: headingPopupItems(),
@@ -299,6 +310,11 @@ function buildOverflowButton(active: string): HTMLButtonElement {
     // Same reason as the heading button's own listener above: without this,
     // this click would immediately close the popup it just opened.
     event.stopPropagation();
+    // Toggles, for the same reason openHeadingPopup does -- see its comment.
+    if (isPopupOpenFor(button)) {
+      closePopupMenu();
+      return;
+    }
     openPopupMenu({
       anchor: button,
       items: overflowPopupItems(),
@@ -319,15 +335,25 @@ function pinPopupItems(pinnedIds: ReadonlySet<string>): PopupItem[] {
 }
 
 /**
- * Toggles `id`'s pinned state. Never touches the pinned list itself -- that
- * would make `buildToolbar` (and its test suite) depend on which popup a
- * click came from, breaking the "pure function of plain arguments" contract
- * the rest of this file relies on. Emitting the event and letting
- * `mountToolbar`'s listener apply it keeps that contract intact; see that
- * function's comment for who is on the other end.
+ * Toggles `id`'s pinned state: announces it on the shared bus for Task 8 to
+ * persist, and tells the caller so the row can rebuild now.
+ *
+ * The split matters. `buildToolbar` stays a pure function of plain arguments
+ * -- it never mutates a pinned list of its own, which is what keeps it (and
+ * its tests) independent of which popup a click came from. The `onTogglePin`
+ * callback is `mountToolbar`'s, and is a direct call rather than a second
+ * listener on `hashpad:command`: a module that both emits and consumes the
+ * same event is a self-loop that would also fire for any *other* dispatcher
+ * of those ids, and it would stop main.ts being the one place to look when
+ * tracing that bus.
  */
-function choosePinItem(id: string, pinnedIds: ReadonlySet<string>): void {
+function choosePinItem(
+  id: string,
+  pinnedIds: ReadonlySet<string>,
+  onTogglePin?: (id: string) => void,
+): void {
   emit(pinnedIds.has(id) ? `toolbar.unpin:${id}` : `toolbar.pin:${id}`);
+  onTogglePin?.(id);
 }
 
 /**
@@ -338,14 +364,25 @@ function choosePinItem(id: string, pinnedIds: ReadonlySet<string>): void {
  * than aspirational; see that attribute's own comment for why Task 6 could
  * not claim it and Task 7 can.
  *
- * Rebuilt fresh on every `buildToolbar` call, same as everything else in this
- * file -- there is no cross-render memory of which button last had the Tab
- * stop, because the whole row (and every button in it) is a new set of DOM
- * nodes on every rebuild regardless.
+ * `initialIndex` is what carries the Tab stop across a rebuild. The row is
+ * replaced wholesale on every `activeFormats` change -- which includes every
+ * activation of a toolbar button, since applying a format republishes it --
+ * so seating the Tab stop unconditionally on button 0 would reset it the
+ * instant the user pressed Enter on any other button, and the focused node
+ * would be detached with focus falling back to <body>. That is worse than no
+ * roving tabindex at all, because `role="toolbar"` promises the pattern.
+ * `mountToolbar` reads the outgoing row's index and passes it back in here.
  */
-function applyRovingTabindex(bar: HTMLElement, buttons: readonly HTMLButtonElement[]): void {
+function applyRovingTabindex(
+  bar: HTMLElement,
+  buttons: readonly HTMLButtonElement[],
+  initialIndex = 0,
+): void {
+  // Clamped: the row shrinks when a command is unpinned, so a remembered
+  // index can point past the end.
+  const seated = Math.min(Math.max(initialIndex, 0), Math.max(buttons.length - 1, 0));
   buttons.forEach((button, index) => {
-    button.tabIndex = index === 0 ? 0 : -1;
+    button.tabIndex = index === seated ? 0 : -1;
   });
 
   // Keeps the Tab stop in sync with whichever button last received focus, by
@@ -404,7 +441,12 @@ function applyRovingTabindex(bar: HTMLElement, buttons: readonly HTMLButtonEleme
  * one is pinned, never the reverse, so a stale or malformed pinned id (e.g.
  * a settings file surviving a future rename) can never throw.
  */
-export function buildToolbar(pinned: readonly string[], active: string): HTMLElement {
+export function buildToolbar(
+  pinned: readonly string[],
+  active: string,
+  initialTabStop = 0,
+  onTogglePin?: (id: string) => void,
+): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'toolbar';
   // `role="toolbar"`, restored here: Task 6 downgraded this to `role="group"`
@@ -442,16 +484,22 @@ export function buildToolbar(pinned: readonly string[], active: string): HTMLEle
   bar.append(overflowButton);
   focusable.push(overflowButton);
 
-  applyRovingTabindex(bar, focusable);
+  applyRovingTabindex(bar, focusable, initialTabStop);
 
   bar.addEventListener('contextmenu', (event) => {
     // Without this, WebView2 shows its own context menu on top of ours
     // (ambiguity #3 in the task brief).
     event.preventDefault();
+    // Anchored to whichever button was right-clicked, falling back to the row
+    // itself only when the click landed on its empty space. Anchoring to the
+    // row always would put the menu at its bottom-left however far right the
+    // user clicked -- and would break Escape's focus return, since the row is
+    // a div with no tabindex and `.focus()` on it does nothing.
+    const clicked = (event.target as HTMLElement | null)?.closest('button');
     openPopupMenu({
-      anchor: bar,
+      anchor: clicked instanceof HTMLElement ? clicked : bar,
       items: pinPopupItems(pinnedIds),
-      onChoose: (id) => choosePinItem(id, pinnedIds),
+      onChoose: (id) => choosePinItem(id, pinnedIds, onTogglePin),
     });
   });
 
@@ -463,49 +511,59 @@ export function buildToolbar(pinned: readonly string[], active: string): HTMLEle
  * `activeFormats` change -- `mountTabBar`'s pattern.
  *
  * Also owns the pinned-command list for the running session. Settings
- * persistence is Task 8's job (ambiguity #4 in the task brief: "the store is
- * the source of truth" here, not settings.json), and main.ts is not this
- * task's to modify -- so rather than routing `toolbar.pin:<id>`/
- * `toolbar.unpin:<id>` through main.ts's central COMMAND_EVENT switch, this
- * closure listens for them directly and is itself the in-memory source of
- * truth `buildToolbar`'s pin/unpin popup (`choosePinItem` above) emits those
- * events for. Task 8 can listen for the same two event names to persist them
- * without this function needing to change.
+ * persistence is Task 8's job; `choosePinItem` still emits
+ * `toolbar.pin:<id>`/`toolbar.unpin:<id>` on the shared bus for Task 8 to
+ * listen for, but the in-session toggle travels a **direct callback** rather
+ * than a second listener on that bus. A module that both emits and consumes
+ * the same event is a self-loop: it makes main.ts stop being the one place
+ * to look when tracing `hashpad:command`, and it would react to those ids
+ * from any future dispatcher, not just its own popup.
  */
 export function mountToolbar(parent: HTMLElement): void {
   let pinned: string[] = [...DEFAULT_PINNED];
-  let current = buildToolbar(pinned, store.getState().activeFormats);
+
+  /**
+   * Which button held the Tab stop, so a rebuild can put it back. Read from
+   * the live DOM rather than tracked in a variable: `applyRovingTabindex`'s
+   * `focusin` listener moves it on mouse clicks too, so the DOM is the only
+   * place that always knows the truth.
+   */
+  function currentTabStop(row: HTMLElement): { index: number; hadFocus: boolean } {
+    const buttons = [...row.querySelectorAll<HTMLButtonElement>('button')];
+    const index = buttons.findIndex((button) => button.tabIndex === 0);
+    const hadFocus = buttons.some((button) => button === document.activeElement);
+    return { index: index === -1 ? 0 : index, hadFocus };
+  }
+
+  let current = buildToolbar(pinned, store.getState().activeFormats, 0, togglePin);
   parent.append(current);
 
   function rerender(active: string): void {
-    const next = buildToolbar(pinned, active);
+    const { index, hadFocus } = currentTabStop(current);
+    const next = buildToolbar(pinned, active, index, togglePin);
     current.replaceWith(next);
     current = next;
+
+    // Activating a toolbar button republishes `activeFormats`, so the row is
+    // replaced out from under the button the user just pressed. Without this
+    // the focused node is detached and focus falls to <body>, dumping a
+    // keyboard user back at the top of the document's tab order on every
+    // single use of the toolbar.
+    if (hadFocus) {
+      const buttons = [...next.querySelectorAll<HTMLButtonElement>('button')];
+      buttons.find((button) => button.tabIndex === 0)?.focus();
+    }
+  }
+
+  function togglePin(commandId: string): void {
+    pinned = pinned.includes(commandId)
+      ? pinned.filter((existing) => existing !== commandId)
+      : [...pinned, commandId];
+    rerender(store.getState().activeFormats);
   }
 
   store.subscribe(
     (state) => state.activeFormats,
     (active) => rerender(active),
   );
-
-  document.addEventListener(COMMAND_EVENT, (event) => {
-    const id = (event as CustomEvent<string>).detail;
-
-    if (id.startsWith('toolbar.pin:')) {
-      const commandId = id.slice('toolbar.pin:'.length);
-      if (!pinned.includes(commandId)) {
-        pinned = [...pinned, commandId];
-        rerender(store.getState().activeFormats);
-      }
-      return;
-    }
-
-    if (id.startsWith('toolbar.unpin:')) {
-      const commandId = id.slice('toolbar.unpin:'.length);
-      if (pinned.includes(commandId)) {
-        pinned = pinned.filter((existing) => existing !== commandId);
-        rerender(store.getState().activeFormats);
-      }
-    }
-  });
 }
