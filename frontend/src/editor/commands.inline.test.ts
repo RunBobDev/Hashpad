@@ -231,20 +231,33 @@ describe('remove path uses the measured delimiter run, not the constant length',
  *   bold          `****`  -> HorizontalRule
  *   strikethrough `~~~~`  -> FencedCode, unclosed, swallowing the rest of the
  *                            document; `inFencedCode` then reports true below
- *                            it and fifteen of the sixteen commands decline
+ *                            it, and every command but `codeBlock` declines
  *   highlight     `====`  -> SetextHeading1, promoting the line *above* it
  *
  * The one existing no-word test used `'a  b'` with the cursor between the two
  * spaces -- mid-line, between letters -- which is the one position where the
  * block parser cannot claim the run. It passed against the bug.
  *
- * So these assert against the tree, and at the positions that matter. They
- * guard the class rather than the three instances: any future mark whose
- * delimiters happen to spell a block construct fails here without anyone
- * having to think of it.
+ * So these assert against the tree, at the positions that matter. The load
+ * bearing assertion is the *positive* one: the mark's own inline node has to
+ * be there. That is what guards the class rather than the three known
+ * instances -- a block parser claiming the delimiters consumes the very
+ * characters the inline node would be built from, so any future mark whose
+ * delimiters spell any block construct at all fails here, including the ten
+ * this file does not name. `NEVER_HERE` then names the known culprits
+ * explicitly, so a failure says which one came back.
  */
 describe('an inline mark with nothing to wrap never emits a block construct', () => {
   const MARKS = ['bold', 'italic', 'strikethrough', 'highlight', 'inlineCode'] as const;
+
+  /** The node each mark must actually produce. */
+  const INLINE_NODE: Record<(typeof MARKS)[number], string> = {
+    bold: 'StrongEmphasis',
+    italic: 'Emphasis',
+    strikethrough: 'Strikethrough',
+    highlight: 'Highlight',
+    inlineCode: 'InlineCode',
+  };
 
   /**
    * Where a delimiters-only line is dangerous. Each is a real cursor position
@@ -257,7 +270,8 @@ describe('an inline mark with nothing to wrap never emits a block construct', ()
     ['an empty document', '', 0],
   ];
 
-  const BLOCK_CONSTRUCT = /^(HorizontalRule|FencedCode|CodeBlock|SetextHeading\d)$/;
+  const NEVER_HERE =
+    /^(HorizontalRule|FencedCode|CodeBlock|SetextHeading\d|Blockquote|ATXHeading\d|BulletList|OrderedList|HTMLBlock|Table)$/;
 
   for (const [label, doc, pos] of POSITIONS) {
     it.each(MARKS)(`%s on ${label} parses as inline markup only`, (id) => {
@@ -266,20 +280,48 @@ describe('an inline mark with nothing to wrap never emits a block construct', ()
       const next = testState(doc, pos).update(spec!).state;
 
       const tree = syntaxTree(next);
-      // Without this the assertions below are vacuous on a parse that stopped
-      // early: an unparsed tail contains no nodes at all, so "no FencedCode"
-      // would hold for the wrong reason.
+      // Without this the assertions below could be vacuous on a parse that
+      // stopped early: an unparsed tail contains no nodes at all. It has never
+      // fired at these document sizes -- it is a guard, not coverage.
       expect(tree.length).toBe(next.doc.length);
 
-      const found: string[] = [];
-      tree.iterate({
-        enter: (node) => {
-          if (BLOCK_CONSTRUCT.test(node.name)) found.push(node.name);
-        },
-      });
-      expect(found).toEqual([]);
+      const names: string[] = [];
+      tree.iterate({ enter: (node) => void names.push(node.name) });
+
+      expect(names).toContain(INLINE_NODE[id]);
+      expect(names.filter((name) => NEVER_HERE.test(name))).toEqual([]);
     });
   }
+
+  /**
+   * The arithmetic the fix introduced, at the one place it could be wrong.
+   * `changeByRange` hands `f` original-document ranges and maps each returned
+   * range through the *other* ranges' changes, so the second cursor's
+   * placeholder is the one that moves -- a returned range computed in
+   * already-mapped coordinates would land off it by the first insertion's
+   * width. Each row's expected document is written out rather than derived, so
+   * the test cannot agree with a wrong implementation by sharing its formula.
+   */
+  it.each([
+    ['bold', 'a **bold** b **bold** c', 'bold'],
+    ['italic', 'a *italic* b *italic* c', 'italic'],
+    ['strikethrough', 'a ~~strikethrough~~ b ~~strikethrough~~ c', 'strikethrough'],
+    ['highlight', 'a ==highlight== b ==highlight== c', 'highlight'],
+    ['inlineCode', 'a `code` b `code` c', 'code'],
+  ] as const)('%s selects its own placeholder at each of two cursors', (id, expected, word) => {
+    const state = testState('a  b  c').update({
+      selection: EditorSelection.create([EditorSelection.cursor(2), EditorSelection.cursor(5)]),
+    }).state;
+    const spec = COMMANDS[id](state);
+    expect(spec).not.toBeNull();
+    const next = state.update(spec!).state;
+
+    expect(next.doc.toString()).toBe(expected);
+    expect(next.selection.ranges.length).toBe(2);
+    for (const range of next.selection.ranges) {
+      expect(next.doc.sliceString(range.from, range.to)).toBe(word);
+    }
+  });
 
   /**
    * The consequence, pinned separately from its cause. Even if some future

@@ -75,8 +75,9 @@ function declinesInFence(state: EditorState): boolean {
  *
  * The fence is the serious one. Everything below it renders as code, and
  * `inFencedCode` then reports true for every position after it, so
- * `declinesInFence` makes fifteen of the sixteen commands do nothing at all
- * until the user deletes a marker they cannot see the significance of.
+ * `declinesInFence` silences every command in this file except `codeBlock` --
+ * they do nothing at all until the user deletes a marker whose significance
+ * is invisible to them.
  *
  * A placeholder word cannot be read as a block construct at any position, and
  * it is the convention this file already follows for the same problem: `link`,

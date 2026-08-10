@@ -2,7 +2,7 @@
 import { tags, type Tag } from '@lezer/highlight';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { LanguageDescription } from '@codemirror/language';
+import { LanguageDescription, defaultHighlightStyle } from '@codemirror/language';
 import { describe, expect, it } from 'vitest';
 import { blockquoteLines } from './blockquote';
 import { markdownHighlightStyle, markdownSupport } from './highlight';
@@ -97,6 +97,62 @@ describe('markdownHighlightStyle', () => {
     const el = view.contentDOM.querySelector(`.${separatorClass}`);
     expect(el).not.toBeNull();
     expect(el!.textContent).toBe('---');
+
+    view.destroy();
+  });
+
+  /**
+   * The test above is not enough on its own, and the reason is the whole
+   * mechanism: for a tag *both* styles have an opinion on, the `---` span
+   * carries **both** classes. They are single-class selectors of equal
+   * specificity, so which colour paints is decided purely by their order in
+   * the stylesheet -- and a class-presence assertion holds identically either
+   * way. Three tags are in this position: `contentSeparator`, `url`, and
+   * `processingInstruction` (via `meta`), i.e. horizontal rules, link URLs,
+   * and every marker character in source mode.
+   *
+   * What puts ours last is `EditorView.mountStyles` doing
+   * `styleModules.concat(baseTheme).reverse()`, so the *first*
+   * `syntaxHighlighting(...)` listed in `markdownSupport` is the one whose
+   * rules land latest and win. Nothing in the source says so, and swapping
+   * those two lines silently repaints every rule, URL and marker in the editor
+   * to CodeMirror's built-in colours with the whole suite green. This is the
+   * assertion that stops that.
+   *
+   * Order, not colour: jsdom resolves `var(--syn-marker)` to the empty string
+   * with no stylesheet loaded, so a computed-colour assertion here would pass
+   * whatever the rules said.
+   */
+  it('registers our style after defaultHighlightStyle, so our rules win the ties', () => {
+    const view = mount('Above.\n\n---\n\nBelow.');
+
+    /** Position of `.cls`'s rule across the document's sheets, in order. */
+    function sheetIndexOf(cls: string): number {
+      let index = 0;
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          if ((rule as CSSStyleRule).selectorText === `.${cls}`) return index;
+          index++;
+        }
+      }
+      return -1;
+    }
+
+    for (const tag of [tags.contentSeparator, tags.url, tags.processingInstruction]) {
+      const ours = classFor(tag);
+      const theirs = defaultHighlightStyle.style([tag]);
+      // If this ever goes null the tag stopped being contested and the
+      // ordering no longer decides it -- which is a change worth noticing,
+      // not a reason to skip the row.
+      expect(theirs).not.toBeNull();
+      expect(ours).not.toBe(theirs);
+
+      const oursAt = sheetIndexOf(ours);
+      const theirsAt = sheetIndexOf(theirs!);
+      expect(oursAt).toBeGreaterThan(-1);
+      expect(theirsAt).toBeGreaterThan(-1);
+      expect(oursAt).toBeGreaterThan(theirsAt);
+    }
 
     view.destroy();
   });

@@ -56,7 +56,7 @@ export const markdownHighlightStyle = HighlightStyle.define([
   // does not fall back to the document's foreground. `defaultHighlightStyle`
   // (registered below, in `markdownSupport`) claims `contentSeparator` with a
   // hard-coded `#219`, which rendered every rule dark blue in *both* themes:
-  // 13.06:1 on the light background, but **1.34:1** on the dark one, i.e.
+  // 13.06:1 on the light background, but **1.33:1** on the dark one, i.e.
   // invisible. `--syn-marker` because a rule is exactly that -- a marker
   // character standing alone -- and it carries the AA-cleared pair already
   // recorded in variables.css (4.5:1 light, 4.6:1 dark).
