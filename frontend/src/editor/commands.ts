@@ -240,32 +240,54 @@ function toggleLinePrefix(options: {
     // Preserving the indent is this function's job, not `format`'s (see the
     // option's doc). `occupiedTo` measures from `line.from`, which is why
     // `detect` and `conflict` must report the line's *whole* indent.
-    return {
-      changes: lines.flatMap((line, index) => {
-        const already = own[index];
+    /** Where the caret should land on `line` once its marker is rewritten. */
+    let caret: number | null = null;
+    const cursor = state.selection.main;
+    const singleCursor = state.selection.ranges.length === 1 && cursor.empty;
 
-        // Already carries this prefix. Left untouched unless the command asks
-        // to rewrite it -- see the `regenerate` option for why that is the
-        // safe default and which two commands opt out of it.
-        if (already && !regenerate(line.text)) return [];
+    const changes = lines.flatMap((line, index) => {
+      const already = own[index];
 
-        // `conflict` is a different marker from the same family holding the
-        // slot -- a plain bullet where a task is wanted, or another heading
-        // level. Neither means the slot holds nothing but indent.
-        const occupant = already ?? conflict?.(line.text) ?? null;
-        // Safe: `\s*` matches at every position, so this exec cannot be null.
-        const indent = occupant ? occupant.indent : /^\s*/.exec(line.text)![0];
-        const occupiedTo = indent.length + (occupant ? occupant.marker.length : 0);
+      // Already carries this prefix. Left untouched unless the command asks
+      // to rewrite it -- see the `regenerate` option for why that is the
+      // safe default and which two commands opt out of it.
+      if (already && !regenerate(line.text)) return [];
 
-        return [
-          {
-            from: line.from,
-            to: line.from + occupiedTo,
-            insert: indent + format(index),
-          },
-        ];
-      }),
-    };
+      // `conflict` is a different marker from the same family holding the
+      // slot -- a plain bullet where a task is wanted, or another heading
+      // level. Neither means the slot holds nothing but indent.
+      const occupant = already ?? conflict?.(line.text) ?? null;
+      // Safe: `\s*` matches at every position, so this exec cannot be null.
+      const indent = occupant ? occupant.indent : /^\s*/.exec(line.text)![0];
+      const occupiedTo = indent.length + (occupant ? occupant.marker.length : 0);
+      const marker = format(index);
+
+      // A bare caret is placed explicitly rather than left to CodeMirror's
+      // change mapping. An insertion at the caret's own position maps it to
+      // the *near* side by default, so pressing Ctrl+Shift+8 on an empty line
+      // left the caret at `|- ` -- before the marker it just asked for, with
+      // the user having to arrow past it before typing. Anywhere else in the
+      // line the default mapping is already right; this reproduces it, and
+      // only differs at the one position where it is wrong.
+      if (singleCursor && cursor.head >= line.from && cursor.head <= line.to) {
+        const column = cursor.head - line.from;
+        // Clamped to `occupiedTo` so a caret sitting inside the indent or the
+        // old marker lands at the start of the text rather than inside the
+        // new marker.
+        caret =
+          line.from + Math.max(column, occupiedTo) - occupiedTo + indent.length + marker.length;
+      }
+
+      return [
+        {
+          from: line.from,
+          to: line.from + occupiedTo,
+          insert: indent + marker,
+        },
+      ];
+    });
+
+    return caret === null ? { changes } : { changes, selection: { anchor: caret } };
   };
 }
 

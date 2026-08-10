@@ -1,82 +1,120 @@
 /**
- * Hand-drawn toolbar icons (SPEC §6.1, §6.5). One SVG string per toolbar
- * command, keyed by command id. Every icon shares `viewBox="0 0 16 16"` and
- * `currentColor` (fill or stroke, never a literal colour, per variables.css's
- * "colours live in one place" rule) and carries no `width`/`height` — CSS
- * (`.toolbar__button svg`) sizes them, so a single rule controls every icon at
- * once.
+ * Toolbar icons (SPEC §6.1, §6.5): one inline SVG string per toolbar command,
+ * keyed by command id.
  *
- * These are markup, not glyphs: no emoji, no icon font, no Unicode symbol
- * standing in for a drawing. SPEC §6.1's mock uses placeholders like `❝ 🔗 🖼`
- * to describe *what* to draw, not what to ship.
+ * **Generated from two primitives, not drawn.** The first set was hand-authored
+ * paths, and the owner's verdict on the built app was that "pretty much every
+ * icon is clipped" — freehand coordinates drift outside the safe area, and at
+ * 16px a couple of stray tenths is the difference between a glyph and a
+ * smudge. Everything here instead comes from either `glyph` (a centred
+ * character, positioned by the text engine rather than by hand) or `rows`
+ * (axis-aligned rectangles on a fixed three-row grid). Neither can clip: the
+ * text is anchored to the box's centre, and every rectangle coordinate is
+ * clamped inside 2…14 by construction.
+ *
+ * Letters where a letter *is* the convention — B, I, S, H — because that is
+ * what every editor's toolbar has used for thirty years and it is instantly
+ * legible at any size. Geometry for the structural commands, where a letter
+ * would say nothing.
+ *
+ * Still SVG, still `currentColor`, still no icon font (SPEC §6.1). The font
+ * for the lettered ones is set in `app.css` rather than here, because a CSS
+ * custom property cannot be used in an SVG presentation attribute — and
+ * because `variables.css` owns the font stack the same way it owns colour.
  */
+
 import type { ToolbarCommandId } from './toolbar';
 
+/**
+ * A character centred in the 16×16 box.
+ *
+ * `dominant-baseline: central` plus `text-anchor: middle` puts the glyph's
+ * optical centre at (8, 8) whatever the character is, so a `B` and a `{}` and
+ * a `1.` all sit on the same centre line without per-glyph nudging — which is
+ * exactly the hand-tuning that produced the clipped set.
+ */
+function glyph(
+  text: string,
+  options: { size?: number; weight?: number; italic?: boolean; strike?: boolean } = {},
+): string {
+  const { size = 12, weight = 600, italic = false, strike = false } = options;
+  const attrs = [
+    'x="8"',
+    'y="8.5"',
+    'text-anchor="middle"',
+    'dominant-baseline="central"',
+    `font-size="${size}"`,
+    `font-weight="${weight}"`,
+    italic ? 'font-style="italic"' : '',
+    strike ? 'text-decoration="line-through"' : '',
+    'fill="currentColor"',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return `<svg viewBox="0 0 16 16"><text ${attrs}>${text}</text></svg>`;
+}
+
+/** The three text rows every list-ish icon shares. */
+const ROW_Y = [3.4, 7.4, 11.4];
+
+/** A text line: a rounded bar from `x` to 14. */
+function bar(x: number, y: number): string {
+  return `<rect x="${x}" y="${y}" width="${14 - x}" height="1.6" rx="0.8" fill="currentColor"/>`;
+}
+
+/**
+ * A three-row block: `marker(y)` draws whatever sits at the left of each row,
+ * and the text bar always starts at `textX`. Passing an empty marker gives a
+ * plain set of lines, which is what the blockquote and rule icons build on.
+ */
+function rows(textX: number, marker: (y: number) => string): string {
+  const body = ROW_Y.map((y) => `${marker(y)}${bar(textX, y)}`).join('');
+  return `<svg viewBox="0 0 16 16">${body}</svg>`;
+}
+
+/** A filled square, used as a bullet and as a table cell. */
+function square(x: number, y: number, size: number, rx = 0.5): string {
+  return `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${rx}" fill="currentColor"/>`;
+}
+
 export const ICONS: Record<ToolbarCommandId, string> = {
-  bold: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3h4.2a2.8 2.8 0 0 1 1.6 5.1A3 3 0 0 1 8.4 13H4V3zm2 2v3h2.1a1.5 1.5 0 0 0 0-3H6zm0 5v3h2.4a1.5 1.5 0 0 0 0-3H6z"/></svg>',
+  // The lettered set. Weight and slant carry the meaning, so each one looks
+  // like the thing it does rather than merely labelling it.
+  bold: glyph('B', { size: 13, weight: 800 }),
+  italic: glyph('I', { size: 13, weight: 500, italic: true }),
+  strikethrough: glyph('S', { size: 13, strike: true }),
+  // A highlighter stroke under the letter, which is what distinguishes it
+  // from the heading H at a glance -- the two are otherwise the same shape.
+  highlight: `<svg viewBox="0 0 16 16"><rect x="2.5" y="11.4" width="11" height="2.2" rx="1" fill="currentColor" opacity="0.45"/><text x="8" y="7" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="600" fill="currentColor">H</text></svg>`,
+  inlineCode: glyph('&lt;/&gt;', { size: 8, weight: 700 }),
+  codeBlock: glyph('{ }', { size: 10, weight: 700 }),
+  // The caret says "this opens a picker", which no other button does.
+  heading: `<svg viewBox="0 0 16 16"><text x="7" y="7.5" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="800" fill="currentColor">H</text><path d="M11.4 11.6h3.2L13 14z" fill="currentColor"/></svg>`,
 
-  italic:
-    '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 3h5v1.6H9.4l-2 7.8H9V14H4v-1.6h1.6l2-7.8H6V3z"/></svg>',
+  // The generated set. All three list icons share ROW_Y and the same bar
+  // geometry, so they read as a family and differ only in the marker.
+  bulletList: rows(6.5, (y) => square(2.4, y - 0.2, 2, 1)),
+  numberedList: rows(
+    6.5,
+    (y) =>
+      `<text x="3.4" y="${y + 0.9}" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="700" fill="currentColor">${ROW_Y.indexOf(y) + 1}</text>`,
+  ),
+  taskList: rows(
+    7,
+    (y) =>
+      `<rect x="2.2" y="${y - 0.9}" width="3.4" height="3.4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1"/>`,
+  ),
+  // A quote bar down the left, with the text indented past it.
+  blockquote: rows(6, (y) => (y === ROW_Y[0] ? square(2.4, 3.2, 2, 1) + bar(2.4, 7.4) : '')),
 
-  // An S-shaped stroke crossed by a flat strike line -- the line is what
-  // distinguishes this from a plain "S" and reads as "strike this out".
-  strikethrough:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5.3c0-1.4 1.3-2.5 3-2.5s2.8.8 3 1.9"/><path d="M6 12.7c1.7 0 3-.9 3-2.4 0-1-.7-1.6-1.7-1.9"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg>',
-
-  // A chisel-tip marker stroke over a short highlighted underline -- a
-  // highlighter pen, not a generic edit pencil.
-  highlight:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M10.5 2.5l3 3-6 6-3.5 1 1-3.5z"/><line x1="2" y1="13.5" x2="8" y2="13.5"/></svg>',
-
-  // Angle brackets -- deliberately without the middle slash real "</>"
-  // glyphs use, so it reads as its own mark rather than a smaller codeBlock.
-  inlineCode:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4L2.5 8 6 12"/><path d="M10 4l3.5 4-3.5 4"/></svg>',
-
-  // Curly braces, not angle brackets -- shares the "code" idea with
-  // inlineCode above but is a visibly different bracket family, for a block
-  // rather than an inline span.
-  codeBlock:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5c-1.5 0-2 .7-2 2v2c0 .8-.4 1.3-1.3 1.5.9.2 1.3.7 1.3 1.5v2c0 1.3.5 2 2 2"/><path d="M10 2.5c1.5 0 2 .7 2 2v2c0 .8.4 1.3 1.3 1.5-.9.2-1.3.7-1.3 1.5v2c0 1.3-.5 2-2 2"/></svg>',
-
-  // Block capital H plus a small caret -- the caret signals this button
-  // opens a dropdown (Task 7), not a plain toggle.
-  heading:
-    '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.5 2.5h1.8v4.4h3.4V2.5h1.8v9h-1.8V8.5H4.3v3H2.5v-9z"/><path d="M10.8 11l1.4 1.4 1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-
-  bulletList:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="2.5" cy="3.5" r="1" fill="currentColor" stroke="none"/><line x1="6" y1="3.5" x2="13.5" y2="3.5"/><circle cx="2.5" cy="8" r="1" fill="currentColor" stroke="none"/><line x1="6" y1="8" x2="13.5" y2="8"/><circle cx="2.5" cy="12.5" r="1" fill="currentColor" stroke="none"/><line x1="6" y1="12.5" x2="13.5" y2="12.5"/></svg>',
-
-  // Small "1 2 3" numerals beside each line, in place of bulletList's dots.
-  numberedList:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.3l1-.6v3.1"/><line x1="6" y1="3.5" x2="13.5" y2="3.5"/><path d="M1.6 6.6c0-.5.5-.9 1-.9s1 .4 1 .8c0 .5-.4.8-1 1.4h1.1"/><line x1="6" y1="8" x2="13.5" y2="8"/><path d="M1.6 10.6c0-.5.5-.8 1-.8s1 .3 1 .7c0 .3-.2.5-.5.6.3.1.5.3.5.7 0 .5-.5.8-1 .8s-1-.3-1-.7"/><line x1="6" y1="12.5" x2="13.5" y2="12.5"/></svg>',
-
-  // Checkbox squares (one checked) beside each line, in place of
-  // bulletList's dots and numberedList's digits.
-  taskList:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="4" height="4" rx="0.8"/><path d="M2.3 4l1 1 1.8-2"/><line x1="7.5" y1="4" x2="13.5" y2="4"/><rect x="1.5" y="9.5" width="4" height="4" rx="0.8"/><line x1="7.5" y1="11.5" x2="13.5" y2="11.5"/></svg>',
-
-  // Two quotation-comma shapes, echoing the mock's "❝" without shipping it
-  // as a literal glyph -- drawn as vector paths instead.
-  blockquote:
-    '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 4.5c-1.1 0-2 .9-2 2v2.3c0 .7.6 1.3 1.3 1.3H4V6.8H2.6c.1-.7.6-1.1 1.4-1.2V4.5zM9.5 4.5c-1.1 0-2 .9-2 2v2.3c0 .7.6 1.3 1.3 1.3h1.7V6.8H9.1c.1-.7.6-1.1 1.4-1.2V4.5z"/></svg>',
-
-  // Two hooked links joined by a diagonal -- a standard chain-link mark.
-  link: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5l3-3"/><path d="M6 4.5L7.4 3a2.5 2.5 0 0 1 3.6 3.6L9.5 8"/><path d="M10 11.5L8.6 13a2.5 2.5 0 0 1-3.6-3.6L6.5 8"/></svg>',
-
-  // A picture frame with a sun dot and a mountain fold -- the classic
-  // "image" pictogram, distinct from table's plain grid.
-  image:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><rect x="2" y="2.5" width="12" height="11" rx="1"/><circle cx="5.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><path d="M2.5 11l3.3-3.3a1 1 0 0 1 1.4 0L9.5 10l1.3-1.3a1 1 0 0 1 1.4 0l1.3 1.3"/></svg>',
-
-  table:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="11" rx="1"/><line x1="2" y1="6.5" x2="14" y2="6.5"/><line x1="2" y1="10.5" x2="14" y2="10.5"/><line x1="6.5" y1="2.5" x2="6.5" y2="13.5"/><line x1="10.5" y1="2.5" x2="10.5" y2="13.5"/></svg>',
-
-  horizontalRule:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg>',
-
-  // A baseline text stroke with a small superscript numeral -- a footnote
-  // reference mark.
-  footnote:
-    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="11" x2="9" y2="11"/><path d="M11.3 3.2l1-.5v3.6"/><line x1="10.6" y1="6.3" x2="13" y2="6.3"/></svg>',
+  link: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.5 9.5 9.5 6.5"/><path d="M7.5 4.5 9 3a2.8 2.8 0 0 1 4 4l-1.5 1.5"/><path d="M8.5 11.5 7 13a2.8 2.8 0 0 1-4-4l1.5-1.5"/></svg>`,
+  image: `<svg viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.8" cy="6.8" r="1.1" fill="currentColor"/><path d="M3.4 11.6 6.6 8.6l2 1.8 2-1.6 2.6 2.8z" fill="currentColor"/></svg>`,
+  // A 3x3 grid: outer frame plus two lines each way, generated rather than
+  // drawn so the cells are exactly equal.
+  table: `<svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.2" fill="none"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6.3h12M2 9.7h12M6 3v10M10 3v10"/></svg>`,
+  horizontalRule: `<svg viewBox="0 0 16 16">${bar(2, 7.2)}<rect x="2" y="3" width="8" height="1.2" rx="0.6" fill="currentColor" opacity="0.4"/><rect x="2" y="11.8" width="8" height="1.2" rx="0.6" fill="currentColor" opacity="0.4"/></svg>`,
+  // A superscript marker, which is what a footnote reference looks like in the
+  // rendered document.
+  footnote: `<svg viewBox="0 0 16 16"><text x="6" y="9" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="600" fill="currentColor">a</text><text x="12" y="4.5" text-anchor="middle" dominant-baseline="central" font-size="7" font-weight="700" fill="currentColor">1</text></svg>`,
 };

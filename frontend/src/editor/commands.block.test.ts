@@ -238,3 +238,74 @@ describe('multiple cursors', () => {
     expect(state.update(spec!).state.doc.toString()).toBe('- one\n- two\nthree');
   });
 });
+
+/**
+ * Where the caret lands when a marker is added. Reported by the owner: bold
+ * and friends put the caret between the delimiters, ready to type, but the
+ * block commands left it *before* the marker, so every list or heading needed
+ * a manual arrow past the `- ` or `# ` before typing could start.
+ *
+ * The cause is CodeMirror's default change mapping: an insertion at exactly
+ * the caret's position maps the caret to the near side. On an empty line the
+ * caret is at column 0, which is exactly where the marker goes.
+ */
+describe('caret placement when adding a marker', () => {
+  it.each([
+    ['bulletList', '- ', 2],
+    ['numberedList', '1. ', 3],
+    ['taskList', '- [ ] ', 6],
+    ['blockquote', '> ', 2],
+    ['heading1', '# ', 2],
+    ['heading3', '### ', 4],
+  ] as const)('%s puts the caret after the marker on an empty line', (id, marker, at) => {
+    const result = apply(testState('', 0), id);
+    expect(result?.doc).toBe(marker);
+    expect(result?.from).toBe(at);
+    expect(result?.to).toBe(at);
+  });
+
+  it.each([
+    ['bulletList', '- item', 2],
+    ['numberedList', '1. item', 3],
+    ['blockquote', '> item', 2],
+    ['heading2', '## item', 3],
+  ] as const)('%s keeps the caret before the first character of the text', (id, expected, at) => {
+    const result = apply(testState('item', 0), id);
+    expect(result?.doc).toBe(expected);
+    expect(result?.from).toBe(at);
+  });
+
+  // Not a regression of the existing behaviour: a caret already inside the
+  // text still travels with the character it was on.
+  it('keeps the caret on the same character when it is mid-word', () => {
+    const result = apply(testState('Title', 2), 'heading1');
+    expect(result?.doc).toBe('# Title');
+    expect(result?.from).toBe(4);
+  });
+
+  it('lands after the new marker when replacing a different one', () => {
+    // '# Title' caret at 3 ('i'); '### Title' has 'i' at 5.
+    const result = apply(testState('# Title', 3), 'heading3');
+    expect(result?.doc).toBe('### Title');
+    expect(result?.from).toBe(5);
+  });
+
+  it('preserves the indent and lands after the marker on an indented line', () => {
+    const result = apply(testState('  ', 2), 'bulletList');
+    expect(result?.doc).toBe('  - ');
+    expect(result?.from).toBe(4);
+  });
+
+  // A real selection is left to CodeMirror's own change mapping, untouched by
+  // the caret logic above -- so this pins pre-existing behaviour rather than a
+  // new choice. Both ends shift past the marker inserted at their own
+  // position, so the selection starts after the first line's marker.
+  // Recorded so a later change to the caret handling cannot quietly alter the
+  // selection case too.
+  it('leaves a non-empty selection to the default mapping', () => {
+    const result = apply(testState('one\ntwo', 0, 7), 'bulletList');
+    expect(result?.doc).toBe('- one\n- two');
+    expect(result?.from).toBe(2);
+    expect(result?.to).toBe(11);
+  });
+});

@@ -49,6 +49,51 @@ describe('TOOLBAR_COMMANDS', () => {
     }
   });
 
+  /**
+   * Structural guards on the icon set. The first set was hand-drawn and every
+   * icon was clipped in the built app; these pin the properties that make the
+   * generated set safe, none of which any rendering test can check.
+   */
+  it.each(TOOLBAR_COMMANDS.map((c) => c.id))('%s has a well-formed 16x16 icon', (id) => {
+    const svg = ICONS[id];
+    expect(svg.startsWith('<svg viewBox="0 0 16 16"')).toBe(true);
+    expect(svg.endsWith('</svg>')).toBe(true);
+  });
+
+  // CSS sizes every icon through one `.toolbar__button svg` rule. An icon
+  // carrying its own width/height would silently ignore it.
+  it('lets CSS size every icon', () => {
+    for (const command of TOOLBAR_COMMANDS) {
+      expect(/<svg[^>]*\swidth=/.test(ICONS[command.id]), `${command.id} sets its own width`).toBe(
+        false,
+      );
+    }
+  });
+
+  // SPEC §5.3: variables.css is the only place a colour is defined. An icon
+  // is styled by the button's `color`, which currentColor inherits -- a
+  // literal would also break the active-state and dark-theme colours.
+  it('uses only currentColor', () => {
+    for (const command of TOOLBAR_COMMANDS) {
+      const svg = ICONS[command.id];
+      expect(/#[0-9a-fA-F]{3}|rgb\(|hsl\(/.test(svg), `${command.id} hard-codes a colour`).toBe(
+        false,
+      );
+      expect(svg.includes('currentColor'), `${command.id} never references currentColor`).toBe(
+        true,
+      );
+    }
+  });
+
+  // SPEC §6.1 asks for an SVG set, not glyphs pasted into the markup. The
+  // lettered icons use <text>, which is drawing with the font rather than
+  // shipping an icon font -- but an emoji would be neither.
+  it('ships no emoji', () => {
+    for (const command of TOOLBAR_COMMANDS) {
+      expect(/\p{Extended_Pictographic}/u.test(ICONS[command.id]), command.id).toBe(false);
+    }
+  });
+
   it('shows a shortcut for every command', () => {
     for (const command of TOOLBAR_COMMANDS) {
       expect(command.shortcut, `missing shortcut for ${command.id}`).toBeTruthy();

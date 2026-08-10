@@ -398,6 +398,18 @@ body {
 .toolbar__button svg {
   width: 16px;
   height: 16px;
+  /* The icons draw right up to the edge of their 16x16 box on purpose, so
+     nothing is trimmed if a glyph turns out wider than expected in a
+     particular font. */
+  overflow: visible;
+}
+
+/* The lettered icons (B, I, S, H, …) take the UI font from here rather than
+   from an SVG attribute: a CSS custom property cannot be used in a
+   presentation attribute, and variables.css owns the font stack the same way
+   it owns colour. */
+.toolbar__button svg text {
+  font-family: var(--font-ui);
 }
 
 .toolbar__button:hover {
