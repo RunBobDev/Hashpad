@@ -60,6 +60,40 @@ function declinesInFence(state: EditorState): boolean {
 }
 
 /**
+ * What goes between the delimiters when a command runs with nothing to wrap --
+ * no selection, and no word under the cursor.
+ *
+ * There has to be *something*. Inserting the two delimiters back to back was
+ * the obvious answer and is what most editors do, but it is wrong here,
+ * because the result is not always inline markup: block parsing runs before
+ * inline parsing, so a run of delimiters alone on a line is claimed by the
+ * block grammar first.
+ *
+ *   `****`  ->  HorizontalRule      (three or more `*` is a thematic break)
+ *   `~~~~`  ->  FencedCode, unclosed -- it swallows the rest of the document
+ *   `====`  ->  SetextHeading1, silently promoting the line *above* it
+ *
+ * The fence is the serious one. Everything below it renders as code, and
+ * `inFencedCode` then reports true for every position after it, so
+ * `declinesInFence` makes fifteen of the sixteen commands do nothing at all
+ * until the user deletes a marker they cannot see the significance of.
+ *
+ * A placeholder word cannot be read as a block construct at any position, and
+ * it is the convention this file already follows for the same problem: `link`,
+ * `image` and `table` all insert a named placeholder and select it, so the
+ * first keystroke replaces it and "press the button, then type" still costs
+ * one keystroke. Keyed by `InlineMark` so a sixth mark cannot be added without
+ * choosing one.
+ */
+const INLINE_MARK_PLACEHOLDERS: Record<InlineMark, string> = {
+  bold: 'bold',
+  italic: 'italic',
+  strikethrough: 'strikethrough',
+  highlight: 'highlight',
+  inlineCode: 'code',
+};
+
+/**
  * Toggles `mark` (bold/italic/strikethrough/highlight/inlineCode) across every
  * selection range. SPEC §6.5: "Toggle, don't just insert" and "respect
  * selection" -- both requirements live here rather than in `toEditorCommand`
@@ -106,9 +140,15 @@ function toggleInlineMark(mark: InlineMark): MarkdownCommand {
       if (range.empty) {
         const word = state.wordAt(range.head);
         if (!word) {
+          // Nothing to wrap: a named placeholder goes between the delimiters
+          // and comes out selected, so the next keystroke replaces it. See
+          // INLINE_MARK_PLACEHOLDERS for why this cannot be the bare
+          // delimiter pair.
+          const placeholder = INLINE_MARK_PLACEHOLDERS[mark];
+          const textFrom = range.head + delimiter.length;
           return {
-            changes: { from: range.head, insert: delimiter + delimiter },
-            range: EditorSelection.cursor(range.head + delimiter.length),
+            changes: { from: range.head, insert: delimiter + placeholder + delimiter },
+            range: EditorSelection.range(textFrom, textFrom + placeholder.length),
           };
         }
         from = word.from;

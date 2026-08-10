@@ -51,6 +51,16 @@ export const markdownHighlightStyle = HighlightStyle.define([
   // earlier checkpoint specifically to clear WCAG AA as *readable text*,
   // not decoration -- do not lower it, and do not hide what it colours.
   { tag: tags.processingInstruction, color: 'var(--syn-marker)' },
+  // A horizontal rule's `---` is `tags.contentSeparator`, not
+  // `processingInstruction`, so it needs its own entry -- and without one it
+  // does not fall back to the document's foreground. `defaultHighlightStyle`
+  // (registered below, in `markdownSupport`) claims `contentSeparator` with a
+  // hard-coded `#219`, which rendered every rule dark blue in *both* themes:
+  // 13.06:1 on the light background, but **1.34:1** on the dark one, i.e.
+  // invisible. `--syn-marker` because a rule is exactly that -- a marker
+  // character standing alone -- and it carries the AA-cleared pair already
+  // recorded in variables.css (4.5:1 light, 4.6:1 dark).
+  { tag: tags.contentSeparator, color: 'var(--syn-marker)' },
   { tag: tags.strikethrough, textDecoration: 'line-through' },
   {
     tag: highlightTag,

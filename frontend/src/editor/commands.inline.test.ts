@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EditorSelection, type EditorState } from '@codemirror/state';
+import { syntaxTree } from '@codemirror/language';
 import { COMMANDS } from './commands';
+import { inFencedCode } from './marks';
 import { applyCommand, testState } from './testdoc';
 
 /** Lets the cases below name a command by id; the work is in testdoc.ts. */
@@ -24,8 +26,8 @@ describe('bold', () => {
     });
   });
 
-  it('inserts empty markers with the cursor between them on whitespace', () => {
-    expect(apply(testState('a  b', 2), 'bold')).toEqual({ doc: 'a **** b', from: 4, to: 4 });
+  it('inserts a selected placeholder when there is no word to wrap', () => {
+    expect(apply(testState('a  b', 2), 'bold')).toEqual({ doc: 'a **bold** b', from: 4, to: 8 });
   });
 
   // SPEC §6.5: "Toggle, don't just insert. Bold on already-bold text removes
@@ -132,6 +134,18 @@ describe('the other four inline marks', () => {
     });
   });
 
+  it.each([
+    ['italic', 'a *italic* b', 3, 9],
+    ['strikethrough', 'a ~~strikethrough~~ b', 4, 17],
+    ['highlight', 'a ==highlight== b', 4, 13],
+    ['inlineCode', 'a `code` b', 3, 7],
+  ] as const)(
+    '%s inserts a selected placeholder when there is no word to wrap',
+    (id, doc, from, to) => {
+      expect(apply(testState('a  b', 2), id)).toEqual({ doc, from, to });
+    },
+  );
+
   it('declines inlineCode inside a fenced code block', () => {
     // The fenced-code guard lives in toggleInlineMark itself, ahead of the
     // per-mark logic, so all five commands share it -- but backticks are the
@@ -202,5 +216,87 @@ describe('remove path uses the measured delimiter run, not the constant length',
       from: 4,
       to: 4,
     });
+  });
+});
+
+/**
+ * The regression this file was blind to, and the reason it was blind.
+ *
+ * Every other assertion here pins the *text* a command produces. None of them
+ * ever asked what that text means to the parser -- so when the add path's
+ * no-word branch emitted the two delimiters back to back, the suite stayed
+ * green while the running editor was visibly broken. Alone on a line, that run
+ * is not inline markup: block parsing happens first and claims it.
+ *
+ *   bold          `****`  -> HorizontalRule
+ *   strikethrough `~~~~`  -> FencedCode, unclosed, swallowing the rest of the
+ *                            document; `inFencedCode` then reports true below
+ *                            it and fifteen of the sixteen commands decline
+ *   highlight     `====`  -> SetextHeading1, promoting the line *above* it
+ *
+ * The one existing no-word test used `'a  b'` with the cursor between the two
+ * spaces -- mid-line, between letters -- which is the one position where the
+ * block parser cannot claim the run. It passed against the bug.
+ *
+ * So these assert against the tree, and at the positions that matter. They
+ * guard the class rather than the three instances: any future mark whose
+ * delimiters happen to spell a block construct fails here without anyone
+ * having to think of it.
+ */
+describe('an inline mark with nothing to wrap never emits a block construct', () => {
+  const MARKS = ['bold', 'italic', 'strikethrough', 'highlight', 'inlineCode'] as const;
+
+  /**
+   * Where a delimiters-only line is dangerous. Each is a real cursor position
+   * with no word under it, so every mark takes the no-word branch.
+   */
+  const POSITIONS: [label: string, doc: string, pos: number][] = [
+    ['an empty line between two paragraphs', 'Above.\n\n\nBelow.\n', 8],
+    // Directly under a paragraph line, with no blank between: the setext case.
+    ['an empty line directly under a paragraph', 'Above.\n\nBelow.\n', 7],
+    ['an empty document', '', 0],
+  ];
+
+  const BLOCK_CONSTRUCT = /^(HorizontalRule|FencedCode|CodeBlock|SetextHeading\d)$/;
+
+  for (const [label, doc, pos] of POSITIONS) {
+    it.each(MARKS)(`%s on ${label} parses as inline markup only`, (id) => {
+      const spec = COMMANDS[id](testState(doc, pos));
+      expect(spec).not.toBeNull();
+      const next = testState(doc, pos).update(spec!).state;
+
+      const tree = syntaxTree(next);
+      // Without this the assertions below are vacuous on a parse that stopped
+      // early: an unparsed tail contains no nodes at all, so "no FencedCode"
+      // would hold for the wrong reason.
+      expect(tree.length).toBe(next.doc.length);
+
+      const found: string[] = [];
+      tree.iterate({
+        enter: (node) => {
+          if (BLOCK_CONSTRUCT.test(node.name)) found.push(node.name);
+        },
+      });
+      expect(found).toEqual([]);
+    });
+  }
+
+  /**
+   * The consequence, pinned separately from its cause. Even if some future
+   * output slips past the node-name check above, this is the behaviour the
+   * owner actually reported: after using a formatting command, every *other*
+   * command stopped working.
+   */
+  it.each(MARKS)('leaves every other command still applicable after %s', (id) => {
+    const doc = 'Above.\n\n\nBelow.\n';
+    const state = testState(doc, 8);
+    const next = state.update(COMMANDS[id](state)!).state;
+
+    // At the end of the document -- below whatever the command just wrote,
+    // which is where an unclosed fence does its damage.
+    const atEnd = next.update({ selection: EditorSelection.cursor(next.doc.length) }).state;
+    expect(inFencedCode(atEnd, atEnd.doc.length)).toBe(false);
+    expect(COMMANDS.heading1(atEnd)).not.toBeNull();
+    expect(COMMANDS.bulletList(atEnd)).not.toBeNull();
   });
 });

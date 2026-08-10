@@ -75,6 +75,31 @@ describe('markdownHighlightStyle', () => {
 
     view.destroy();
   });
+
+  /**
+   * A horizontal rule is `tags.contentSeparator`, not `processingInstruction`,
+   * so it needs its own entry -- and a tag this style has no opinion on does
+   * not fall through to the document's foreground: `defaultHighlightStyle` is
+   * registered alongside us (see `markdownSupport`) and claims
+   * `contentSeparator` with a hard-coded `#219`. That shipped, and rendered
+   * every `---` dark blue in both themes -- 1.34:1 against the dark editor
+   * background, i.e. invisible.
+   *
+   * Asserted as "our class is present", the same way every test above does it,
+   * rather than as a computed colour: jsdom resolves `var(--syn-marker)` to
+   * the empty string with no stylesheet loaded, so a colour assertion here
+   * would pass whatever the rule said.
+   */
+  it('gives a horizontal rule our own marker class rather than leaving it to defaultHighlightStyle', () => {
+    const view = mount('Above.\n\n---\n\nBelow.');
+    const separatorClass = classFor(tags.contentSeparator);
+
+    const el = view.contentDOM.querySelector(`.${separatorClass}`);
+    expect(el).not.toBeNull();
+    expect(el!.textContent).toBe('---');
+
+    view.destroy();
+  });
 });
 
 describe('fenced code block highlighting (task 5)', () => {
