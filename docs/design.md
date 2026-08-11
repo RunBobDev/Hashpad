@@ -334,6 +334,71 @@ flat items to twenty, in a bar SPEC §6.1 fixes at exactly four menus and which
 Rejected: putting them in both places. Two surfaces to keep in sync, and the Edit menu
 still ends up with twenty flat items.
 
+### 4.15 An inline mark with nothing to wrap inserts a named placeholder
+
+SPEC §6.5's Inserts column spells all five inline marks with the same filler word:
+`**text**`, `*text*`, `~~text~~`, `==text==`, `` `text` ``.
+
+**Decision: the placeholder names the construct, not the slot — `**bold**`,
+`*italic*`, `~~strikethrough~~`, `==highlight==`, `` `code` `` — and comes out
+selected.**
+
+This started as a bug fix, not a preference. The command used to insert the two
+delimiters back to back with the caret between them, which is what most editors do,
+and it is wrong for markdown: block parsing runs before inline parsing, so a run of
+delimiters alone on a line is claimed by the block grammar. `****` became a
+`HorizontalRule`, `====` a `SetextHeading1` that promoted the line above it, and
+`~~~~` an **unclosed fenced code block** that swallowed the rest of the document —
+after which `inFencedCode` was true below it and every command but `codeBlock`
+silently declined. Reported from the running app; see commit `587ad7f`.
+
+A placeholder cannot be read as a block construct at any position, which is the
+property being bought. Naming the construct rather than the slot is the smaller,
+separate call: five identical `text`s in one paragraph would be unreadable, and the
+word doubles as a label for what the button just did. The mechanism — insert a
+placeholder, select it, let the first keystroke replace it — is already what `link`,
+`image` and `table` do, so "press the button, then type" still costs one keystroke.
+
+Rejected: declining when there is nothing to wrap. That removes the "turn bold on,
+then type" workflow every editor supports, to fix a problem the placeholder fixes
+without cost.
+
+Rejected: keeping bare delimiters everywhere they are provably harmless and falling
+back to a placeholder only on a line of their own. It preserves current feel exactly,
+but at the price of a per-mark rule that has to stay correct as marks are added — and
+the marks whose delimiters spell a block construct are not a fixed set.
+
+### 4.16 Our highlight style is scoped to markdown; CodeMirror's styles embedded code
+
+`markdownSupport` registers two highlight styles: ours, and CodeMirror's
+`defaultHighlightStyle`, which exists to colour the contents of fenced code blocks
+(§6.3). They share one stylesheet, and ours is registered so as to win any tie.
+
+**Decision: `markdownHighlightStyle` carries `scope: markdownLanguage`.**
+
+Without it the division of labour is only a convention, and it breaks in both
+directions. Markdown tags our style had no rule for — `labelName`, `atom`, `escape`,
+`character`, `string`, `contentSeparator` — silently fell through to
+`defaultHighlightStyle`'s built-in palette, which is tuned for a white page: on the
+dark editor background those measured between 1.33:1 and 2.32:1. And the rules that
+close that gap name *generic* tags every nested code grammar emits too, so unscoped
+they would repaint the string literals inside every fenced block.
+
+`@lezer/highlight` applies the scope filter at `type.isTop` and again at each mounted
+sub-language (`highlightRange`), so it reaches every node of the markdown tree and
+stops exactly at the boundary of an embedded grammar. Both directions are pinned by
+tests.
+
+One consequence: an HTML block or `<!-- comment -->` is a mounted HTML sub-tree and so
+sits *outside* the scope, keeping `defaultHighlightStyle`'s colours. There is
+deliberately no `tags.comment` rule — one would have to be unscoped, and would then
+recolour the comments inside every fenced code block.
+
+**Still open, and larger than this decision:** `defaultHighlightStyle` is CodeMirror's
+*light* palette, and it is what colours all fenced code in both themes. On `#1a1a1a`
+its values run from about 1.33:1 to 2.6:1. Dark-mode fenced code is largely
+illegible, and fixing it means a dark code palette, not another rule.
+
 ---
 
 ## 5. Architecture

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { tags, type Tag } from '@lezer/highlight';
+import { highlightTree, tags, type Tag } from '@lezer/highlight';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { LanguageDescription, defaultHighlightStyle } from '@codemirror/language';
+import { LanguageDescription, defaultHighlightStyle, ensureSyntaxTree } from '@codemirror/language';
 import { describe, expect, it } from 'vitest';
 import { blockquoteLines } from './blockquote';
 import { markdownHighlightStyle, markdownSupport } from './highlight';
@@ -102,6 +102,38 @@ describe('markdownHighlightStyle', () => {
   });
 
   /**
+   * `defaultHighlightStyle`'s `tags.heading` entry sets
+   * `text-decoration: underline`. Ours sets size, weight and colour but said
+   * nothing about decoration, and the two styles union *per property* rather
+   * than compete -- so every heading in the editor was underlined, as was
+   * every GFM table header cell and the `|` around it. Nobody reported it
+   * because an underlined heading looks deliberate.
+   *
+   * Both shapes are checked because they take different routes:
+   * `ATXHeading1` resolves to our `tags.heading1` rule (which must carry
+   * `textDecoration` itself, since `style()` returns only the most specific
+   * match), while a table header has no specific rule and falls to our
+   * `tags.heading` one. Fixing only the general rule leaves headings
+   * underlined and this test red -- verified.
+   */
+  it.each([
+    // The heading's text span keeps the space after `#` -- only the `#`
+    // itself is split off as a HeaderMark.
+    ['an ATX heading', '# Head\n', ' Head'],
+    ['a GFM table header cell', '| A | B |\n| --- | --- |\n| c | d |\n', ' A '],
+  ])('does not let defaultHighlightStyle underline %s', (_label, doc, text) => {
+    const view = mount(doc);
+
+    const span = Array.from(view.contentDOM.querySelectorAll('span')).find(
+      (el) => el.textContent === text,
+    );
+    expect(span).toBeDefined();
+    expect(window.getComputedStyle(span!).textDecoration).toBe('none');
+
+    view.destroy();
+  });
+
+  /**
    * The test above is not enough on its own, and the reason is the whole
    * mechanism: for a tag *both* styles have an opinion on, the `---` span
    * carries **both** classes. They are single-class selectors of equal
@@ -155,6 +187,122 @@ describe('markdownHighlightStyle', () => {
     }
 
     view.destroy();
+  });
+});
+
+/**
+ * SPEC §5.3 says variables.css is the only place colours are defined. The way
+ * that gets broken is not by writing a literal into this file -- it is by
+ * *omission*: `defaultHighlightStyle` is registered alongside ours to colour
+ * fenced code, and any markdown tag we have no rule for silently falls to one
+ * of its built-in colours instead. Those are tuned for a white page, so on
+ * `--bg-editor` dark they land between 1.33:1 and 2.6:1.
+ *
+ * That is how horizontal rules shipped dark blue, and hunting the rest by hand
+ * found five more. So this checks the invariant directly rather than naming
+ * the constructs: **nothing outside a code block's content may be coloured by
+ * `defaultHighlightStyle` alone.** A new grammar node, a new GFM extension, or
+ * a dependency bump that adds a tag all fail here without anyone remembering
+ * to look.
+ *
+ * `CodeText` and not `FencedCode` is the exclusion, deliberately: the fence
+ * line carries the info string (` ```js `), which is markdown and ours to
+ * colour, while the block's *contents* are exactly what defaultHighlightStyle
+ * is registered for.
+ */
+describe('no markdown construct is left to defaultHighlightStyle', () => {
+  const FIXTURE = [
+    '# ATX heading',
+    '',
+    'Text with **bold**, *italic*, ~~struck~~, ==marked==, `code`,',
+    'an entity &amp;, an escape \\*not italic\\*, an <https://auto.link>,',
+    'a [link](http://x "inline title"), a [ref][label], an ![image](p.png).',
+    '',
+    '[label]: http://y "definition title"',
+    '',
+    '> quoted',
+    '',
+    '- bullet',
+    '1. numbered',
+    '- [ ] unchecked',
+    '- [x] checked',
+    '',
+    '| Head A | Head B |',
+    '| --- | --- |',
+    '| a | b |',
+    '',
+    '---',
+    '',
+    '```js',
+    'const s = 1;',
+    '```',
+    '',
+    'Setext',
+    '======',
+    '',
+  ].join('\n');
+
+  it('colours every construct itself, leaving only code-block contents to CodeMirror', () => {
+    const state = EditorState.create({ doc: FIXTURE, extensions: markdownSupport() });
+    const tree = ensureSyntaxTree(state, state.doc.length, 5000);
+    expect(tree).not.toBeNull();
+    expect(tree!.length).toBe(state.doc.length);
+
+    const len = state.doc.length;
+    const ours = new Uint8Array(len);
+    highlightTree(tree!, markdownHighlightStyle, (from, to) => ours.fill(1, from, to));
+
+    const codeContents = new Uint8Array(len);
+    tree!.iterate({
+      enter: (node) => {
+        if (node.name === 'CodeText') codeContents.fill(1, node.from, node.to);
+      },
+    });
+
+    // Reported as the offending text, not a count -- a failure here should say
+    // which construct regressed without anyone having to re-derive it.
+    const leaked = new Set<string>();
+    highlightTree(tree!, defaultHighlightStyle, (from, to) => {
+      for (let pos = from; pos < to; pos++) {
+        if (!codeContents[pos] && !ours[pos]) {
+          leaked.add(state.doc.sliceString(from, to));
+          return;
+        }
+      }
+    });
+
+    expect([...leaked]).toEqual([]);
+  });
+
+  /**
+   * The other direction, and the reason `markdownHighlightStyle` carries
+   * `scope: markdownLanguage`. Several rules above name generic tags --
+   * `string`, `atom`, `labelName`, `escape` -- that every nested code grammar
+   * emits too, and ours is registered to win the ties. Unscoped, the rule that
+   * makes a link title `--syn-link` would repaint every string literal inside
+   * every fenced block. Removing the scope leaves the test above green and
+   * fails this one.
+   */
+  it('does not reach inside a fenced block, where defaultHighlightStyle does the work', async () => {
+    const js = LanguageDescription.matchLanguageName(MARKDOWN_CODE_LANGUAGES, 'javascript', true);
+    expect(js).not.toBeNull();
+    await js!.load();
+
+    const doc = 'A [ref]: http://y "title"\n\n```javascript\nconst s = \'str\';\n```\n';
+    const state = EditorState.create({ doc, extensions: markdownSupport() });
+    const tree = ensureSyntaxTree(state, state.doc.length, 5000);
+    expect(tree).not.toBeNull();
+
+    const stringStart = doc.indexOf("'str'");
+    let classesOnCodeString: string | null = null;
+    highlightTree(tree!, [markdownHighlightStyle, defaultHighlightStyle], (from, to, classes) => {
+      if (from === stringStart && doc.slice(from, to) === "'str'") classesOnCodeString = classes;
+    });
+
+    expect(classesOnCodeString).not.toBeNull();
+    // The JS string must carry defaultHighlightStyle's class and *not* ours.
+    expect(classesOnCodeString).toContain(defaultHighlightStyle.style([tags.string]));
+    expect(classesOnCodeString).not.toContain(markdownHighlightStyle.style([tags.string]));
   });
 });
 
