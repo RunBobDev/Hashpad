@@ -36,11 +36,7 @@ export function addDocument(state: AppState, doc: Document): AppState {
  *
  * An unknown `id` is a no-op: it must never blank `activeDocumentId`.
  */
-export function closeDocument(
-  state: AppState,
-  id: string,
-  makeUntitled: () => Document,
-): AppState {
+export function closeDocument(state: AppState, id: string, makeUntitled: () => Document): AppState {
   const closedIndex = state.documents.findIndex((d) => d.id === id);
   if (closedIndex === -1) return { ...state };
 

@@ -67,7 +67,9 @@ function findDocument(id: string): Document | null {
  * the single easiest way to save a stale or wrong buffer.
  */
 function currentText(doc: Document): Text {
-  return doc.id === store.getState().activeDocumentId ? getEditorView().state.doc : doc.editorState.doc;
+  return doc.id === store.getState().activeDocumentId
+    ? getEditorView().state.doc
+    : doc.editorState.doc;
 }
 
 /**

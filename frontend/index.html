@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="light">
-<head>
-    <meta charset="UTF-8"/>
+  <head>
+    <meta charset="UTF-8" />
     <!--
       SPEC §2.1 is enforced here, not by convention. img-src deliberately omits
       https:, so a remote image cannot load even if a bug tried to fetch one;
@@ -12,7 +12,9 @@
       reliably to dynamically created ones. It permits no network access and no
       script execution.
     -->
-    <meta http-equiv="Content-Security-Policy" content="
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
       default-src 'none';
       script-src 'self';
       style-src 'self' 'unsafe-inline';
@@ -21,12 +23,13 @@
       connect-src 'self';
       base-uri 'none';
       form-action 'none';
-    "/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    "
+    />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>Hashpad</title>
-</head>
-<body>
-<div id="app"></div>
-<script src="./src/main.ts" type="module"></script>
-</body>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="./src/main.ts" type="module"></script>
+  </body>
 </html>

@@ -50,9 +50,9 @@
   --bg-hover: #e9e9e9;
   --bg-active: #dedede;
 
-  --fg-primary: #1a1a1a;   /* ~17:1  */
+  --fg-primary: #1a1a1a; /* ~17:1  */
   --fg-secondary: #4a4a4a; /* ~9:1   */
-  --fg-muted: #666666;     /* 4.73:1 on --bg-hover (worst surface); 5.74:1 on --bg-editor */
+  --fg-muted: #666666; /* 4.73:1 on --bg-hover (worst surface); 5.74:1 on --bg-editor */
 
   --border: #d4d4d4;
   --border-strong: #b0b0b0;
@@ -91,7 +91,7 @@
   /* Markers (#, *, >) are readable characters in source mode, not decoration,
      so they are bound by the AA floor. Dimmer than --fg-muted, but only as dim
      as 4.5:1 allows. */
-  --syn-marker: #767676;   /* 4.5:1 */
+  --syn-marker: #767676; /* 4.5:1 */
   --syn-code-fg: #a3204f;
   --syn-code-bg: #f0f0f0;
   --syn-link: var(--accent);
@@ -122,9 +122,9 @@
   --bg-hover: #2d2d2d;
   --bg-active: #383838;
 
-  --fg-primary: #e8e8e8;   /* ~14:1  */
+  --fg-primary: #e8e8e8; /* ~14:1  */
   --fg-secondary: #b0b0b0; /* ~8:1   */
-  --fg-muted: #949494;     /* 4.54:1 on --bg-hover (worst surface); 4.93:1 on --bg-elevated */
+  --fg-muted: #949494; /* 4.54:1 on --bg-hover (worst surface); 4.93:1 on --bg-elevated */
 
   --border: #333333;
   --border-strong: #4a4a4a;
@@ -149,7 +149,7 @@
 
   --syn-heading: #e8e8e8;
   /* Same reasoning as the light theme: readable text, so bound by AA. */
-  --syn-marker: #838383;   /* 4.6:1 */
+  --syn-marker: #838383; /* 4.6:1 */
   --syn-code-fg: #f0a0c0;
   --syn-code-bg: #262626;
   --syn-link: var(--accent);
