@@ -378,21 +378,43 @@ the marks whose delimiters spell a block construct are not a fixed set.
 
 Without it the division of labour is only a convention, and it breaks in both
 directions. Markdown tags our style had no rule for — `labelName`, `atom`, `escape`,
-`character`, `string`, `contentSeparator` — silently fell through to
-`defaultHighlightStyle`'s built-in palette, which is tuned for a white page: on the
-dark editor background those measured between 1.33:1 and 2.32:1. And the rules that
-close that gap name *generic* tags every nested code grammar emits too, so unscoped
-they would repaint the string literals inside every fenced block.
+`character`, `comment`, `string`, `contentSeparator` — silently fell through to
+`defaultHighlightStyle`'s built-in palette, which is tuned for a white page. Measured
+against `--bg-editor`: five of the seven land between 1.33:1 and 2.64:1 on the dark
+theme, and `escape`'s `#e40` inverts the problem, clearing dark at 4.54:1 while
+failing *light* at 3.84:1. And the rules that close that gap name *generic* tags
+every nested code grammar emits too, so unscoped they would repaint the string
+literals inside every fenced block.
 
 `@lezer/highlight` applies the scope filter at `type.isTop` and again at each mounted
 sub-language (`highlightRange`), so it reaches every node of the markdown tree and
-stops exactly at the boundary of an embedded grammar. Both directions are pinned by
-tests.
+stops at any embedded grammar. Both directions are pinned by tests.
 
-One consequence: an HTML block or `<!-- comment -->` is a mounted HTML sub-tree and so
-sits *outside* the scope, keeping `defaultHighlightStyle`'s colours. There is
-deliberately no `tags.comment` rule — one would have to be unscoped, and would then
-recolour the comments inside every fenced code block.
+Three consequences, all measured rather than assumed:
+
+- `parseCode` mounts only `HTMLBlock`, `HTMLTag` and `CommentBlock`. Those keep
+  `defaultHighlightStyle`'s colours. An *inline* `<!-- comment -->` is a plain
+  `Comment` node with no mount, so a scoped `tags.comment` rule does reach it — which
+  is the only reason that rule can exist without also recolouring the comments inside
+  every fenced code block. An earlier draft of this section said inline comments were
+  mounted and used that to justify having no rule at all; that was wrong, and the
+  inline comment was leaking `#940` at 2.64:1 as a result.
+- Every language `@codemirror/lang-markdown`'s `mkLang` builds shares one
+  module-level `data` facet, and the filter is `h.scope(mounted.tree.type)`. So a
+  mounted *markdown* sub-tree — a ```` ```markdown ```` fence — passes the filter and
+  is still fully styled by us, headings sized and all. Unchanged from before the
+  scope, and arguably right, but this does not "stop at every embedded grammar".
+- Two things lose our styling and gain CodeMirror's, both inside fenced code:
+  `<?xml …?>` and `<?php` / `?>` carry `tags.meta`, so they go from `--syn-marker` to
+  `#404740` (1.82:1 dark). Booked under the open problem below rather than fixed.
+
+The same property-union hazard as the heading underline (§4.16's sibling case) also
+applied to **links**: `defaultHighlightStyle`'s `tags.link` rule sets
+`text-decoration: underline`, and ours set only a colour, so every inline `[t](u)`
+and `![alt](u)` was underlined — brackets, parens and title included — while
+`<autolink>` and `[label]: url` were not, since those carry `url` without `link`.
+Ours now sets `textDecoration: 'none'` explicitly. Links remain distinguished by
+`--syn-link`, and source mode shows the bracket syntax regardless.
 
 **Still open, and larger than this decision:** `defaultHighlightStyle` is CodeMirror's
 *light* palette, and it is what colours all fenced code in both themes. On `#1a1a1a`

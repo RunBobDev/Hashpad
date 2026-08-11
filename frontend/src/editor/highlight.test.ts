@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { highlightTree, tags, type Tag } from '@lezer/highlight';
+import { NodeProp, type Tree } from '@lezer/common';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { LanguageDescription, defaultHighlightStyle, ensureSyntaxTree } from '@codemirror/language';
 import { describe, expect, it } from 'vitest';
 import { blockquoteLines } from './blockquote';
 import { markdownHighlightStyle, markdownSupport } from './highlight';
+import { highlightTag } from './highlightmark';
 import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
 /**
@@ -34,6 +36,33 @@ function classFor(tag: Tag): string {
   const cls = markdownHighlightStyle.style([tag]);
   expect(cls).not.toBeNull();
   return cls as string;
+}
+
+/**
+ * Position of `.cls`'s rule across the document's sheets, in order. Equal
+ * specificity everywhere here, so this is what decides which rule paints.
+ */
+function sheetIndexOf(cls: string): number {
+  let index = 0;
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      if ((rule as CSSStyleRule).selectorText === `.${cls}`) return index;
+      index++;
+    }
+  }
+  return -1;
+}
+
+/** The `color` `.cls` declares, verbatim -- e.g. `var(--syn-marker)`. */
+function declaredColourFor(cls: string): string | null {
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      const styleRule = rule as CSSStyleRule;
+      if (styleRule.selectorText !== `.${cls}`) continue;
+      return styleRule.style.getPropertyValue('color') || null;
+    }
+  }
+  return null;
 }
 
 describe('markdownHighlightStyle', () => {
@@ -90,6 +119,45 @@ describe('markdownHighlightStyle', () => {
    * the empty string with no stylesheet loaded, so a colour assertion here
    * would pass whatever the rule said.
    */
+  /**
+   * `'Highlight/...'` is an inherit-mode style spec, so every descendant of a
+   * `Highlight` node carries `highlightTag` *as well as* whatever its own node
+   * type resolves to. An `&amp;` or `\*` inside `==marked==` therefore matches
+   * two of our rules at once, and equal specificity means the later one in the
+   * sheet paints.
+   *
+   * That ordering is load-bearing and was got wrong once: appending the
+   * marker-ish rules below `highlightTag` flipped such a span's foreground from
+   * `--syn-highlight-fg` to `--syn-marker`, which variables.css records at
+   * **2.27:1** on the highlight wash -- the exact failure `--syn-highlight-marker`
+   * was minted to avoid. The suite was green.
+   *
+   * Both facts are asserted, because the ordering only matters if the
+   * double-classing is real: the span must carry both classes, and
+   * `highlightTag`'s must come later.
+   */
+  it('keeps the highlight wash winning over the marker rules that overlap it', () => {
+    const view = mount('x ==AT&amp;T and \\*lit\\*== y');
+    const washClass = classFor(highlightTag);
+
+    for (const [text, tag] of [
+      ['&amp;', tags.character],
+      ['\\*', tags.escape],
+    ] as const) {
+      const span = Array.from(view.contentDOM.querySelectorAll('span')).find(
+        (el) => el.textContent === text,
+      );
+      expect(span, `no span for ${text}`).toBeDefined();
+      const classes = span!.className.split(' ');
+      expect(classes).toContain(washClass);
+      expect(classes).toContain(classFor(tag));
+
+      expect(sheetIndexOf(washClass)).toBeGreaterThan(sheetIndexOf(classFor(tag)));
+    }
+
+    view.destroy();
+  });
+
   it('gives a horizontal rule our own marker class rather than leaving it to defaultHighlightStyle', () => {
     const view = mount('Above.\n\n---\n\nBelow.');
     const separatorClass = classFor(tags.contentSeparator);
@@ -158,18 +226,6 @@ describe('markdownHighlightStyle', () => {
   it('registers our style after defaultHighlightStyle, so our rules win the ties', () => {
     const view = mount('Above.\n\n---\n\nBelow.');
 
-    /** Position of `.cls`'s rule across the document's sheets, in order. */
-    function sheetIndexOf(cls: string): number {
-      let index = 0;
-      for (const sheet of Array.from(document.styleSheets)) {
-        for (const rule of Array.from(sheet.cssRules)) {
-          if ((rule as CSSStyleRule).selectorText === `.${cls}`) return index;
-          index++;
-        }
-      }
-      return -1;
-    }
-
     for (const tag of [tags.contentSeparator, tags.url, tags.processingInstruction]) {
       const ours = classFor(tag);
       const theirs = defaultHighlightStyle.style([tag]);
@@ -199,16 +255,25 @@ describe('markdownHighlightStyle', () => {
  * `--bg-editor` dark they land between 1.33:1 and 2.6:1.
  *
  * That is how horizontal rules shipped dark blue, and hunting the rest by hand
- * found five more. So this checks the invariant directly rather than naming
- * the constructs: **nothing outside a code block's content may be coloured by
- * `defaultHighlightStyle` alone.** A new grammar node, a new GFM extension, or
- * a dependency bump that adds a tag all fail here without anyone remembering
- * to look.
+ * found six more. So this checks the invariant directly rather than naming the
+ * constructs: **outside an embedded sub-language, `defaultHighlightStyle` may
+ * not set any property we have not set ourselves.** A new grammar node, a new
+ * GFM extension, or a dependency bump that adds a tag all fail here without
+ * anyone remembering to look.
  *
- * `CodeText` and not `FencedCode` is the exclusion, deliberately: the fence
- * line carries the info string (` ```js `), which is markdown and ours to
- * colour, while the block's *contents* are exactly what defaultHighlightStyle
- * is registered for.
+ * *Properties*, not merely "did we colour this at all", and that distinction is
+ * load-bearing. The two worst instances found so far were not colour gaps but
+ * property unions on ranges we already coloured: `defaultHighlightStyle`'s
+ * `tags.heading` rule underlining every heading, and its `tags.link` rule
+ * underlining every inline link including the brackets. A presence check
+ * reports both as clean.
+ *
+ * The exclusion is any range covered by a mounted sub-language, which is
+ * exactly the set of places `defaultHighlightStyle` is registered *for*:
+ * fenced-code contents, plus the HTML blocks and block comments `parseCode`
+ * mounts. Keyed off `NodeProp.mounted` rather than the node name `CodeText`,
+ * so it is the same predicate `@lezer/highlight` uses to decide the scope --
+ * and so it covers the HTML case, which a `CodeText` check silently did not.
  */
 describe('no markdown construct is left to defaultHighlightStyle', () => {
   const FIXTURE = [
@@ -216,9 +281,14 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
     '',
     'Text with **bold**, *italic*, ~~struck~~, ==marked==, `code`,',
     'an entity &amp;, an escape \\*not italic\\*, an <https://auto.link>,',
-    'a [link](http://x "inline title"), a [ref][label], an ![image](p.png).',
+    'a [link](http://x "inline title"), a [ref][label], an ![image](p.png),',
+    'an inline <!-- comment --> and an inline <b>tag</b>.',
     '',
     '[label]: http://y "definition title"',
+    '',
+    '<!-- a block comment -->',
+    '',
+    '<div class="html-block">block</div>',
     '',
     '> quoted',
     '',
@@ -242,36 +312,141 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
     '',
   ].join('\n');
 
-  it('colours every construct itself, leaving only code-block contents to CodeMirror', () => {
-    const state = EditorState.create({ doc: FIXTURE, extensions: markdownSupport() });
+  /**
+   * The CSS property names each generated class declares, read from the
+   * stylesheet CodeMirror actually injected. `highlightTree` hands back class
+   * names; this turns them back into the properties that decide the pixels.
+   * Read from the live sheet rather than the `HighlightStyle` object, so the
+   * comparison is against what ships rather than what the spec object says.
+   */
+  function propertiesByClass(): Map<string, Set<string>> {
+    const byClass = new Map<string, Set<string>>();
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        const selector = (rule as CSSStyleRule).selectorText;
+        // Single-class selectors only -- the shape `HighlightStyle` emits.
+        // Anything more complex belongs to a theme, not to a token.
+        if (!selector || !/^\.[^\s.,:>[]+$/.test(selector)) continue;
+        byClass.set(selector.slice(1), new Set(Array.from((rule as CSSStyleRule).style)));
+      }
+    }
+    return byClass;
+  }
+
+  /** Every CSS property `style` applies at each position of the document. */
+  function propertiesByPosition(
+    style: typeof defaultHighlightStyle,
+    tree: Tree,
+    length: number,
+    byClass: Map<string, Set<string>>,
+  ): Set<string>[] {
+    const byPosition: Set<string>[] = Array.from({ length }, () => new Set<string>());
+    highlightTree(tree, style, (from, to, classes) => {
+      for (const cls of classes.split(' ')) {
+        for (const property of byClass.get(cls) ?? []) {
+          for (let pos = from; pos < to; pos++) byPosition[pos]!.add(property);
+        }
+      }
+    });
+    return byPosition;
+  }
+
+  it('sets every property CodeMirror would, outside embedded sub-languages', () => {
+    // Mounted rather than a bare state: injecting the stylesheet is what makes
+    // the per-class property lookup possible at all.
+    const view = mount(FIXTURE);
+    const state = view.state;
     const tree = ensureSyntaxTree(state, state.doc.length, 5000);
     expect(tree).not.toBeNull();
     expect(tree!.length).toBe(state.doc.length);
 
-    const len = state.doc.length;
-    const ours = new Uint8Array(len);
-    highlightTree(tree!, markdownHighlightStyle, (from, to) => ours.fill(1, from, to));
+    const length = state.doc.length;
+    const byClass = propertiesByClass();
+    // Guard: an unreadable sheet would leave this empty and make every
+    // comparison below vacuously clean.
+    expect(byClass.size).toBeGreaterThan(0);
+    const ours = propertiesByPosition(markdownHighlightStyle, tree!, length, byClass);
+    const theirs = propertiesByPosition(defaultHighlightStyle, tree!, length, byClass);
 
-    const codeContents = new Uint8Array(len);
+    // Wherever another language is mounted, defaultHighlightStyle is the one
+    // doing the work on purpose. Same predicate @lezer/highlight scopes by.
+    const embedded = new Uint8Array(length);
     tree!.iterate({
       enter: (node) => {
-        if (node.name === 'CodeText') codeContents.fill(1, node.from, node.to);
+        if (node.node.tree?.prop(NodeProp.mounted)) embedded.fill(1, node.from, node.to);
       },
     });
+    // Guard: the fixture must actually contain embedded regions, or this
+    // exclusion is silently doing nothing and the test is weaker than it looks.
+    expect(embedded.includes(1)).toBe(true);
 
-    // Reported as the offending text, not a count -- a failure here should say
-    // which construct regressed without anyone having to re-derive it.
+    // Reported as offending text plus the property, so a failure names the
+    // construct and what leaked without anyone re-deriving it.
     const leaked = new Set<string>();
-    highlightTree(tree!, defaultHighlightStyle, (from, to) => {
-      for (let pos = from; pos < to; pos++) {
-        if (!codeContents[pos] && !ours[pos]) {
-          leaked.add(state.doc.sliceString(from, to));
-          return;
-        }
+    for (let pos = 0; pos < length; pos++) {
+      if (embedded[pos]) continue;
+      for (const property of theirs[pos]!) {
+        if (ours[pos]!.has(property)) continue;
+        const line = state.doc.lineAt(pos);
+        leaked.add(`${property} on ${JSON.stringify(line.text.trim().slice(0, 40))}`);
       }
-    });
+    }
 
     expect([...leaked]).toEqual([]);
+    view.destroy();
+  });
+
+  /**
+   * The rules above pick a *token* per construct, and the leak check cannot
+   * see which one -- `--syn-marker` and `--syn-link` are both "we styled it".
+   *
+   * Asserted as the custom property that ends up winning the cascade, not as a
+   * class. A first attempt compared the span's classes against
+   * `markdownHighlightStyle.style([tag])` and could not fail: `style()` falls
+   * back to the nearest ancestor tag's rule, so deleting the rule under test
+   * just moved the *expected* class too. `tags.character` is the sharp case --
+   * it descends from `tags.string`, so dropping its rule leaves `&amp;` styled,
+   * merely link-coloured instead of marker-coloured. Reading the declared value
+   * breaks that circularity: the expectation is a literal token name, written
+   * out, that the implementation cannot move.
+   *
+   * jsdom keeps `var(--syn-marker)` verbatim in `cssRules` (checked), so this
+   * compares tokens rather than resolved colours -- which is all that is
+   * available here, and is the thing actually being chosen.
+   */
+  it.each([
+    ['a fence info string', '```js\nx\n```\n', 'js', 'var(--syn-marker)'],
+    ['a reference label', '[label]: http://y\n', '[label]', 'var(--syn-marker)'],
+    ['a task marker', '- [x] done\n', '[x]', 'var(--syn-marker)'],
+    ['an entity', 'an &amp; here\n', '&amp;', 'var(--syn-marker)'],
+    ['an escape', 'an \\*escape\\* here\n', '\\*', 'var(--syn-marker)'],
+    ['an inline comment', 'text <!-- c --> more\n', '<!-- c -->', 'var(--syn-marker)'],
+    ['a reference title', '[label]: http://y "the title"\n', '"the title"', 'var(--syn-link)'],
+  ])('paints %s with %s', (_label, doc, text, expected) => {
+    const view = mount(doc);
+
+    const span = Array.from(view.contentDOM.querySelectorAll('span')).find(
+      (el) => el.textContent === text,
+    );
+    expect(span, `no span rendered for ${JSON.stringify(text)}`).toBeDefined();
+
+    // The colour that actually paints: among the span's classes, the one whose
+    // rule sits latest in the sheet and declares a colour.
+    let winningIndex = -1;
+    let painted: string | null = null;
+    for (const cls of span!.className.split(' ')) {
+      const declared = declaredColourFor(cls);
+      if (!declared) continue;
+      const index = sheetIndexOf(cls);
+      if (index > winningIndex) {
+        winningIndex = index;
+        painted = declared;
+      }
+    }
+
+    expect(painted).toBe(expected);
+
+    view.destroy();
   });
 
   /**
@@ -300,9 +475,12 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
     });
 
     expect(classesOnCodeString).not.toBeNull();
-    // The JS string must carry defaultHighlightStyle's class and *not* ours.
-    expect(classesOnCodeString).toContain(defaultHighlightStyle.style([tags.string]));
-    expect(classesOnCodeString).not.toContain(markdownHighlightStyle.style([tags.string]));
+    // Split rather than substring-matched: CM6 mints class names from one
+    // counter (`ͼ5`..`ͼz`, then `ͼ10`..), so `ͼ1` is a substring of `ͼ18` and
+    // `toContain` on the raw string would start lying as the counter grows.
+    const classList = (classesOnCodeString as unknown as string).split(' ');
+    expect(classList).toContain(defaultHighlightStyle.style([tags.string]));
+    expect(classList).not.toContain(markdownHighlightStyle.style([tags.string]));
   });
 });
 

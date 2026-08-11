@@ -96,7 +96,16 @@ export const markdownHighlightStyle = HighlightStyle.define(
       backgroundColor: 'var(--syn-code-bg)',
       color: 'var(--syn-code-fg)',
     },
-    { tag: [tags.link, tags.url], color: 'var(--syn-link)' },
+    // `textDecoration` is not decoration here, it is a claim: without it,
+    // `defaultHighlightStyle`'s own `tags.link` rule supplies
+    // `text-decoration: underline` and the two styles union per property, the
+    // same way they did on headings. That underlined every inline `[t](u)`
+    // and `![alt](u)` -- brackets, parens and title included -- while leaving
+    // `<autolink>` and `[label]: url` alone, since those carry `url` without
+    // `link`. An underline nobody chose, applied inconsistently. The colour
+    // already distinguishes a link, and source mode shows the `[](...)`
+    // syntax anyway.
+    { tag: [tags.link, tags.url], color: 'var(--syn-link)', textDecoration: 'none' },
     { tag: tags.quote, color: 'var(--syn-quote-fg)' },
     // The defining rule of source mode: literal marker characters (`#`, `*`,
     // `>`, backticks, list bullets -- see @lezer/markdown's own
@@ -117,6 +126,49 @@ export const markdownHighlightStyle = HighlightStyle.define(
     // recorded in variables.css (4.5:1 light, 4.6:1 dark).
     { tag: tags.contentSeparator, color: 'var(--syn-marker)' },
     { tag: tags.strikethrough, textDecoration: 'line-through' },
+
+    // The rest of the same gap `contentSeparator` closed: tags the markdown
+    // grammar emits that this style had no opinion on, so
+    // `defaultHighlightStyle` supplied one of CodeMirror's built-in colours --
+    // all tuned for a white page, none from variables.css. Measured against
+    // `--bg-editor` before the fix:
+    //
+    //   CodeInfo, LinkLabel  labelName   #219  1.33:1 dark
+    //   TaskMarker           atom        #219  1.33:1 dark
+    //   LinkTitle            string      #a11  2.32:1 dark
+    //   Comment (inline)     comment     #940  2.64:1 dark
+    //   Entity               character   #a11  2.32:1 dark
+    //   Escape               escape      #e40  4.54:1 dark, but 3.84:1 light
+    //
+    // These names are generic -- `string`, `atom`, `comment` and friends are
+    // emitted by every nested code grammar too -- which is exactly why the
+    // whole style is scoped to `markdownLanguage` (see the `scope` option
+    // below). Unscoped, they would repaint the contents of every fenced block.
+    //
+    // `--syn-marker` for all but the title because each is syntax rather than
+    // prose: a fence's language name, a checkbox literal, a backslash escape,
+    // an HTML entity and a comment are all markup the reader needs to see but
+    // not read as content. That is what the token is for.
+    //
+    // These sit BEFORE the `highlightTag` rule below, and must stay there.
+    // Later entries win, and `'Highlight/...'` is an inherit-mode spec, so an
+    // `Entity` or `Escape` *inside* `==marked==` carries both this rule and
+    // `highlightTag`. Placed after, they flipped such a span's foreground from
+    // `--syn-highlight-fg` to `--syn-marker` -- 2.27:1 on the highlight wash,
+    // which is the precise failure `--syn-highlight-marker` exists to prevent.
+    { tag: tags.labelName, color: 'var(--syn-marker)' },
+    { tag: tags.atom, color: 'var(--syn-marker)' },
+    { tag: [tags.escape, tags.character], color: 'var(--syn-marker)' },
+    // Reaches an *inline* `<!-- comment -->` only. A block-level comment and
+    // any HTML block are mounted HTML sub-trees, so the scope below excludes
+    // them and they keep `defaultHighlightStyle`'s colour -- see that comment.
+    { tag: tags.comment, color: 'var(--syn-marker)' },
+    // A link's title (`[x](u "title")`) is part of the link, so it takes the
+    // link colour like the URL beside it. Only reference definitions reach
+    // this rule in practice -- a title inside an inline `Link` node is already
+    // covered by the `tags.link` rule above, which applies to every descendant.
+    { tag: tags.string, color: 'var(--syn-link)' },
+
     {
       tag: highlightTag,
       backgroundColor: 'var(--syn-highlight-bg)',
@@ -136,35 +188,6 @@ export const markdownHighlightStyle = HighlightStyle.define(
     // (SPEC §6.6) specifically against the highlight wash, not against
     // `--bg-editor`.
     { tag: highlightMarkTag, color: 'var(--syn-highlight-marker)' },
-
-    // Everything below closes the same gap `contentSeparator` did: a tag the
-    // markdown grammar emits that this style had no opinion on, so
-    // `defaultHighlightStyle` supplied one of CodeMirror's built-in colours --
-    // all of them tuned for a white background and none of them from
-    // variables.css. Measured on `--bg-editor` dark (#1a1a1a) before the fix:
-    //
-    //   CodeInfo, LinkLabel  labelName          #219  1.33:1
-    //   TaskMarker           atom               #219  1.33:1
-    //   Entity, Escape       character, escape  #a11 / #e40
-    //   LinkTitle            string             #a11  2.32:1
-    //
-    // The generic names are the reason this whole style is scoped to
-    // `markdownLanguage` (see the `scope` option below): `string`, `atom` and
-    // friends are emitted by every nested code grammar too, and an unscoped
-    // rule here would repaint the strings inside a ```js block.
-    //
-    // `--syn-marker` for the first three groups because each is syntax rather
-    // than prose -- a fence's language name, a checkbox literal, a backslash
-    // escape and an HTML entity are all markup the reader needs to see but not
-    // read as content, which is precisely what that token is for.
-    { tag: tags.labelName, color: 'var(--syn-marker)' },
-    { tag: tags.atom, color: 'var(--syn-marker)' },
-    { tag: [tags.escape, tags.character], color: 'var(--syn-marker)' },
-    // A link's title (`[x](u "title")`) is part of the link, so it takes the
-    // link colour like the URL beside it. Only reference definitions reach this
-    // rule in practice -- a title inside an inline `Link` node is already
-    // covered by the `tags.link` rule above, which applies to every descendant.
-    { tag: tags.string, color: 'var(--syn-link)' },
   ],
   {
     /**
@@ -176,14 +199,23 @@ export const markdownHighlightStyle = HighlightStyle.define(
      *
      * `@lezer/highlight` applies the filter at `type.isTop` and again at each
      * mounted sub-language (`highlightRange`, dist/index.js:384 and :402), so
-     * this reaches every node of the markdown tree and stops exactly at the
-     * boundary of an embedded grammar. Verified both directions.
+     * this reaches every node of the markdown tree and stops at any embedded
+     * grammar. Verified both directions.
      *
-     * One consequence worth knowing: an HTML block or `<!-- comment -->` is a
-     * mounted HTML sub-tree, so it is *outside* this scope and keeps
-     * `defaultHighlightStyle`'s colours. That is why no `tags.comment` rule
-     * appears above -- one would have to be unscoped, and would then recolour
-     * the comments inside every fenced code block.
+     * Two consequences worth knowing, both measured rather than assumed:
+     *
+     * - `parseCode` (@lezer/markdown) mounts only `HTMLBlock`, `HTMLTag` and
+     *   `CommentBlock`. Those three are outside this scope and keep
+     *   `defaultHighlightStyle`'s colours. An *inline* `<!-- comment -->` is a
+     *   plain `Comment` node with no mount, so the `tags.comment` rule above
+     *   does reach it -- which is the only reason that rule can exist without
+     *   also recolouring the comments inside every fenced code block.
+     * - The filter is `h.scope(mounted.tree.type)`, and every language built
+     *   by `@codemirror/lang-markdown`'s `mkLang` shares one module-level
+     *   `data` facet. So a mounted *markdown* sub-tree -- a ```markdown fence
+     *   -- passes the filter and is still fully styled by us. Unchanged from
+     *   before the scope, and arguably right, but it is not "stops at every
+     *   embedded grammar".
      */
     scope: markdownLanguage,
   },
