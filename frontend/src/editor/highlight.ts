@@ -12,10 +12,11 @@
  * values are consumed by style-mod rather than a CM6 `EditorView.theme`
  * object.
  */
-import { HighlightStyle, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { tags } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
+import { codeHighlightStyle } from './codetheme';
 import { HighlightMarkExtension, highlightMarkTag, highlightTag } from './highlightmark';
 import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
@@ -239,17 +240,18 @@ export const markdownHighlightStyle = HighlightStyle.define(
  * grammar highlights the fenced content -- source mode's markers stay
  * visible either way.
  *
- * `defaultHighlightStyle` is what actually colours the tokens *inside* a
- * fenced block -- `markdownHighlightStyle` only names markdown-level tags
- * (heading, strong, link, ...), not the generic `keyword`/`string`/
- * `comment`/... tags a nested grammar like `@codemirror/lang-python`
- * produces. Verified empirically (see task-5-report.md): without this line,
- * a loaded Python grammar parses a fenced block into real
- * `keyword`/`variableName` nodes but nothing paints them, so the block still
- * renders as one undifferentiated colour. This adds no colours of our own --
- * `defaultHighlightStyle` is CodeMirror's own built-in style with its own
- * baked-in values, not a new `--syn-*` variable, so it doesn't touch
- * variables.css's status as the one place colours live.
+ * `codeHighlightStyle` (codetheme.ts) is what actually colours the tokens
+ * *inside* a fenced block -- `markdownHighlightStyle` only names
+ * markdown-level tags (heading, strong, link, ...), not the generic
+ * `keyword`/`string`/`comment`/... tags a nested grammar like
+ * `@codemirror/lang-python` produces. Verified empirically (see
+ * task-5-report.md, written when `defaultHighlightStyle` held this line):
+ * without a style like this registered, a loaded Python grammar parses a
+ * fenced block into real `keyword`/`variableName` nodes but nothing paints
+ * them, so the block still renders as one undifferentiated colour. Unlike
+ * `defaultHighlightStyle`, this one's colours are `--syn-code-*` variables
+ * (variables.css), so fenced code stays inside SPEC §5.3's one place colours
+ * live, the same as every other rule in this file.
  *
  * Deliberately NOT registered with `{ fallback: true }`: `getHighlighters`
  * (`@codemirror/language`'s internal facet combiner) treats "fallback" as
@@ -263,7 +265,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
  * `syntaxHighlighting`'s own doc comment describes for "multiple
  * (non-fallback) styles") -- markdownHighlightStyle's rules (e.g.
  * `tags.processingInstruction` on a `CodeMark` fence) and
- * defaultHighlightStyle's rules (e.g. `tags.keyword` inside the fence) don't
+ * codeHighlightStyle's rules (e.g. `tags.keyword` inside the fence) don't
  * overlap, so the union is exactly "each tag gets whichever of the two has
  * an opinion on it".
  */
@@ -275,6 +277,6 @@ export function markdownSupport(): Extension[] {
       extensions: [HighlightMarkExtension],
     }),
     syntaxHighlighting(markdownHighlightStyle),
-    syntaxHighlighting(defaultHighlightStyle),
+    syntaxHighlighting(codeHighlightStyle),
   ];
 }

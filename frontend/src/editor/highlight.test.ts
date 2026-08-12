@@ -3,9 +3,10 @@ import { highlightTree, tags, type Tag } from '@lezer/highlight';
 import { NodeProp, type Tree } from '@lezer/common';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { LanguageDescription, defaultHighlightStyle, ensureSyntaxTree } from '@codemirror/language';
+import { LanguageDescription, ensureSyntaxTree } from '@codemirror/language';
 import { describe, expect, it } from 'vitest';
 import { blockquoteLines } from './blockquote';
+import { codeHighlightStyle } from './codetheme';
 import { markdownHighlightStyle, markdownSupport } from './highlight';
 import { highlightTag } from './highlightmark';
 import { MARKDOWN_CODE_LANGUAGES } from './languages';
@@ -107,12 +108,16 @@ describe('markdownHighlightStyle', () => {
 
   /**
    * A horizontal rule is `tags.contentSeparator`, not `processingInstruction`,
-   * so it needs its own entry -- and a tag this style has no opinion on does
-   * not fall through to the document's foreground: `defaultHighlightStyle` is
-   * registered alongside us (see `markdownSupport`) and claims
-   * `contentSeparator` with a hard-coded `#219`. That shipped, and rendered
+   * so it needs its own entry. Under the old `defaultHighlightStyle` pairing
+   * this tag was actively dangerous to leave unclaimed: that style claimed
+   * `contentSeparator` with a hard-coded `#219`, which shipped and rendered
    * every `---` dark blue in both themes -- 1.34:1 against the dark editor
-   * background, i.e. invisible.
+   * background, i.e. invisible. `codeHighlightStyle` claims no such rule
+   * (`codeHighlightStyle.style([tags.contentSeparator])` is `null`, measured
+   * directly), so that specific failure can no longer happen -- but the
+   * ownership belongs here regardless: which tag falls to which style is a
+   * decision this file makes on purpose, not an accident of which styles
+   * happen to be registered alongside it this checkpoint.
    *
    * Asserted as "our class is present", the same way every test above does it,
    * rather than as a computed colour: jsdom resolves `var(--syn-marker)` to
@@ -158,7 +163,7 @@ describe('markdownHighlightStyle', () => {
     view.destroy();
   });
 
-  it('gives a horizontal rule our own marker class rather than leaving it to defaultHighlightStyle', () => {
+  it('gives a horizontal rule our own marker class rather than leaving it to codeHighlightStyle', () => {
     const view = mount('Above.\n\n---\n\nBelow.');
     const separatorClass = classFor(tags.contentSeparator);
 
@@ -170,7 +175,7 @@ describe('markdownHighlightStyle', () => {
   });
 
   /**
-   * `defaultHighlightStyle`'s `tags.heading` entry sets
+   * `codeHighlightStyle`'s `tags.heading` entry sets
    * `text-decoration: underline`. Ours sets size, weight and colour but said
    * nothing about decoration, and the two styles union *per property* rather
    * than compete -- so every heading in the editor was underlined, as was
@@ -189,7 +194,7 @@ describe('markdownHighlightStyle', () => {
     // itself is split off as a HeaderMark.
     ['an ATX heading', '# Head\n', ' Head'],
     ['a GFM table header cell', '| A | B |\n| --- | --- |\n| c | d |\n', ' A '],
-  ])('does not let defaultHighlightStyle underline %s', (_label, doc, text) => {
+  ])('does not let codeHighlightStyle underline %s', (_label, doc, text) => {
     const view = mount(doc);
 
     const span = Array.from(view.contentDOM.querySelectorAll('span')).find(
@@ -203,32 +208,51 @@ describe('markdownHighlightStyle', () => {
 
   /**
    * The test above is not enough on its own, and the reason is the whole
-   * mechanism: for a tag *both* styles have an opinion on, the `---` span
+   * mechanism: for a tag *both* styles have an opinion on, a span of that tag
    * carries **both** classes. They are single-class selectors of equal
    * specificity, so which colour paints is decided purely by their order in
    * the stylesheet -- and a class-presence assertion holds identically either
-   * way. Three tags are in this position: `contentSeparator`, `url`, and
-   * `processingInstruction` (via `meta`), i.e. horizontal rules, link URLs,
-   * and every marker character in source mode.
+   * way. Six tags are in this position -- `url`, `atom`, `escape`,
+   * `character`, `comment` and `string`, i.e. link URLs and every marker
+   * character in source mode -- because each both has a
+   * `markdownHighlightStyle` rule of its own and resolves (directly, or via
+   * an ancestor tag such as `url`'s `literal`) to one of `codeHighlightStyle`'s
+   * generic code-token rules.
+   *
+   * This is a *different* set than when this test named `defaultHighlightStyle`:
+   * that style also contested `contentSeparator` and `processingInstruction`
+   * (via `meta`), but `codeHighlightStyle`'s tag list mirrors
+   * `defaultHighlightStyle`'s code-token shape, not its markdown-adjacent odds
+   * and ends, so neither resolves to a rule there at all --
+   * `codeHighlightStyle.style([tags.contentSeparator])` is `null`, measured
+   * directly. Confirms the loop comment below: once a tag stops being
+   * contested it drops out of this list rather than failing silently in it.
    *
    * What puts ours last is `EditorView.mountStyles` doing
    * `styleModules.concat(baseTheme).reverse()`, so the *first*
    * `syntaxHighlighting(...)` listed in `markdownSupport` is the one whose
    * rules land latest and win. Nothing in the source says so, and swapping
-   * those two lines silently repaints every rule, URL and marker in the editor
-   * to CodeMirror's built-in colours with the whole suite green. This is the
-   * assertion that stops that.
+   * those two lines silently repaints every one of these six constructs in
+   * the editor to `codeHighlightStyle`'s code-token colours, with the whole
+   * suite green outside this test. This is the assertion that stops that.
    *
    * Order, not colour: jsdom resolves `var(--syn-marker)` to the empty string
    * with no stylesheet loaded, so a computed-colour assertion here would pass
    * whatever the rules said.
    */
-  it('registers our style after defaultHighlightStyle, so our rules win the ties', () => {
+  it('registers our style after codeHighlightStyle, so our rules win the ties', () => {
     const view = mount('Above.\n\n---\n\nBelow.');
 
-    for (const tag of [tags.contentSeparator, tags.url, tags.processingInstruction]) {
+    for (const tag of [
+      tags.url,
+      tags.atom,
+      tags.escape,
+      tags.character,
+      tags.comment,
+      tags.string,
+    ]) {
       const ours = classFor(tag);
-      const theirs = defaultHighlightStyle.style([tag]);
+      const theirs = codeHighlightStyle.style([tag]);
       // If this ever goes null the tag stopped being contested and the
       // ordering no longer decides it -- which is a change worth noticing,
       // not a reason to skip the row.
@@ -249,33 +273,45 @@ describe('markdownHighlightStyle', () => {
 /**
  * SPEC §5.3 says variables.css is the only place colours are defined. The way
  * that gets broken is not by writing a literal into this file -- it is by
- * *omission*: `defaultHighlightStyle` is registered alongside ours to colour
- * fenced code, and any markdown tag we have no rule for silently falls to one
- * of its built-in colours instead. Those are tuned for a white page, so on
- * `--bg-editor` dark they land between 1.33:1 and 2.6:1.
+ * *omission*: `codeHighlightStyle` is registered alongside ours to colour
+ * fenced code, and any markdown tag we have no rule for silently falls to
+ * whatever `codeHighlightStyle` says instead, whether or not that is the
+ * right answer for a markdown-level construct.
  *
- * That is how horizontal rules shipped dark blue, and hunting the rest by hand
- * found six more. So this checks the invariant directly rather than naming the
- * constructs: **outside an embedded sub-language, `defaultHighlightStyle` may
- * not set any property we have not set ourselves.** A new grammar node, a new
- * GFM extension, or a dependency bump that adds a tag all fail here without
- * anyone remembering to look.
+ * The motivating case predates `codeHighlightStyle`: when this test named
+ * `defaultHighlightStyle`, horizontal rules fell to its hard-coded `#219` and
+ * shipped dark blue -- 1.34:1 against the dark editor background, invisible
+ * -- and hunting the rest by hand found six more built-in colours between
+ * 1.33:1 and 2.6:1. `codeHighlightStyle`'s own colours are all AA-cleared
+ * `--syn-code-*` tokens (codetheme.test.ts asserts every one at 4.5:1+ in
+ * both themes), so a leak onto it can no longer reproduce that specific
+ * illegibility -- but it can still repaint a markdown construct with the
+ * wrong *meaning* (a heading rendered as if it were a variable name, say),
+ * which is exactly as much an omission as an illegible colour was. So this
+ * checks the invariant directly rather than naming the constructs: **outside
+ * an embedded sub-language, `codeHighlightStyle` may not set any property we
+ * have not set ourselves.** A new grammar node, a new GFM extension, or a
+ * dependency bump that adds a tag all fail here without anyone remembering to
+ * look.
  *
- * *Properties*, not merely "did we colour this at all", and that distinction is
- * load-bearing. The two worst instances found so far were not colour gaps but
- * property unions on ranges we already coloured: `defaultHighlightStyle`'s
- * `tags.heading` rule underlining every heading, and its `tags.link` rule
- * underlining every inline link including the brackets. A presence check
- * reports both as clean.
+ * *Properties*, not merely "did we colour this at all", and that distinction
+ * is load-bearing: a presence check would not have caught
+ * `defaultHighlightStyle`'s worst instances, which were not colour gaps but
+ * property unions on ranges already coloured -- its `tags.heading` rule
+ * underlining every heading, and its `tags.link` rule underlining every
+ * inline link including the brackets. `codeHighlightStyle` sets colour only
+ * (see codetheme.ts), so that particular danger is gone too, but the
+ * property-level check stays: it is what would catch the next thing either
+ * style adds that a presence check would wave through.
  *
  * The exclusion is any range covered by a mounted sub-language, which is
- * exactly the set of places `defaultHighlightStyle` is registered *for*:
+ * exactly the set of places `codeHighlightStyle` is registered *for*:
  * fenced-code contents, plus the HTML blocks and block comments `parseCode`
  * mounts. Keyed off `NodeProp.mounted` rather than the node name `CodeText`,
  * so it is the same predicate `@lezer/highlight` uses to decide the scope --
  * and so it covers the HTML case, which a `CodeText` check silently did not.
  */
-describe('no markdown construct is left to defaultHighlightStyle', () => {
+describe('no markdown construct is left to codeHighlightStyle', () => {
   const FIXTURE = [
     '# ATX heading',
     '',
@@ -335,7 +371,7 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
 
   /** Every CSS property `style` applies at each position of the document. */
   function propertiesByPosition(
-    style: typeof defaultHighlightStyle,
+    style: typeof codeHighlightStyle,
     tree: Tree,
     length: number,
     byClass: Map<string, Set<string>>,
@@ -366,9 +402,9 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
     // comparison below vacuously clean.
     expect(byClass.size).toBeGreaterThan(0);
     const ours = propertiesByPosition(markdownHighlightStyle, tree!, length, byClass);
-    const theirs = propertiesByPosition(defaultHighlightStyle, tree!, length, byClass);
+    const theirs = propertiesByPosition(codeHighlightStyle, tree!, length, byClass);
 
-    // Wherever another language is mounted, defaultHighlightStyle is the one
+    // Wherever another language is mounted, codeHighlightStyle is the one
     // doing the work on purpose. Same predicate @lezer/highlight scopes by.
     const embedded = new Uint8Array(length);
     tree!.iterate({
@@ -458,7 +494,7 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
    * every fenced block. Removing the scope leaves the test above green and
    * fails this one.
    */
-  it('does not reach inside a fenced block, where defaultHighlightStyle does the work', async () => {
+  it('does not reach inside a fenced block, where codeHighlightStyle does the work', async () => {
     const js = LanguageDescription.matchLanguageName(MARKDOWN_CODE_LANGUAGES, 'javascript', true);
     expect(js).not.toBeNull();
     await js!.load();
@@ -470,7 +506,7 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
 
     const stringStart = doc.indexOf("'str'");
     let classesOnCodeString: string | null = null;
-    highlightTree(tree!, [markdownHighlightStyle, defaultHighlightStyle], (from, to, classes) => {
+    highlightTree(tree!, [markdownHighlightStyle, codeHighlightStyle], (from, to, classes) => {
       if (from === stringStart && doc.slice(from, to) === "'str'") classesOnCodeString = classes;
     });
 
@@ -479,7 +515,7 @@ describe('no markdown construct is left to defaultHighlightStyle', () => {
     // counter (`ͼ5`..`ͼz`, then `ͼ10`..), so `ͼ1` is a substring of `ͼ18` and
     // `toContain` on the raw string would start lying as the counter grows.
     const classList = (classesOnCodeString as unknown as string).split(' ');
-    expect(classList).toContain(defaultHighlightStyle.style([tags.string]));
+    expect(classList).toContain(codeHighlightStyle.style([tags.string]));
     expect(classList).not.toContain(markdownHighlightStyle.style([tags.string]));
   });
 });
@@ -530,7 +566,7 @@ describe('fenced code block highlighting (task 5)', () => {
     // (verified directly: without `codeLanguages`, this same line is plain
     // text with zero child spans) -- and that span must carry a different
     // class than the fence markers, since `def` is a `keyword`
-    // (`defaultHighlightStyle`'s fallback), not a `CodeMark`
+    // (`codeHighlightStyle`'s fallback), not a `CodeMark`
     // (`markdownHighlightStyle`'s `processingInstruction`).
     const spans = codeLine!.querySelectorAll('span');
     expect(spans.length).toBeGreaterThan(0);

@@ -111,6 +111,23 @@
      so it still reads as dim next to --syn-highlight-fg's ~15:1 while
      clearing the wash's AA floor on its own. */
   --syn-highlight-marker: #696969; /* 4.86:1 on --syn-highlight-bg */
+
+  /* Fenced-code tokens (design §4.18). Until Checkpoint F these came from
+     CodeMirror's built-in defaultHighlightStyle, which is tuned for a white
+     page and measured 1.33:1 to 2.6:1 against the dark --bg-editor. Every
+     value below is asserted against 4.5:1 by codetheme.test.ts -- if you
+     retune one, the test is the authority, not this comment. Starting values
+     are adapted from GitHub's Primer palettes, which are themselves
+     contrast-tuned; they live here because SPEC §5.3 allows colours nowhere
+     else, not because the preview is imitating GitHub (design §2.3). */
+  --syn-code-keyword: #8250df;
+  --syn-code-string: #0a3069;
+  --syn-code-literal: #0550ae;
+  --syn-code-comment: #656d76;
+  --syn-code-function: #953800;
+  --syn-code-type: #116329;
+  --syn-code-variable: #24292f;
+  --syn-code-invalid: #cf222e;
 }
 
 :root[data-theme='dark'] {
@@ -167,4 +184,14 @@
      lighter than --syn-marker but dimmer than --syn-highlight-fg's ~6.9:1, so
      it still clears AA on this specific background. */
   --syn-highlight-marker: #c4c4c4; /* 4.93:1 on --syn-highlight-bg */
+
+  /* See the light block. Measured against --bg-editor #1a1a1a. */
+  --syn-code-keyword: #ff7b72;
+  --syn-code-string: #a5d6ff;
+  --syn-code-literal: #79c0ff;
+  --syn-code-comment: #9198a1;
+  --syn-code-function: #d2a8ff;
+  --syn-code-type: #7ee787;
+  --syn-code-variable: #e8e8e8;
+  --syn-code-invalid: #ffa198;
 }
