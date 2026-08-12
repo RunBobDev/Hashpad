@@ -17,7 +17,6 @@ function read(relative: string): string {
 }
 
 const CSS = read('../styles/variables.css');
-const CODETHEME = read('./codetheme.ts');
 
 /** sRGB hex to WCAG relative luminance. */
 function luminance(hex: string): number {
@@ -67,24 +66,38 @@ function valueOf(name: string, theme: 'light' | 'dark'): string {
 }
 
 /**
- * Every `--syn-code-*` token `codetheme.ts` actually asks for, read out of its
- * source rather than listed here.
+ * Every `--syn-code-*` token the style actually asks for, read out of the CSS
+ * it emits rather than listed here.
  *
  * A hand-maintained list is the failure this exists to prevent. Renaming every
  * `var(--syn-code-*)` in codetheme.ts to a name that does not exist left the
  * whole suite green -- 555 tests -- while the real editor painted every code
- * token the inherited foreground. Nothing connected the two files. Deriving
- * the list from the consumer is what connects them.
+ * token the inherited foreground. Nothing connected the two files.
+ *
+ * Read from `module.rules`, not from the source text: a first version scanned
+ * `codetheme.ts` for `var(--…)`, which binds by spelling. A rule built from a
+ * constant or a template literal would evade it and reintroduce exactly the
+ * hole this closes. The generated rules are what ship.
+ *
+ * `rules` is absent from `StyleModule`'s public types even though it is on the
+ * object -- hence the cast, which is confined to this line.
  */
-const REFERENCED = [...CODETHEME.matchAll(/var\((--syn-code-[a-z-]+)\)/g)].map((m) => m[1]!);
+const EMITTED_CSS = (
+  (codeHighlightStyle.module as unknown as { rules?: string[] })?.rules ?? []
+).join('\n');
+const REFERENCED = [
+  ...new Set([...EMITTED_CSS.matchAll(/var\((--syn-code-[a-z0-9-]+)\)/g)].map((m) => m[1]!)),
+];
 
 describe('the fenced-code palette', () => {
-  it('is actually referenced by codetheme.ts', () => {
-    // Guard: a regex that matched nothing would make every check below vacuous.
+  it('emits rules that reference tokens at all', () => {
+    // Guard: an empty module, or a regex that matched nothing, would make
+    // every check below vacuous rather than failing.
+    expect(EMITTED_CSS).not.toBe('');
     expect(REFERENCED.length).toBeGreaterThanOrEqual(8);
   });
 
-  it.each(['light', 'dark'] as const)('defines every token codetheme.ts uses, in %s', (theme) => {
+  it.each(['light', 'dark'] as const)('defines every token the palette uses, in %s', (theme) => {
     const missing = REFERENCED.filter(
       (token) => !new RegExp(`${token}:\\s*#[0-9a-fA-F]{6}`).test(themeBlock(theme)),
     );
@@ -114,7 +127,7 @@ describe('the fenced-code palette', () => {
     const paletteOnly = declared.filter(
       (name) => name !== '--syn-code-fg' && name !== '--syn-code-bg',
     );
-    expect([...new Set(paletteOnly)].sort()).toEqual([...new Set(REFERENCED)].sort());
+    expect([...new Set(paletteOnly)].sort()).toEqual([...REFERENCED].sort());
   });
 });
 

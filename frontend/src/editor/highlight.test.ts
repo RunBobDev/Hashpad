@@ -107,24 +107,6 @@ describe('markdownHighlightStyle', () => {
   });
 
   /**
-   * A horizontal rule is `tags.contentSeparator`, not `processingInstruction`,
-   * so it needs its own entry. Under the old `defaultHighlightStyle` pairing
-   * this tag was actively dangerous to leave unclaimed: that style claimed
-   * `contentSeparator` with a hard-coded `#219`, which shipped and rendered
-   * every `---` dark blue in both themes -- 1.34:1 against the dark editor
-   * background, i.e. invisible. `codeHighlightStyle` claims no such rule
-   * (`codeHighlightStyle.style([tags.contentSeparator])` is `null`, measured
-   * directly), so that specific failure can no longer happen -- but the
-   * ownership belongs here regardless: which tag falls to which style is a
-   * decision this file makes on purpose, not an accident of which styles
-   * happen to be registered alongside it this checkpoint.
-   *
-   * Asserted as "our class is present", the same way every test above does it,
-   * rather than as a computed colour: jsdom resolves `var(--syn-marker)` to
-   * the empty string with no stylesheet loaded, so a colour assertion here
-   * would pass whatever the rule said.
-   */
-  /**
    * `'Highlight/...'` is an inherit-mode style spec, so every descendant of a
    * `Highlight` node carries `highlightTag` *as well as* whatever its own node
    * type resolves to. An `&amp;` or `\*` inside `==marked==` therefore matches
@@ -163,6 +145,24 @@ describe('markdownHighlightStyle', () => {
     view.destroy();
   });
 
+  /**
+   * A horizontal rule is `tags.contentSeparator`, not `processingInstruction`,
+   * so it needs its own entry. Under the old `defaultHighlightStyle` pairing
+   * this tag was actively dangerous to leave unclaimed: that style claimed
+   * `contentSeparator` with a hard-coded `#219`, which shipped and rendered
+   * every `---` dark blue in both themes -- 1.34:1 against the dark editor
+   * background, i.e. invisible. `codeHighlightStyle` claims no such rule
+   * (`codeHighlightStyle.style([tags.contentSeparator])` is `null`, measured
+   * directly), so that specific failure can no longer happen -- but the
+   * ownership belongs here regardless: which tag falls to which style is a
+   * decision this file makes on purpose, not an accident of which styles
+   * happen to be registered alongside it this checkpoint.
+   *
+   * Asserted as "our class is present", the same way every test above does it,
+   * rather than as a computed colour: jsdom resolves `var(--syn-marker)` to
+   * the empty string with no stylesheet loaded, so a colour assertion here
+   * would pass whatever the rule said.
+   */
   it('gives a horizontal rule our own marker class', () => {
     const view = mount('Above.\n\n---\n\nBelow.');
     const separatorClass = classFor(tags.contentSeparator);
@@ -217,27 +217,24 @@ describe('markdownHighlightStyle', () => {
    * carries **both** classes. They are single-class selectors of equal
    * specificity, so which colour paints is decided purely by their order in
    * the stylesheet -- and a class-presence assertion holds identically either
-   * way. Six tags are in this position -- `url`, `atom`, `escape`,
-   * `character`, `comment` and `string`, i.e. link URLs and every marker
-   * character in source mode -- because each both has a
-   * `markdownHighlightStyle` rule of its own and resolves (directly, or via
-   * an ancestor tag such as `url`'s `literal`) to one of `codeHighlightStyle`'s
-   * generic code-token rules.
+   * way. Eight tags are in this position -- `url`, `atom`, `escape`,
+   * `character`, `comment`, `string`, `labelName` and `processingInstruction`
+   * -- because each both has a `markdownHighlightStyle` rule of its own and
+   * resolves (directly, or via an ancestor tag: `url` through `literal`,
+   * `processingInstruction` through `meta`) to one of `codeHighlightStyle`'s
+   * rules. Between them that is link URLs, fence info strings, and **every
+   * marker character in source mode** -- `#`, `>`, `*`, backticks.
    *
-   * This is a *different* set than when this test named `defaultHighlightStyle`:
-   * that style also contested `contentSeparator` and `processingInstruction`
-   * (via `meta`), but `codeHighlightStyle`'s tag list mirrors
-   * `defaultHighlightStyle`'s code-token shape, not its markdown-adjacent odds
-   * and ends, so neither resolves to a rule there at all --
-   * `codeHighlightStyle.style([tags.contentSeparator])` is `null`, measured
-   * directly. Confirms the loop comment below: once a tag stops being
-   * contested it drops out of this list rather than failing silently in it.
+   * `contentSeparator` is the one tag that stopped being contested when
+   * `defaultHighlightStyle` was replaced: `codeHighlightStyle.style([
+   * tags.contentSeparator])` is `null`, measured. It is absent from the list
+   * for that reason, which is what the loop comment below describes.
    *
    * What puts ours last is `EditorView.mountStyles` doing
    * `styleModules.concat(baseTheme).reverse()`, so the *first*
    * `syntaxHighlighting(...)` listed in `markdownSupport` is the one whose
    * rules land latest and win. Nothing in the source says so, and swapping
-   * those two lines silently repaints every one of these six constructs in
+   * those two lines silently repaints every one of these eight constructs in
    * the editor to `codeHighlightStyle`'s code-token colours, with the whole
    * suite green outside this test. This is the assertion that stops that.
    *
@@ -255,6 +252,11 @@ describe('markdownHighlightStyle', () => {
       tags.character,
       tags.comment,
       tags.string,
+      tags.labelName,
+      // Markdown's `#`, `>` and backticks. Contested since Checkpoint F gave
+      // `codeHighlightStyle` a `tags.meta` rule, which this descends from --
+      // the row that was missing when that rule landed.
+      tags.processingInstruction,
     ]) {
       const ours = classFor(tag);
       const theirs = codeHighlightStyle.style([tag]);

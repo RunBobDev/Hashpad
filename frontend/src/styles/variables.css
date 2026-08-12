@@ -196,6 +196,12 @@
   --syn-code-type: #7ee787;
   --syn-code-variable: #e8e8e8;
   --syn-code-invalid: #ffa198;
+  /* Two collisions here that light does not have, both deliberate: `inserted`
+     repeats `type`, and `deleted` repeats `invalid`. Neither pair co-occurs in
+     a way a reader would need to tell apart -- a diff fence has no type names,
+     and `invalid` is close to unreachable in these grammars -- and separate
+     token names keep them independently retunable. Named rather than left as
+     an apparent oversight. */
   --syn-code-inserted: #7ee787;
   --syn-code-deleted: #ffa198;
 }
