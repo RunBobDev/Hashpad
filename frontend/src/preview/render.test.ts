@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { renderMarkdown } from './render';
+import { purifierForTests, renderMarkdown } from './render';
 
 /** Parses the rendered HTML so assertions are about structure, not substrings. */
 function render(markdown: string): Document {
@@ -47,21 +47,85 @@ describe('renderMarkdown', () => {
 });
 
 describe('sanitisation', () => {
-  // Raw HTML is permitted (SPEC §6.7) but must never execute. Each row is a
-  // different escape route, not five spellings of the same one.
+  /**
+   * Raw HTML is permitted (SPEC §6.7) but must never execute. Each row is a
+   * different escape route, not five spellings of one.
+   *
+   * Two things about the shape of these rows, both of which were wrong first
+   * time round and were caught in review:
+   *
+   * - **They are written as raw HTML, not as markdown links.** The markdown
+   *   spellings `[x](javascript:…)` and `[x](data:text/html,…)` never reach
+   *   DOMPurify at all: markdown-it's own `validateLink` rejects both schemes
+   *   and emits them as literal text, so those rows passed with the sanitiser
+   *   removed entirely. They were testing markdown-it. The markdown spellings
+   *   are still worth pinning and get their own block below.
+   * - **Each row asserts something survives.** Five bare "this is absent"
+   *   assertions all hold for a renderer that returns the empty string, which
+   *   is a perfect score on a security suite for producing nothing. The
+   *   `keeps` column is what stops that.
+   */
   it.each([
-    ['a script element', '<script>window.pwned = 1</script>\n', 'script'],
-    ['an inline handler', '<img src="x" onerror="window.pwned=1">\n', '[onerror]'],
-    ['a javascript: href', '[x](javascript:window.pwned=1)\n', '[href^="javascript"]'],
-    ['a data:text/html href', '[x](data:text/html,<b>h</b>)\n', '[href^="data:text/html"]'],
-    ['an iframe', '<iframe src="x"></iframe>\n', 'iframe'],
-  ])('strips %s', (_label, markdown, selector) => {
+    ['a script element', '<script>window.pwned = 1</script>\n\nafter\n', 'script', 'after'],
+    ['an inline handler', '<img src="x" onerror="window.pwned=1">\n', '[onerror]', null],
+    [
+      'a javascript: href',
+      '<a href="javascript:window.pwned=1">link</a>\n',
+      '[href^="javascript"]',
+      'link',
+    ],
+    [
+      'a data:text/html href',
+      '<a href="data:text/html,<b>h</b>">link</a>\n',
+      '[href^="data:text/html"]',
+      'link',
+    ],
+    ['an iframe', '<iframe src="x"></iframe>\n\nafter\n', 'iframe', 'after'],
+  ])('strips %s', (_label, markdown, selector, survives) => {
     const doc = render(markdown);
     expect(doc.querySelector(selector)).toBeNull();
+    if (survives === null) {
+      // The `<img>` itself is kept; only the handler is stripped.
+      expect(doc.querySelector('img')).not.toBeNull();
+    } else {
+      expect(doc.body.textContent).toContain(survives);
+    }
+  });
+
+  // The other half of the two link rows above: markdown-it refuses these
+  // schemes before DOMPurify is reached, so both layers are pinned rather
+  // than one standing in for the other.
+  it.each([
+    ['javascript:', '[x](javascript:window.pwned=1)\n'],
+    ['data:text/html', '[x](data:text/html,<b>h</b>)\n'],
+  ])("markdown-it's own link validator rejects %s", (_label, markdown) => {
+    const doc = render(markdown);
+    expect(doc.querySelector('a')).toBeNull();
+    // Left as literal text rather than silently dropped.
+    expect(doc.body.textContent).toContain('[x]');
   });
 
   it('keeps benign raw HTML', () => {
     const doc = render('<div class="note"><b>kept</b></div>\n');
     expect(doc.querySelector('div.note b')?.textContent).toBe('kept');
+  });
+
+  /**
+   * The comment-stripping hook, pinned in the one configuration where it is
+   * load-bearing.
+   *
+   * Under the shipped config DOMPurify's default ALLOWED_TAGS has no
+   * `#comment`, so comments are dropped by the allowlist and the hook changes
+   * nothing -- removing it fails no other test here. That makes the hook
+   * unfalsifiable, which this project treats as a defect in its own right.
+   * Overriding `ALLOWED_TAGS` disables the default and leaves the hook as the
+   * only thing holding SPEC §6.8. Deleting the hook reddens this.
+   */
+  it('strips comments even when ALLOWED_TAGS would re-admit them', () => {
+    const output = purifierForTests.sanitize('<p>a<!-- secret --></p>', {
+      ALLOWED_TAGS: ['p', '#comment'],
+    });
+    expect(output).not.toContain('secret');
+    expect(output).toContain('a');
   });
 });

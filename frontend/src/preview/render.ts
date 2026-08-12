@@ -45,19 +45,6 @@ const md = new MarkdownIt({ html: true, linkify: false, typographer: false })
   .use(markdownItMark)
   .use(markdownItFootnote);
 
-/**
- * `<!-- … -->` is this project's annotation mechanism (SPEC §6.8): visible in
- * the editor, absent from the preview.
- *
- * Checked empirically against the installed dompurify@3.4.13: its default
- * ALLOWED_TAGS already excludes comment nodes, so with this config nothing
- * below is currently load-bearing for comment removal -- disabling it does
- * not surface in a failing test. It stays anyway as an explicit,
- * version-independent guarantee: SPEC §6.8 is a product requirement, not an
- * incidental side effect of DOMPurify's current defaults, and should not go
- * unnoticed if a future DOMPurify upgrade or a config change (e.g. an
- * ALLOWED_TAGS override) ever re-admits comments.
- */
 // Not `as const`: DOMPurify's `Config.FORBID_TAGS`/`FORBID_ATTR` are typed as
 // mutable `string[]`, which a `readonly [...]` tuple doesn't satisfy.
 const PURIFY_CONFIG: Config = {
@@ -66,20 +53,56 @@ const PURIFY_CONFIG: Config = {
   FORBID_ATTR: ['style'],
 };
 
-// The brief named this hook `uponSanitizeNode`; no such hook exists in
-// dompurify@3.4.13 (checked both its .d.ts and dist/purify.cjs.js -- addHook
-// silently no-ops on an unrecognised entry point, so that spelling would have
-// compiled to a dead call). `uponSanitizeElement` is misleadingly named but
-// fires for every visited node, comments included -- DOMPurify's own
-// documented pattern for stripping comment nodes. currentNode.nodeType === 8
-// is COMMENT_NODE.
-DOMPurify.addHook('uponSanitizeElement', (currentNode) => {
+/**
+ * Our own DOMPurify instance, not the imported singleton.
+ *
+ * The hook below is registered at module scope, and on the singleton it would
+ * change the behaviour of every `DOMPurify.sanitize` call in the process --
+ * including from code that never imported this file. Task 6 loads this module
+ * lazily, on the first Ctrl+Shift+P, so that would mean app-wide sanitiser
+ * behaviour changing at an arbitrary moment during a session. An instance
+ * keeps the hook where it belongs; verified that the global is unaffected.
+ */
+const purifier = DOMPurify(window);
+
+/**
+ * `<!-- … -->` is this project's annotation mechanism (SPEC §6.8): visible in
+ * the editor, absent from the preview.
+ *
+ * The brief named this hook `uponSanitizeNode`. There is no such entry point
+ * in dompurify@3.4.13 -- `_createHooksMap` lists nine and that is not among
+ * them, and `addHook` returns silently for an unrecognised name. It also does
+ * not typecheck (TS2769), so the mistake would have been caught either way.
+ * `uponSanitizeElement` is misleadingly named but fires for every visited
+ * node, comments included; `nodeType === 8` is COMMENT_NODE.
+ *
+ * With the *current* config the hook is not what removes comments: DOMPurify's
+ * default ALLOWED_TAGS has no `#comment`, so they are dropped by the allowlist
+ * before the hook matters, and removing the hook fails no test of ordinary
+ * rendering. It stays because SPEC §6.8 is a product requirement rather than a
+ * side effect of a library default, and the moment `ALLOWED_TAGS` is
+ * overridden -- which any future config change could do -- the default stops
+ * applying and only this hook holds. `render.test.ts` pins exactly that
+ * configuration, so the hook is falsifiable rather than decorative.
+ */
+purifier.addHook('uponSanitizeElement', (currentNode) => {
   if (currentNode.nodeType === 8) currentNode.parentNode?.removeChild(currentNode);
 });
 
+/**
+ * Note what sanitisation deliberately does *not* do: a remote `<img>`, `<a>`
+ * or `<form>` survives it untouched. Nothing here blocks the network -- that
+ * is `index.html`'s CSP (`img-src` without `https:`, `form-action 'none'`)
+ * and, for images specifically, the placeholder rule in `rules/images.ts`.
+ * Do not read a passing sanitiser test as evidence of the zero-network
+ * constraint; they are separate mechanisms with separate tests.
+ */
 export function renderMarkdown(text: string, ctx: RenderContext): RenderResult {
   void ctx; // Task 3's image rule is the first consumer.
   const rendered = md.render(text);
-  const html = DOMPurify.sanitize(rendered, PURIFY_CONFIG);
+  const html = purifier.sanitize(rendered, PURIFY_CONFIG);
   return { html, anchors: [] };
 }
+
+/** Test-only: the instance the hook is registered on. */
+export const purifierForTests = purifier;
