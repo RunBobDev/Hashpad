@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { LanguageDescription } from '@codemirror/language';
+import { highlightTree } from '@lezer/highlight';
+import { codeHighlightStyle } from './codetheme';
+import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
 /**
  * The palette is only worth having if it is legible, and "legible" is a number.
@@ -8,21 +12,12 @@ import { fileURLToPath } from 'node:url';
  * because the CSS file is what ships -- a JS mirror could drift from it and
  * this test would happily verify the mirror.
  */
-const CSS = readFileSync(
-  fileURLToPath(new URL('../styles/variables.css', import.meta.url)),
-  'utf8',
-);
+function read(relative: string): string {
+  return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+}
 
-const TOKENS = [
-  'keyword',
-  'string',
-  'literal',
-  'comment',
-  'function',
-  'type',
-  'variable',
-  'invalid',
-] as const;
+const CSS = read('../styles/variables.css');
+const CODETHEME = read('./codetheme.ts');
 
 /** sRGB hex to WCAG relative luminance. */
 function luminance(hex: string): number {
@@ -42,37 +37,166 @@ function contrast(a: string, b: string): number {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 
-/** The value of `--name` inside the light `:root` block or the dark block. */
-function tokenValue(name: string, theme: 'light' | 'dark'): string {
-  const start = theme === 'light' ? CSS.indexOf(':root') : CSS.indexOf("[data-theme='dark']");
-  expect(start, `no ${theme} block in variables.css`).toBeGreaterThan(-1);
-  const block = CSS.slice(
-    start,
-    theme === 'light' ? CSS.indexOf("[data-theme='dark']") : undefined,
-  );
-  const match = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block);
-  expect(match, `--${name} not found in the ${theme} block, or not a 6-digit hex`).not.toBeNull();
-  return match![1]!;
+/**
+ * The slice of variables.css a theme's declarations live in.
+ *
+ * `variables.css` has **two** `:root` blocks -- a layout and font one, then
+ * the light theme -- so "light" is everything before the dark block, not the
+ * first `:root`. An earlier version of this file sliced from the first
+ * `:root` and took the *first* regex match inside it, which is the opposite
+ * of CSS's last-one-wins: a stale duplicate earlier in the file would be
+ * measured while the browser painted the later value. `valueOf` below takes
+ * the last match for the same reason.
+ */
+function themeBlock(theme: 'light' | 'dark'): string {
+  const darkStart = CSS.indexOf("[data-theme='dark']");
+  expect(darkStart, 'no dark block in variables.css').toBeGreaterThan(-1);
+  return theme === 'light' ? CSS.slice(0, darkStart) : CSS.slice(darkStart);
 }
 
-describe('the fenced-code palette clears WCAG AA in both themes', () => {
-  it.each(['light', 'dark'] as const)('%s', (theme) => {
-    const background = tokenValue('bg-editor', theme);
+/** The value `--name` ends up with in `theme`, i.e. its last declaration. */
+function valueOf(name: string, theme: 'light' | 'dark'): string {
+  const matches = [
+    ...themeBlock(theme).matchAll(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`, 'g')),
+  ];
+  expect(
+    matches.length,
+    `--${name} is not declared as a 6-digit hex in the ${theme} theme`,
+  ).toBeGreaterThan(0);
+  return matches[matches.length - 1]![1]!;
+}
+
+/**
+ * Every `--syn-code-*` token `codetheme.ts` actually asks for, read out of its
+ * source rather than listed here.
+ *
+ * A hand-maintained list is the failure this exists to prevent. Renaming every
+ * `var(--syn-code-*)` in codetheme.ts to a name that does not exist left the
+ * whole suite green -- 555 tests -- while the real editor painted every code
+ * token the inherited foreground. Nothing connected the two files. Deriving
+ * the list from the consumer is what connects them.
+ */
+const REFERENCED = [...CODETHEME.matchAll(/var\((--syn-code-[a-z-]+)\)/g)].map((m) => m[1]!);
+
+describe('the fenced-code palette', () => {
+  it('is actually referenced by codetheme.ts', () => {
+    // Guard: a regex that matched nothing would make every check below vacuous.
+    expect(REFERENCED.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it.each(['light', 'dark'] as const)('defines every token codetheme.ts uses, in %s', (theme) => {
+    const missing = REFERENCED.filter(
+      (token) => !new RegExp(`${token}:\\s*#[0-9a-fA-F]{6}`).test(themeBlock(theme)),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it.each(['light', 'dark'] as const)('clears WCAG AA against --bg-editor in %s', (theme) => {
+    const background = valueOf('bg-editor', theme);
     const failures: string[] = [];
-    for (const token of TOKENS) {
-      const value = tokenValue(`syn-code-${token}`, theme);
+    for (const token of REFERENCED) {
+      const value = valueOf(token.slice(2), theme);
       const ratio = contrast(value, background);
       if (ratio < 4.5) {
-        failures.push(`--syn-code-${token} ${value} on ${background} = ${ratio.toFixed(2)}:1`);
+        failures.push(`${token} ${value} on ${background} = ${ratio.toFixed(2)}:1`);
       }
     }
     expect(failures).toEqual([]);
   });
 
-  it('defines every token in both themes', () => {
-    for (const token of TOKENS) {
-      expect(tokenValue(`syn-code-${token}`, 'light')).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(tokenValue(`syn-code-${token}`, 'dark')).toMatch(/^#[0-9a-f]{6}$/i);
-    }
+  it('declares no token variables.css does not define, and none it never uses', () => {
+    const declared = [...themeBlock('light').matchAll(/(--syn-code-[a-z-]+):\s*#/g)].map(
+      (m) => m[1]!,
+    );
+    // --syn-code-fg and --syn-code-bg predate this palette: they style inline
+    // code and the fence background in *markdown*, not code tokens, and
+    // markdownHighlightStyle owns them.
+    const paletteOnly = declared.filter(
+      (name) => name !== '--syn-code-fg' && name !== '--syn-code-bg',
+    );
+    expect([...new Set(paletteOnly)].sort()).toEqual([...new Set(REFERENCED)].sort());
+  });
+});
+
+/**
+ * Coverage, which is a different question from legibility.
+ *
+ * Replacing `defaultHighlightStyle` meant inheriting responsibility for every
+ * tag it used to colour, and the first draft of `codetheme.ts` quietly dropped
+ * three: `inserted`, `deleted` and `meta`. A ```diff fence therefore rendered
+ * with **zero** spans -- added and removed lines the same colour as prose,
+ * which reads as deliberate rather than broken. Every check above passed.
+ *
+ * So this asserts the positive: named constructs in real fences must come out
+ * carrying a class. It walks the tree directly rather than mounting a view,
+ * because none of it needs layout and `highlightTree` is what the editor uses
+ * underneath anyway.
+ */
+describe('the palette colours what it took responsibility for', () => {
+  const LANGUAGES = ['javascript', 'python', 'html', 'diff', 'shell'] as const;
+
+  beforeAll(async () => {
+    await Promise.all(
+      LANGUAGES.map(async (name) => {
+        const description = LanguageDescription.matchLanguageName(
+          MARKDOWN_CODE_LANGUAGES,
+          name,
+          true,
+        );
+        expect(description, `${name} is not in MARKDOWN_CODE_LANGUAGES`).not.toBeNull();
+        await description!.load();
+      }),
+    );
+  });
+
+  /** The substrings of `code` that came out inside a highlighted span. */
+  function highlighted(language: string, code: string): string[] {
+    const description = LanguageDescription.matchLanguageName(
+      MARKDOWN_CODE_LANGUAGES,
+      language,
+      true,
+    );
+    const support = description?.support;
+    expect(support, `${language} did not load`).toBeDefined();
+
+    const spans: string[] = [];
+    highlightTree(support!.language.parser.parse(code), codeHighlightStyle, (from, to, classes) => {
+      if (classes) spans.push(code.slice(from, to));
+    });
+    return spans;
+  }
+
+  it.each([
+    ['javascript', "const s = 'str'; // note", ['const', "'str'", '// note']],
+    ['python', 'def f(x):  # note\n    return "str"\n', ['def', '# note', '"str"']],
+    // The regression that motivated this block. Both sides of a diff must be
+    // distinguishable, and the hunk header is `meta`.
+    ['diff', '@@ -1,2 +1,2 @@\n-removed\n+added\n', ['@@ -1,2 +1,2 @@', '-removed', '+added']],
+    ['html', '<!DOCTYPE html>\n<div class="x">t</div>\n', ['<!DOCTYPE html>']],
+    ['shell', '#!/bin/sh\necho hi\n', ['#!/bin/sh']],
+  ] as const)('colours %s', (language, code, expected) => {
+    const spans = highlighted(language, code);
+    const missing = expected.filter((text) => !spans.some((span) => span.includes(text)));
+    expect(missing, `spans found: ${JSON.stringify(spans)}`).toEqual([]);
+  });
+
+  it('gives a diff fence different colours for added and removed lines', () => {
+    const code = '-removed\n+added\n';
+    const description = LanguageDescription.matchLanguageName(
+      MARKDOWN_CODE_LANGUAGES,
+      'diff',
+      true,
+    );
+    const byText = new Map<string, string>();
+    highlightTree(
+      description!.support!.language.parser.parse(code),
+      codeHighlightStyle,
+      (from, to, classes) => byText.set(code.slice(from, to).trim(), classes),
+    );
+    // Same colour for both would make the fence useless, which is what
+    // inheriting a single fallback would have produced.
+    expect(byText.get('-removed')).toBeDefined();
+    expect(byText.get('+added')).toBeDefined();
+    expect(byText.get('-removed')).not.toBe(byText.get('+added'));
   });
 });

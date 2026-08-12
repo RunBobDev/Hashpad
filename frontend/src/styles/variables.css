@@ -128,6 +128,8 @@
   --syn-code-type: #116329;
   --syn-code-variable: #24292f;
   --syn-code-invalid: #cf222e;
+  --syn-code-inserted: #116329;
+  --syn-code-deleted: #a40e26;
 }
 
 :root[data-theme='dark'] {
@@ -194,4 +196,6 @@
   --syn-code-type: #7ee787;
   --syn-code-variable: #e8e8e8;
   --syn-code-invalid: #ffa198;
+  --syn-code-inserted: #7ee787;
+  --syn-code-deleted: #ffa198;
 }

@@ -31,7 +31,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
   [
     // `tags.heading` is the parent of `heading1`..`heading6`, and GFM also
     // hangs `TableHeader/...` off it. Claimed here for one reason: without a
-    // rule of our own, `defaultHighlightStyle`'s `tags.heading` entry supplies
+    // rule of our own, the style registered beside this one can supply
     // `text-decoration: underline`, and because the two styles *union* per
     // property rather than compete, every heading in the editor was underlined
     // -- along with every GFM table header cell and the `|` delimiters around
@@ -98,7 +98,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
       color: 'var(--syn-code-fg)',
     },
     // `textDecoration` is not decoration here, it is a claim: without it,
-    // `defaultHighlightStyle`'s own `tags.link` rule supplies
+    // the style registered beside this one can supply
     // `text-decoration: underline` and the two styles union per property, the
     // same way they did on headings. That underlined every inline `[t](u)`
     // and `![alt](u)` -- brackets, parens and title included -- while leaving
@@ -118,11 +118,15 @@ export const markdownHighlightStyle = HighlightStyle.define(
     { tag: tags.processingInstruction, color: 'var(--syn-marker)' },
     // A horizontal rule's `---` is `tags.contentSeparator`, not
     // `processingInstruction`, so it needs its own entry -- and without one it
-    // does not fall back to the document's foreground. `defaultHighlightStyle`
-    // (registered below, in `markdownSupport`) claims `contentSeparator` with a
-    // hard-coded `#219`, which rendered every rule dark blue in *both* themes:
-    // 13.06:1 on the light background, but **1.33:1** on the dark one, i.e.
-    // invisible. `--syn-marker` because a rule is exactly that -- a marker
+    // does not fall back to the document's foreground. When
+    // `defaultHighlightStyle` was the style registered alongside this one, it
+    // claimed `contentSeparator` with a hard-coded `#219` and every rule
+    // shipped dark blue in *both* themes: 13.06:1 on the light background, but
+    // **1.33:1** on the dark one, i.e. invisible. `codeHighlightStyle`
+    // replaced it in Checkpoint F and claims no such rule, so that particular
+    // trap is gone -- the entry stays because which style owns a tag should be
+    // a decision here, not an accident of what happens to be registered
+    // beside it. `--syn-marker` because a rule is exactly that -- a marker
     // character standing alone -- and it carries the AA-cleared pair already
     // recorded in variables.css (4.5:1 light, 4.6:1 dark).
     { tag: tags.contentSeparator, color: 'var(--syn-marker)' },
@@ -162,7 +166,8 @@ export const markdownHighlightStyle = HighlightStyle.define(
     { tag: [tags.escape, tags.character], color: 'var(--syn-marker)' },
     // Reaches an *inline* `<!-- comment -->` only. A block-level comment and
     // any HTML block are mounted HTML sub-trees, so the scope below excludes
-    // them and they keep `defaultHighlightStyle`'s colour -- see that comment.
+    // them; inside those, `codeHighlightStyle` colours them instead -- see
+    // that comment.
     { tag: tags.comment, color: 'var(--syn-marker)' },
     // A link's title (`[x](u "title")`) is part of the link, so it takes the
     // link colour like the URL beside it. Only reference definitions reach
@@ -192,8 +197,8 @@ export const markdownHighlightStyle = HighlightStyle.define(
   ],
   {
     /**
-     * Our style styles *markdown*; CodeMirror's `defaultHighlightStyle` styles
-     * the code embedded in it. Without this the two overlap on every generic
+     * Our style styles *markdown*; `codeHighlightStyle` (editor/codetheme.ts)
+     * styles the code embedded in it. Without this the two overlap on every generic
      * tag -- `string`, `atom`, `comment`, `labelName`, `escape` -- and since
      * ours is registered to win the ties (see `markdownSupport`), the rules
      * above would repaint the contents of every fenced code block.
@@ -206,8 +211,10 @@ export const markdownHighlightStyle = HighlightStyle.define(
      * Two consequences worth knowing, both measured rather than assumed:
      *
      * - `parseCode` (@lezer/markdown) mounts only `HTMLBlock`, `HTMLTag` and
-     *   `CommentBlock`. Those three are outside this scope and keep
-     *   `defaultHighlightStyle`'s colours. An *inline* `<!-- comment -->` is a
+     *   `CommentBlock`. Those three are outside this scope, so their contents
+     *   are coloured by `codeHighlightStyle` (which is unscoped) rather than
+     *   by anything here -- a `<div>` takes `--syn-code-type`, its attribute
+     *   names `--syn-code-variable`. An *inline* `<!-- comment -->` is a
      *   plain `Comment` node with no mount, so the `tags.comment` rule above
      *   does reach it -- which is the only reason that rule can exist without
      *   also recolouring the comments inside every fenced code block.

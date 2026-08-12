@@ -163,7 +163,7 @@ describe('markdownHighlightStyle', () => {
     view.destroy();
   });
 
-  it('gives a horizontal rule our own marker class rather than leaving it to codeHighlightStyle', () => {
+  it('gives a horizontal rule our own marker class', () => {
     const view = mount('Above.\n\n---\n\nBelow.');
     const separatorClass = classFor(tags.contentSeparator);
 
@@ -175,26 +175,31 @@ describe('markdownHighlightStyle', () => {
   });
 
   /**
-   * `codeHighlightStyle`'s `tags.heading` entry sets
-   * `text-decoration: underline`. Ours sets size, weight and colour but said
-   * nothing about decoration, and the two styles union *per property* rather
-   * than compete -- so every heading in the editor was underlined, as was
-   * every GFM table header cell and the `|` around it. Nobody reported it
-   * because an underlined heading looks deliberate.
+   * Headings are explicitly *not* underlined, and the rules saying so are
+   * defensive rather than currently load-bearing.
    *
-   * Both shapes are checked because they take different routes:
-   * `ATXHeading1` resolves to our `tags.heading1` rule (which must carry
-   * `textDecoration` itself, since `style()` returns only the most specific
-   * match), while a table header has no specific rule and falls to our
-   * `tags.heading` one. Fixing only the general rule leaves headings
-   * underlined and this test red -- verified.
+   * The history: `defaultHighlightStyle` used to be registered alongside this
+   * style, and its `tags.heading` entry set `text-decoration: underline`. The
+   * two union *per property* rather than compete, so every heading was
+   * underlined -- as was every GFM table header cell and the `|` around it --
+   * and nobody reported it because an underlined heading looks deliberate.
+   * Checkpoint F replaced that style with `codeHighlightStyle`, which claims
+   * no heading tag at all (`style([tags.heading])` is `null`, measured), so
+   * nothing supplies an underline today.
+   *
+   * The assertions stay because "not underlined" is a decision this file
+   * makes, and whatever is registered beside it next could supply one again.
+   * Both shapes are checked because they take different routes: `ATXHeading1`
+   * resolves to our `tags.heading1` rule (which must carry `textDecoration`
+   * itself, since `style()` returns only the most specific match), while a
+   * table header has no specific rule and falls to our `tags.heading` one.
    */
   it.each([
     // The heading's text span keeps the space after `#` -- only the `#`
     // itself is split off as a HeaderMark.
     ['an ATX heading', '# Head\n', ' Head'],
     ['a GFM table header cell', '| A | B |\n| --- | --- |\n| c | d |\n', ' A '],
-  ])('does not let codeHighlightStyle underline %s', (_label, doc, text) => {
+  ])('declares no underline on %s', (_label, doc, text) => {
     const view = mount(doc);
 
     const span = Array.from(view.contentDOM.querySelectorAll('span')).find(
