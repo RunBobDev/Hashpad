@@ -123,7 +123,38 @@ export function renderMarkdown(text: string, ctx: RenderContext): RenderResult {
   const env: Env & RenderContext & SourceLineEnv = { ...ctx };
   const rendered = md.render(text, env);
   const html = purifier.sanitize(rendered, PURIFY_CONFIG);
-  return { html, anchors: env.anchors ?? [] };
+  return { html, anchors: anchorsIn(html) };
+}
+
+/**
+ * The source lines that actually made it into the output, read back out of the
+ * sanitised HTML rather than taken from what the source-line rule stamped.
+ *
+ * Those two are not the same list, which is the point. The rule marks tokens;
+ * three things then drop marks before the HTML is final:
+ *
+ * - an HTML comment is removed entirely -- and comments are SPEC §6.8's
+ *   annotation mechanism, a shipped feature, so this is routine, not an edge
+ *   case
+ * - markdown-it's `html_block` renderer emits `token.content` verbatim and
+ *   silently discards the attribute the rule set on it
+ * - DOMPurify strips `<style>`/`<script>` blocks outright
+ *
+ * `RenderResult.anchors` is documented as "the source lines present in the
+ * output", and Task 6 looks each one up with
+ * `querySelector('[data-source-line="N"]')`. A line in the list with no
+ * element behind it is a `null` at exactly the moment scroll sync needs a
+ * position. Deriving the list from the finished HTML makes the invariant true
+ * by construction instead of by two code paths agreeing.
+ */
+function anchorsIn(html: string): number[] {
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const lines = new Set<number>();
+  for (const element of parsed.querySelectorAll('[data-source-line]')) {
+    const line = Number(element.getAttribute('data-source-line'));
+    if (Number.isInteger(line) && line > 0) lines.add(line);
+  }
+  return [...lines].sort((a, b) => a - b);
 }
 
 /** Test-only: the instance the hook is registered on. */

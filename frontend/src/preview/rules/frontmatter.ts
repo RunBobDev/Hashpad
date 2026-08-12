@@ -22,7 +22,21 @@ export function frontMatterPlugin(md: MarkdownIt): void {
       // Only at the very top of the document. Anywhere else `---` is a
       // horizontal rule or a setext underline, and stealing it would change
       // what existing documents mean.
+      //
+      // Three conditions, not one, and the second two were missing:
+      //
+      // - `startLine !== 0` means line 0 *of the current tokenize pass*, not of
+      //   the document. markdown-it re-enters `block.tokenize` at line 0 for a
+      //   blockquote's contents, so `> ---` / `> title: x` / `> ---` produced a
+      //   metadata card inside the quote. `parentType === 'root'` is what
+      //   actually means "top level".
+      // - Four spaces of indent makes a line an indented code block in
+      //   CommonMark, and `.trim()` below throws that indent away. Both `fence`
+      //   and `hr` check this; so must we, or `    ---` becomes a card instead
+      //   of code.
       if (startLine !== 0) return false;
+      if (state.parentType !== 'root') return false;
+      if (state.sCount[startLine]! - state.blkIndent >= 4) return false;
 
       const open = state.getLines(startLine, startLine + 1, 0, false).trim();
       if (open !== FENCE) return false;

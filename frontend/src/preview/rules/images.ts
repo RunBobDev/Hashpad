@@ -11,6 +11,13 @@
  * them with no CSP relaxation, and there is exactly one place to reject path
  * traversal — Task 4's handler, not here. This module does no security
  * checking and must not start: two half-checks are worse than one whole one.
+ *
+ * **Raw HTML `<img>` bypasses all of this.** `html: true` is on (SPEC §6.7),
+ * so `<img src="https://x/p.png">` in a document renders as a live element
+ * with no placeholder, and `<img src="assets/p.png">` is not rewritten and so
+ * 404s. Zero-network still holds -- the CSP owns that, not this file -- but
+ * the policy below only governs markdown image syntax. Rewriting raw HTML
+ * would mean parsing it here, ahead of DOMPurify, which is a worse trade.
  */
 // See sourceline.ts for why this imports `MarkdownIt` as a named type from
 // the package root rather than the default export.
@@ -20,12 +27,28 @@ import type { RenderContext } from '../render';
 /** Task 4's Go handler serves exactly this path. */
 export const ASSET_ROUTE = '/__hashpad/asset';
 
-/** Anything with a scheme we will not resolve locally. */
-const REMOTE = /^[a-z][a-z0-9+.-]*:/i;
+/**
+ * Anything with a URL scheme we will not resolve locally.
+ *
+ * **Two or more characters before the colon**, deliberately. RFC 3986 allows a
+ * one-character scheme, but no real one exists and `C:/docs/pic.png` is a
+ * Windows absolute path, not a URL -- matching it here reported "Remote image
+ * not loaded" for a local file. With this it falls through to the local
+ * branch, the Go handler rejects it as absolute, and the user gets a broken
+ * image rather than a wrong explanation.
+ */
+const REMOTE = /^[a-z][a-z0-9+.-]+:/i;
 
-function placeholder(md: MarkdownIt, text: string, detail: string): string {
+/**
+ * `alt` is the author's description and is the one thing worth keeping when
+ * the image itself cannot be shown -- so it becomes the accessible name, and
+ * the generic string is only the fallback. A screen reader announcing "Remote
+ * image not loaded" tells the user nothing about what they are missing.
+ */
+function placeholder(md: MarkdownIt, alt: string, text: string, detail: string): string {
+  const label = alt.trim() === '' ? text : `${alt} -- ${text}`;
   return (
-    `<span class="preview-image-placeholder" role="img" aria-label="${md.utils.escapeHtml(text)}">` +
+    `<span class="preview-image-placeholder" role="img" aria-label="${md.utils.escapeHtml(label)}">` +
     `${md.utils.escapeHtml(text)}<span class="preview-image-placeholder__detail">` +
     `${md.utils.escapeHtml(detail)}</span></span>`
   );
@@ -52,8 +75,9 @@ export function imagePlugin(md: MarkdownIt): void {
     // Verified against markdown-it@15.0.0's `default_rules.image` in
     // dist/markdown-it.mjs, not assumed from the brief.
     const altIndex = token.attrIndex('alt');
+    const alt = self.renderInlineAsText(token.children ?? [], options, env);
     if (altIndex >= 0) {
-      token.attrs![altIndex]![1] = self.renderInlineAsText(token.children ?? [], options, env);
+      token.attrs![altIndex]![1] = alt;
     }
 
     // `env`'s declared type is markdown-it's own `Env | undefined` (an index
@@ -67,14 +91,28 @@ export function imagePlugin(md: MarkdownIt): void {
     if (src.startsWith('data:')) return self.renderToken(tokens, index, options);
 
     if (REMOTE.test(src)) {
-      return placeholder(md, 'Remote image not loaded', src);
+      return placeholder(md, alt, 'Remote image not loaded', src);
     }
 
     if (ctx.documentDir === null) {
-      return placeholder(md, 'Local image unavailable', 'save the document to load local images');
+      return placeholder(
+        md,
+        alt,
+        'Local image unavailable',
+        'save the document to load local images',
+      );
     }
 
-    token.attrSet('src', `${ASSET_ROUTE}?path=${encodeURIComponent(src)}`);
+    // `normalizeLinkText` first, and this is not optional: markdown-it's
+    // `normalizeLink` has *already* percent-encoded the src by the time we see
+    // it (`mdurl.encode` at the end of it), so encoding again escapes the `%`
+    // itself. `assets/café.png` reached the handler as `assets/caf%C3%A9.png`
+    // and 404'd -- every image in a document with a non-ASCII or spaced
+    // filename. Decoding back to the raw path and encoding once is what makes
+    // Go's `r.URL.Query().Get("path")` yield the name that is actually on
+    // disk. Round-trip verified for accents, spaces and backslashes.
+    const raw = md.normalizeLinkText(src);
+    token.attrSet('src', `${ASSET_ROUTE}?path=${encodeURIComponent(raw)}`);
     return self.renderToken(tokens, index, options);
   };
 }

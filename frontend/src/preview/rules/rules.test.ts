@@ -11,7 +11,109 @@ function render(markdown: string, documentDir: string | null = 'C:\\docs') {
   };
 }
 
+describe('the cross-task and ordering contracts', () => {
+  /**
+   * The literal route, not the constant.
+   *
+   * Every other assertion in this file interpolates `ASSET_ROUTE`, which makes
+   * them tautological about its value — changing it to `/WRONG/route` left the
+   * whole suite green. Task 4's Go handler serves this exact path, and a
+   * rename that compiles on both sides is how a cross-language contract breaks
+   * silently.
+   */
+  it('serves images from the path Task 4 implements', () => {
+    expect(ASSET_ROUTE).toBe('/__hashpad/asset');
+  });
+
+  /**
+   * Percent-encoded exactly once.
+   *
+   * markdown-it's `normalizeLink` has already encoded the src before the image
+   * rule sees it, so a second `encodeURIComponent` escapes the `%` itself and
+   * the handler receives `assets/caf%C3%A9.png` as a literal filename — every
+   * image in a document with a non-ASCII or spaced name 404s. Asserted on what
+   * Go's `r.URL.Query().Get("path")` will actually yield, which is the thing
+   * that has to be right.
+   */
+  it.each([
+    ['an accented filename', '![a](assets/café.png)\n', 'assets/café.png'],
+    ['a spaced filename', '![a](<assets/my pic.png>)\n', 'assets/my pic.png'],
+    ['a plain filename', '![a](assets/pic.png)\n', 'assets/pic.png'],
+  ])('encodes %s once, not twice', (_label, markdown, expected) => {
+    const { doc } = render(markdown);
+    const src = doc.querySelector('img')!.getAttribute('src')!;
+    const query = src.slice(`${ASSET_ROUTE}?path=`.length);
+    expect(decodeURIComponent(query)).toBe(expected);
+  });
+
+  /**
+   * The sort in `sourceline.ts` is load-bearing, not decorative:
+   * markdown-it-footnote moves a definition's tokens to the end of the stream,
+   * so a document whose definition sits above its reference emits lines out of
+   * order. Removing the sort survives every other test here.
+   */
+  it('returns anchors ascending even when footnotes reorder the token stream', () => {
+    const { anchors } = render('Para A.\n\n[^1]: body\n\nPara B.[^1]\n');
+    expect(anchors.length).toBeGreaterThan(1);
+    expect(anchors).toEqual([...anchors].sort((a, b) => a - b));
+  });
+
+  /**
+   * Every anchor must have an element behind it. Task 6 looks each one up with
+   * `querySelector('[data-source-line="N"]')`, so a line with nothing behind
+   * it is a `null` at the moment scroll sync needs a position. Three things
+   * drop marks after the rule sets them: HTML comments (SPEC §6.8 removes
+   * them), `html_block` (whose renderer emits raw content and discards the
+   * attribute), and DOMPurify's FORBID_TAGS.
+   */
+  it('lists only lines that have a surviving element', () => {
+    const { doc, anchors } = render(
+      ['# One', '', '<!-- a comment -->', '', '<div>raw block</div>', '', 'Para.', ''].join('\n'),
+    );
+    const present = [...doc.querySelectorAll('[data-source-line]')].map((el) =>
+      Number(el.getAttribute('data-source-line')),
+    );
+    expect(anchors).toEqual([...new Set(present)].sort((a, b) => a - b));
+  });
+});
+
+describe('the marks each rule leaves for later tasks', () => {
+  it('gives the front-matter card a source line, like every other block', () => {
+    const { doc } = render('---\ntitle: A\n---\n\nBody\n');
+    expect(doc.querySelector('.preview-frontmatter')?.getAttribute('data-source-line')).toBe('1');
+  });
+
+  // preview.css (Task 8) hangs `list-style: none` off this.
+  it('marks a task item so the stylesheet can drop its bullet', () => {
+    const { doc } = render('- [ ] todo\n');
+    expect(doc.querySelector('li')?.classList.contains('preview-task-item')).toBe(true);
+  });
+
+  it('gives the image placeholder an accessible name carrying the author alt', () => {
+    const { doc } = render('![the diagram](https://example.com/p.png)\n');
+    const placeholder = doc.querySelector('.preview-image-placeholder')!;
+    expect(placeholder.getAttribute('role')).toBe('img');
+    expect(placeholder.getAttribute('aria-label')).toContain('the diagram');
+  });
+});
+
 describe('front matter', () => {
+  // `startLine === 0` means line 0 of the current tokenize pass, and
+  // markdown-it re-enters at 0 for a blockquote's contents.
+  it('leaves a --- pair inside a blockquote alone', () => {
+    const { doc } = render('> ---\n> title: Secret\n> ---\n>\n> quoted\n');
+    expect(doc.querySelector('.preview-frontmatter')).toBeNull();
+    expect(doc.querySelector('blockquote')).not.toBeNull();
+  });
+
+  // Four spaces makes it an indented code block in CommonMark, and the rule's
+  // own `.trim()` would otherwise discard the indent that says so.
+  it('leaves an indented --- pair as code', () => {
+    const { doc } = render('    ---\n    title: X\n    ---\n');
+    expect(doc.querySelector('.preview-frontmatter')).toBeNull();
+    expect(doc.querySelector('pre code')).not.toBeNull();
+  });
+
   it('renders a metadata card rather than hiding the block', () => {
     const { doc } = render('---\ntitle: A Post\ndate: 2026-01-01\n---\n\nBody\n');
     const card = doc.querySelector('.preview-frontmatter');
