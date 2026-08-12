@@ -9,9 +9,14 @@
  * list.
  */
 import MarkdownIt from 'markdown-it';
+import type { Env } from 'markdown-it';
 import markdownItMark from 'markdown-it-mark';
 import markdownItFootnote from 'markdown-it-footnote';
 import DOMPurify, { type Config } from 'dompurify';
+import { frontMatterPlugin } from './rules/frontmatter';
+import { imagePlugin } from './rules/images';
+import { sourceLinePlugin, type SourceLineEnv } from './rules/sourceline';
+import { taskListPlugin } from './rules/tasklist';
 
 export interface RenderContext {
   /** Absolute directory of the active document, or null when it is unsaved. */
@@ -43,7 +48,14 @@ export interface RenderResult {
 // from `new MarkdownIt(...)` gets the instance type without fighting that.
 const md = new MarkdownIt({ html: true, linkify: false, typographer: false })
   .use(markdownItMark)
-  .use(markdownItFootnote);
+  .use(markdownItFootnote)
+  // Order matters: front matter is a *block* rule and must claim line 0 before
+  // anything else looks at it; source lines is a *core* rule pushed last so it
+  // sees the final token stream, task list included.
+  .use(frontMatterPlugin)
+  .use(taskListPlugin)
+  .use(imagePlugin)
+  .use(sourceLinePlugin);
 
 // Not `as const`: DOMPurify's `Config.FORBID_TAGS`/`FORBID_ATTR` are typed as
 // mutable `string[]`, which a `readonly [...]` tuple doesn't satisfy.
@@ -98,10 +110,20 @@ purifier.addHook('uponSanitizeElement', (currentNode) => {
  * constraint; they are separate mechanisms with separate tests.
  */
 export function renderMarkdown(text: string, ctx: RenderContext): RenderResult {
-  void ctx; // Task 3's image rule is the first consumer.
-  const rendered = md.render(text);
+  // `env` is markdown-it's per-render channel. Passing the context through it
+  // rather than rebuilding `md` keeps the parser instance stateless and
+  // reusable across documents.
+  //
+  // Typed `Env & RenderContext & SourceLineEnv`, not just the latter two:
+  // markdown-it@15's own `Env` type (unlike @types/markdown-it@14's `any`)
+  // declares an index signature, and a value typed only `RenderContext &
+  // SourceLineEnv` doesn't structurally satisfy that when passed through a
+  // variable rather than as a fresh object literal. The intersection keeps
+  // `md.render`'s argument well-typed without a cast.
+  const env: Env & RenderContext & SourceLineEnv = { ...ctx };
+  const rendered = md.render(text, env);
   const html = purifier.sanitize(rendered, PURIFY_CONFIG);
-  return { html, anchors: [] };
+  return { html, anchors: env.anchors ?? [] };
 }
 
 /** Test-only: the instance the hook is registered on. */
