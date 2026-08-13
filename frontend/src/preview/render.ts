@@ -13,6 +13,7 @@ import type { Env } from 'markdown-it';
 import markdownItMark from 'markdown-it-mark';
 import markdownItFootnote from 'markdown-it-footnote';
 import DOMPurify, { type Config } from 'dompurify';
+import { highlightCode } from './codehighlight';
 import { frontMatterPlugin } from './rules/frontmatter';
 import { imagePlugin } from './rules/images';
 import { sourceLinePlugin, type SourceLineEnv } from './rules/sourceline';
@@ -46,7 +47,23 @@ export interface RenderResult {
 // as the *constructor* (`MarkdownItConstructor`), so the bare name isn't a
 // usable type through a default import here ("refers to a value"). Inferring
 // from `new MarkdownIt(...)` gets the instance type without fighting that.
-const md = new MarkdownIt({ html: true, linkify: false, typographer: false })
+const md = new MarkdownIt({
+  html: true,
+  linkify: false,
+  typographer: false,
+  /**
+   * Returning `''` tells markdown-it to escape and wrap the code itself,
+   * which is exactly the right fallback for a grammar that has not loaded --
+   * markdown-it@15's fence renderer does `highlight(...) || escapeHtml(content)`.
+   * A non-empty return is inserted raw inside `<pre><code>`, so it must
+   * already be escaped; `highlightCode` does that.
+   *
+   * An infoless fence arrives here with `lang === ''`, which `highlightCode`
+   * already answers with `null`; there is no guard for it because a guard
+   * would be a second, untested opinion about the same case.
+   */
+  highlight: (code, lang) => highlightCode(code, lang) ?? '',
+})
   .use(markdownItMark)
   .use(markdownItFootnote)
   // Order matters: front matter is a *block* rule and must claim line 0 before

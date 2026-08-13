@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { LanguageDescription } from '@codemirror/language';
+import { MARKDOWN_CODE_LANGUAGES } from '../editor/languages';
 import { purifierForTests, renderMarkdown } from './render';
 
 /** Parses the rendered HTML so assertions are about structure, not substrings. */
@@ -43,6 +45,58 @@ describe('renderMarkdown', () => {
     expect(doc.body.innerHTML).not.toContain('secret');
     expect(doc.body.textContent).toContain('before');
     expect(doc.body.textContent).toContain('after');
+  });
+});
+
+/**
+ * Fenced code is coloured by `codehighlight.ts`, reached through markdown-it's
+ * `highlight` constructor option. These two tests are here rather than only in
+ * `codehighlight.test.ts` because that file exercises `highlightCode`
+ * directly: deleting the `highlight` option from `render.ts` altogether leaves
+ * it entirely green while the preview renders every fence colourless.
+ */
+describe('fenced code blocks', () => {
+  it('leaves a language whose grammar has not loaded as escaped plain code', () => {
+    // `brainfuck` is in language-data and nothing in this file loads it -- and
+    // `<` and `>` happen to be two of its eight instructions, so the same
+    // fence checks that the unhighlighted path still escapes.
+    const doc = render('```brainfuck\n+<script>alert(1)</script>+\n```\n');
+    const code = doc.querySelector('pre code');
+    expect(code).not.toBeNull();
+    expect(code!.querySelector('span')).toBeNull();
+    expect(doc.querySelector('script')).toBeNull();
+    expect(code!.textContent).toBe('+<script>alert(1)</script>+\n');
+  });
+
+  it('leaves a fence with no info string as escaped plain code', () => {
+    // `highlight` is handed `''` for these, and `highlightCode` answers null
+    // for it -- there is no separate guard in `render.ts`, so this is what
+    // pins that behaviour.
+    const doc = render('```\n<b>&amp;</b>\n```\n');
+    const code = doc.querySelector('pre code');
+    expect(code).not.toBeNull();
+    expect(code!.querySelector('span')).toBeNull();
+    expect(code!.querySelector('b')).toBeNull();
+    expect(code!.textContent).toBe('<b>&amp;</b>\n');
+  });
+
+  it('colours a fence whose grammar has loaded', async () => {
+    const javascript = LanguageDescription.matchLanguageName(
+      MARKDOWN_CODE_LANGUAGES,
+      'javascript',
+      true,
+    );
+    expect(javascript).not.toBeNull();
+    await javascript!.load();
+
+    // `js` rather than `javascript`: the fence info string is what an author
+    // actually types, and markdown-it hands it over verbatim.
+    const doc = render("```js\nconst s = 'str';\n```\n");
+    const code = doc.querySelector('pre code');
+    expect(code).not.toBeNull();
+    expect(code!.querySelectorAll('span').length).toBeGreaterThan(0);
+    // Spans or not, the source survives byte for byte.
+    expect(code!.textContent).toBe("const s = 'str';\n");
   });
 });
 
