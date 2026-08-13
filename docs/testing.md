@@ -181,3 +181,31 @@ real keyboard proves the real path.
       both end up bulleted, rather than the marker alternating.
 - [ ] With `- [x] done` selected alongside a plain line, apply Bullet list and
       confirm the checkbox survives.
+
+## Checkpoint F — local image serving (Task 4)
+
+Automation covers the traversal rejections; these are the ones it cannot reach.
+
+- [ ] **Symlink escape is accepted, by design.** Put a symlink inside a
+      document's folder pointing at an image outside it, reference it from the
+      document, and confirm the preview shows it. Containment is decided
+      lexically — `filepath.EvalSymlinks` on every request costs a syscall per
+      image and fails for paths that do not exist yet. The residual exposure is
+      "displays a local image you did not expect": there is no network to send
+      it anywhere (SPEC §2.1), and the extension allow-list keeps it to images.
+      **If that trade ever stops being acceptable, `internal/app/assets.go` is
+      the one place to change.**
+- [ ] **A document saved at a drive root** (`C:\notes.md`) still shows its
+      images. `C:` alone is drive-relative on Windows and resolves against the
+      process working directory; the separator is what makes it absolute.
+- [ ] **Save As into a different folder**, then confirm relative images still
+      resolve. This is the one path that changes the document's folder without
+      changing which document is active.
+- [ ] **An image with a non-ASCII or spaced filename** (`café.png`,
+      `my pic.png`) loads. Percent-encoding is applied exactly once; encoding
+      twice makes every such file 404.
+- [ ] **An `.svg` referenced as a link rather than an image** does not run
+      script. The handler sends `Content-Security-Policy: default-src 'none';
+      sandbox` and `X-Content-Type-Options: nosniff` for exactly this — an SVG
+      is a document, and `index.html`'s CSP is a `<meta>` tag that does not
+      apply to a page the webview navigates to.

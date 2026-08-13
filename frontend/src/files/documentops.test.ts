@@ -544,6 +544,27 @@ describe('publishing the active document directory to the asset handler', () => 
     expect(SetActiveDocumentDir).toHaveBeenCalledWith('');
   });
 
+  // A document saved at a drive root. `C:` alone is drive-*relative* on
+  // Windows: Go would resolve images against the process working directory
+  // and every containment check would still pass -- measured serving a file
+  // from the wrong folder. The separator is what makes it absolute.
+  it.each([
+    [
+      'a Windows drive root',
+      'C:' + String.fromCharCode(92) + 'post.md',
+      'C:' + String.fromCharCode(92),
+    ],
+    ['a POSIX root', '/post.md', '/'],
+  ])('keeps the separator for %s', (_label, filePath, expected) => {
+    const doc = cleanDoc('a', 'text');
+    doc.filePath = filePath;
+    store.setState((prev) => ({ ...prev, documents: [doc] }));
+
+    switchToDocument('a');
+
+    expect(SetActiveDocumentDir).toHaveBeenCalledWith(expected);
+  });
+
   it('handles a forward-slash path as well as a backslash one', () => {
     const doc = cleanDoc('a', 'text');
     doc.filePath = '/home/user/notes/post.md';

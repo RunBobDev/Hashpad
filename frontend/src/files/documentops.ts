@@ -43,9 +43,26 @@ export interface FileContentsLike {
  * Fire-and-forget: a failure here means local images do not load, which the
  * preview already renders as a placeholder. It must never block a tab switch.
  */
+export function documentDirOf(filePath: string | null): string {
+  if (filePath === null) return '';
+
+  const cut = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'));
+  // No separator at all: a bare filename has no directory to resolve against.
+  // The dialogs always return absolute paths, so this is defensive.
+  if (cut === -1) return '';
+
+  // `C:\post.md` must give `C:\`, not `C:`. A bare drive letter is a
+  // *drive-relative* path on Windows, so `filepath.Join("C:", "x.png")` yields
+  // `C:x.png`, which the OS resolves against the process working directory --
+  // measured serving a file from the repo folder rather than the document's.
+  // Keeping the separator makes it absolute. `/post.md` needs the same
+  // treatment for the same reason on the Linux build.
+  const dir = filePath.slice(0, cut);
+  return dir === '' || /^[A-Za-z]:$/.test(dir) ? filePath.slice(0, cut + 1) : dir;
+}
+
 export function publishActiveDocumentDir(filePath: string | null): void {
-  const dir = filePath === null ? '' : filePath.replace(/[\\/][^\\/]*$/, '');
-  void SetActiveDocumentDir(dir);
+  void SetActiveDocumentDir(documentDirOf(filePath));
 }
 
 /** Mints an untitled document with a real `EditorState`, ready to become a new tab. */

@@ -58,6 +58,54 @@ func TestAssetHandler(t *testing.T) {
 	}
 }
 
+// A drive-relative directory is the shape a document saved at a drive root
+// produces, and it is not merely refused-out-of-caution: filepath.Join("C:",
+// "x.png") yields "C:x.png", which the OS resolves against the process working
+// directory, while filepath.Rel("C:", "C:x.png") returns "x.png" so every
+// containment check below still passes. Measured before the guard: a request
+// served a file from the repository folder rather than the document's.
+func TestAssetHandlerRejectsARelativeDirectory(t *testing.T) {
+	for _, dir := range []string{"C:", "relative/dir", "."} {
+		t.Run(dir, func(t *testing.T) {
+			a := New()
+			a.SetActiveDocumentDir(dir)
+			req := httptest.NewRequest(http.MethodGet, assetRoute+"?path=pic.png", nil)
+			rec := httptest.NewRecorder()
+			AssetHandler(a).ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("dir %q: got %d, want %d", dir, rec.Code, http.StatusForbidden)
+			}
+		})
+	}
+}
+
+// An SVG is a document, not just a picture, and it is served from the app's own
+// origin. index.html's CSP is a <meta> tag, which does not apply to a page the
+// webview navigates to -- so these headers are what stop a linked
+// `evil.svg` running script where Wails' bound methods are reachable.
+func TestAssetHandlerSendsSecurityHeaders(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pic.svg"), []byte("<svg/>"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	a := New()
+	a.SetActiveDocumentDir(dir)
+
+	req := httptest.NewRequest(http.MethodGet, assetRoute+"?path=pic.svg", nil)
+	rec := httptest.NewRecorder()
+	AssetHandler(a).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "default-src 'none'; sandbox" {
+		t.Errorf("CSP: got %q", got)
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("nosniff: got %q", got)
+	}
+}
+
 func TestAssetHandlerWithNoActiveDocument(t *testing.T) {
 	a := New()
 	a.SetActiveDocumentDir("")

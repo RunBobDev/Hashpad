@@ -51,6 +51,15 @@ func (a *App) activeDocumentDir() string {
 // This is the one place path traversal is rejected (design §5.7). Every check
 // below is lexical and runs before any filesystem access.
 //
+// **Symlinks are a deliberate non-goal.** Containment is decided lexically, so
+// a symlink *inside* the document's directory pointing outside it resolves and
+// is served. The alternative, filepath.EvalSymlinks on every request, costs a
+// syscall per image and fails for paths that do not exist yet. The residual
+// exposure is "displays a local image the user did not expect" -- there is no
+// network to send it anywhere (SPEC §2.1), and the extension allow-list keeps
+// it to images. Recorded in docs/testing.md as a manual check rather than left
+// implicit.
+//
 // A package-level function taking *App, not a method on *App. Wails binds
 // every exported method of any struct passed to options.App.Bind, with no
 // per-method opt-out -- confirmed against wails v2.13.0's internal/binding:
@@ -80,6 +89,19 @@ func AssetHandler(a *App) http.Handler {
 			return
 		}
 
+		// The directory must be absolute, and this is not belt-and-braces.
+		// `C:` is a *drive-relative* path on Windows -- filepath.Join("C:",
+		// "x.png") gives "C:x.png", which the OS resolves against the process
+		// working directory, and filepath.Rel("C:", "C:x.png") returns
+		// "x.png", so every containment check below passes while the file
+		// served comes from somewhere else entirely. Measured: with dir set to
+		// "C:", a request returned a file from the repository directory. A
+		// document saved at a drive root produces exactly that string.
+		if !filepath.IsAbs(dir) {
+			http.Error(w, "", http.StatusForbidden)
+			return
+		}
+
 		// Normalise separators first: a document written on Windows may use
 		// backslashes, and filepath.Clean on Linux would treat `..\x` as one
 		// filename rather than a traversal.
@@ -87,9 +109,14 @@ func AssetHandler(a *App) http.Handler {
 		// No test on this machine distinguishes this line, and that is a
 		// property of the platform rather than a gap in coverage: on Windows
 		// filepath.Clean already understands a backslash, so the traversal
-		// cases below are caught with or without it. It is load-bearing only
-		// on Linux, which this project cross-compiles for and does not run
-		// tests on. Deleting it here would look free and break the port.
+		// cases below are caught with or without it.
+		//
+		// This is a **compatibility** measure, not a security one -- an
+		// earlier version of this comment implied otherwise. On Linux a
+		// backslash is an ordinary filename character, so `..\outside.png`
+		// there is one filename inside `dir` and simply 404s, which is safe.
+		// What the line buys is that a Windows-authored `assets\pic.png`
+		// resolves on the Linux build instead of 404ing.
 		rel = strings.ReplaceAll(rel, `\`, "/")
 
 		// A volume name means the path is anchored somewhere other than `dir`.
@@ -100,14 +127,21 @@ func AssetHandler(a *App) http.Handler {
 			return
 		}
 
-		// A cheap early-out, and deliberately redundant: every input it rejects
-		// is also rejected by the containment check below, so no test can tell
-		// the two apart -- verified by deleting this block and watching the
-		// suite stay green. It stays because this is a security boundary and
-		// the two are independent mechanisms: this one is a string comparison,
-		// that one trusts filepath.Rel's semantics. If the redundancy ever has
-		// to go, delete *this* block, not the check below -- that one is what
-		// the tests actually exercise.
+		// This and the containment check below are **mutually** redundant, and
+		// no test distinguishes either one: deleting this block leaves the
+		// suite green, and so does deleting that one. Measured both ways,
+		// twice -- two earlier versions of this comment each nominated one of
+		// them as "the one the tests exercise" and both were wrong.
+		//
+		// They are kept anyway, and the reason is not superstition: this is a
+		// security boundary, and the two are independent mechanisms. This one
+		// is a string comparison over a cleaned path; that one delegates to
+		// filepath.Rel's notion of containment. A bug in either is unlikely to
+		// be a bug in both. If the redundancy ever has to go, either may be
+		// deleted -- but the guards above must stay, because with them in
+		// place `clean` is always relative, volume-free and not `..`-prefixed,
+		// which is why neither of these two can be reached with a hostile
+		// input in the first place.
 		clean := filepath.Clean(rel)
 		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			http.Error(w, "", http.StatusForbidden)
@@ -121,16 +155,33 @@ func AssetHandler(a *App) http.Handler {
 
 		full := filepath.Join(dir, clean)
 
-		// The containment check, and the one that actually does the work:
-		// deleting the lexical block above leaves every traversal case still
-		// failing here. Named honestly rather than as "belt and braces",
-		// because a reader deciding which of the two to simplify away needs to
-		// know which one is load-bearing.
+		// The second of the two redundant containment checks -- see the comment
+		// above the lexical one for why both are here and why neither is
+		// individually tested.
 		inside, err := filepath.Rel(dir, full)
 		if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
 			http.Error(w, "", http.StatusForbidden)
 			return
 		}
+
+		// These two headers matter because of one entry in the allow-list.
+		// An `.svg` is a document, not just a picture: served at the app's own
+		// origin it can carry script, and `index.html`'s CSP is a `<meta>`
+		// tag, which does not apply to a document the webview *navigates to*.
+		// Once the preview pane lands, a link is a plain `<a href>` that
+		// DOMPurify keeps by design, so `[x](/__hashpad/asset?path=evil.svg)`
+		// in an untrusted document would be a top-level navigation to
+		// attacker-authored content at an origin where Wails' runtime -- and
+		// therefore every bound method -- is reachable. Wails' own asset
+		// server sets no security headers either (checked v2.13.0: it sets
+		// Content-Type and nothing else).
+		//
+		// `sandbox` with no allow-list denies script, plugins and same-origin
+		// alike; `nosniff` stops a mislabelled file being re-interpreted.
+		// Neither affects an `<img>`, which is the only thing this route
+		// exists to serve.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		http.ServeFile(w, r, full)
 	})
