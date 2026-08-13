@@ -12,7 +12,7 @@
  * asked about rather than whatever happens to be on screen.
  */
 import { EditorState } from '@codemirror/state';
-import { ReadFile } from '../../wailsjs/go/app/App';
+import { ReadFile, SetActiveDocumentDir } from '../../wailsjs/go/app/App';
 import { buildExtensions, publishActiveFormats } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
@@ -32,6 +32,20 @@ export interface FileContentsLike {
   content: string;
   encoding: string;
   lineEnding: string;
+}
+
+/**
+ * Keeps Go's asset handler pointed at the active document's folder, which is
+ * what relative image paths in the preview resolve against (design §5.7). An
+ * unsaved document has no folder, and the empty string is how the handler is
+ * told to refuse everything.
+ *
+ * Fire-and-forget: a failure here means local images do not load, which the
+ * preview already renders as a placeholder. It must never block a tab switch.
+ */
+export function publishActiveDocumentDir(filePath: string | null): void {
+  const dir = filePath === null ? '' : filePath.replace(/[\\/][^\\/]*$/, '');
+  void SetActiveDocumentDir(dir);
 }
 
 /** Mints an untitled document with a real `EditorState`, ready to become a new tab. */
@@ -110,6 +124,12 @@ export function switchToDocument(id: string): void {
     // `syncActiveDocument`, it needs to. Without this the toolbar keeps
     // showing the outgoing document's active formatting until the user types.
     publishActiveFormats(view.state);
+
+    // Same reasoning again: Go's asset handler (design §5.7) must track
+    // whichever document is now on screen, and this is the one place every
+    // caller of this function -- new tab, tab-bar click, Ctrl+Tab, a tab
+    // closing into whatever is next -- funnels through.
+    publishActiveDocumentDir(incoming.filePath);
   }
 }
 

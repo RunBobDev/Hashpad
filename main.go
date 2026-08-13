@@ -34,6 +34,11 @@ func main() {
 		Height: 700,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
+			// Relative image paths in the preview resolve here (design §5.7).
+			// Wails calls this for any GET the embedded assets cannot serve.
+			// app.AssetHandler is a package-level function, not a bound
+			// method -- see its doc comment for why that distinction matters.
+			Handler: app.AssetHandler(application),
 		},
 		// SPEC §6.1 draws the menu bar and window controls on one row, which a
 		// native OS frame/menu cannot do, so the window is frameless and the

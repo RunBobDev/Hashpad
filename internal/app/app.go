@@ -30,6 +30,12 @@ type App struct {
 	// mutex; see showWindowEventually.
 	windowMu    sync.Mutex
 	windowShown bool
+
+	// assets is the active document's directory, as seen by AssetHandler
+	// (assets.go). No initialisation needed -- the zero value is an unlocked
+	// mutex and an empty directory, which is the correct "no active document"
+	// state.
+	assets assetState
 }
 
 // New creates the application struct.

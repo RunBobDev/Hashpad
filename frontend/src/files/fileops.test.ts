@@ -1,9 +1,28 @@
 import { EditorState } from '@codemirror/state';
-import { describe, expect, it, vi } from 'vitest';
-import { store } from '../state/appcontext';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setEditorView, store } from '../state/appcontext';
+import type { EditorView } from '@codemirror/view';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
 import type { SaveChoice } from '../ui/confirmdialog';
-import { displayName, markSaved, resolveDocumentsBeforeQuit, windowTitle } from './fileops';
+import {
+  displayName,
+  markSaved,
+  resolveDocumentsBeforeQuit,
+  saveDocumentAs,
+  windowTitle,
+} from './fileops';
+import { SetActiveDocumentDir, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
+
+vi.mock('../../wailsjs/go/app/App', () => ({
+  ConfirmQuit: vi.fn(),
+  LoadSettings: vi.fn(),
+  ReadFile: vi.fn(),
+  SaveSettings: vi.fn(),
+  SetActiveDocumentDir: vi.fn(),
+  ShowOpenDialog: vi.fn(),
+  ShowSaveDialog: vi.fn(),
+  WriteFile: vi.fn(),
+}));
 
 function docWith(overrides: Partial<Document>): Document {
   const base = createUntitledDocument(EditorState.create({ doc: 'hello' }));
@@ -224,5 +243,67 @@ describe('resolveDocumentsBeforeQuit', () => {
     await resolveDocumentsBeforeQuit(docs, prompt, save);
 
     expect(seen).toEqual(['a.md', 'b.md']);
+  });
+});
+
+/**
+ * Save As is the one way the active document's folder changes without the
+ * active document changing, so it is the one path `switchToDocument` does not
+ * cover. Getting it wrong leaves Go's asset handler pointed at the old folder
+ * and every relative image in the preview 404s — silently, because a broken
+ * image looks the same as one that was never there.
+ */
+describe('save-as re-points the asset handler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(WriteFile).mockResolvedValue(undefined as never);
+    // `currentText` reads the live view's document for the *active* tab, so
+    // one has to exist. A stub rather than a real EditorView keeps this file
+    // in the node environment: the whole rest of it tests pure functions, and
+    // opting the file into jsdom to satisfy one field would slow every one of
+    // them. `.state.doc` is all `currentText` touches.
+    const stub = { state: { doc: EditorState.create({ doc: 'hello' }).doc } };
+    setEditorView(stub as unknown as EditorView);
+  });
+
+  function seed(activeId: string | null, docs: Document[]): void {
+    store.setState(() => ({
+      documents: docs,
+      activeDocumentId: activeId,
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+      pinnedToolbarCommands: [],
+    }));
+  }
+
+  it('publishes the new folder when the saved document is the active one', async () => {
+    const doc = cleanDoc({ id: 'a' });
+    seed('a', [doc]);
+    vi.mocked(ShowSaveDialog).mockResolvedValue('D:\\elsewhere\\moved.md');
+
+    await saveDocumentAs('a');
+
+    expect(SetActiveDocumentDir).toHaveBeenCalledWith('D:\\elsewhere');
+  });
+
+  // Saving a background tab must not drag the handler away from the document
+  // actually on screen — the preview is showing that one, not this one.
+  it('leaves the handler alone when a background document is saved', async () => {
+    seed('front', [cleanDoc({ id: 'front' }), cleanDoc({ id: 'back' })]);
+    vi.mocked(ShowSaveDialog).mockResolvedValue('D:\\elsewhere\\moved.md');
+
+    await saveDocumentAs('back');
+
+    expect(SetActiveDocumentDir).not.toHaveBeenCalled();
+  });
+
+  it('publishes nothing when the dialog is cancelled', async () => {
+    seed('a', [cleanDoc({ id: 'a' })]);
+    vi.mocked(ShowSaveDialog).mockResolvedValue('');
+
+    await saveDocumentAs('a');
+
+    expect(SetActiveDocumentDir).not.toHaveBeenCalled();
   });
 });

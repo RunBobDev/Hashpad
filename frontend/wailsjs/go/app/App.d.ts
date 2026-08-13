@@ -10,6 +10,8 @@ export function ReadFile(arg1:string):Promise<app.FileContents>;
 
 export function SaveSettings(arg1:app.Settings):Promise<void>;
 
+export function SetActiveDocumentDir(arg1:string):Promise<void>;
+
 export function ShowOpenDialog():Promise<Array<string>>;
 
 export function ShowSaveDialog(arg1:string):Promise<string>;
