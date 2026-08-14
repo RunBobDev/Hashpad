@@ -30,8 +30,26 @@ import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
-import { addDocument, documentAtPosition, neighbourId, reorderDocument } from './state/documents';
-import { createUntitledDocument, isDirty, type Document } from './state/document';
+import {
+  activeDocument,
+  addDocument,
+  documentAtPosition,
+  neighbourId,
+  reorderDocument,
+  setViewMode,
+} from './state/documents';
+import {
+  clampSplitRatio,
+  createUntitledDocument,
+  DEFAULT_SPLIT_RATIO,
+  isDirty,
+  type Document,
+} from './state/document';
+// Type-only, so this does not pull preview/pane.ts (and with it markdown-it
+// and DOMPurify) into the entry bundle -- `import type` is erased at compile
+// time. The module itself only ever arrives through the dynamic import in
+// `togglePreview` below.
+import type { PreviewHandle } from './preview/pane';
 import {
   applyAccent,
   applyTheme,
@@ -53,10 +71,20 @@ mountTabBar(root);
 // after `editorArea` is already in the tree, bootstrap passes it as the node
 // to insert before -- appending would drop the formatting row below the
 // editor, at the bottom of the window, since #app is a plain flex column.
+// Since Checkpoint F that node is the split row below, not the editor area
+// inside it -- see the mountToolbar call for what goes wrong otherwise.
+
+// #app is a flex *column*, so the editor and the preview need a flex row of
+// their own to sit side by side. Built at startup whether or not the preview
+// is on: toggling it then only adds and removes two children of this row,
+// rather than restructuring the tree around a live EditorView.
+const editorSplit = document.createElement('div');
+editorSplit.className = 'editor-split';
+root.append(editorSplit);
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
-root.append(editorArea);
+editorSplit.append(editorArea);
 
 // Starts light; bootstrap() below replaces this the moment settings and the
 // system preference are known, before the (still-hidden) window shows.
@@ -103,6 +131,7 @@ function isThemeMode(value: string): value is ThemeMode {
 async function bootstrap(): Promise<void> {
   let toolbarVisible = true;
   let pinnedCommands: string[] = [...DEFAULT_PINNED];
+  let splitRatio = DEFAULT_SPLIT_RATIO;
 
   try {
     const settings = await LoadSettings();
@@ -134,11 +163,20 @@ async function bootstrap(): Promise<void> {
     // drops what it doesn't recognise and falls back to DEFAULT_PINNED only
     // when the value isn't even an array of strings.
     pinnedCommands = validatePinned(settings.toolbar.pinned);
+    // Same treatment as the pinned list above, and for the same reason: this
+    // is a hand-editable file, so the value is validated rather than trusted.
+    // Read last in this block deliberately -- anything that threw here would
+    // cost the theme and the toolbar their settings too.
+    splitRatio = clampSplitRatio(settings.window.previewSplitRatio);
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
   } finally {
-    store.setState((prev) => ({ ...prev, pinnedToolbarCommands: pinnedCommands }));
+    store.setState((prev) => ({
+      ...prev,
+      pinnedToolbarCommands: pinnedCommands,
+      previewSplitRatio: splitRatio,
+    }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog, and MenuItem has no checkmark
     // support to render its state honestly in the meantime.
@@ -149,7 +187,11 @@ async function bootstrap(): Promise<void> {
     // `insertBefore` throws NotFoundError if handed a node that is not a
     // child of `root`, so this one call is worth its own guard.
     try {
-      if (toolbarVisible) mountToolbar(root!, pinnedCommands, editorArea);
+      // Inserted before `editorSplit`, not `editorArea`: the editor area is a
+      // child of the split row now, and `insertBefore` throws NotFoundError
+      // for a node that is not a child of `root` -- which is precisely the
+      // throw the guard around this call was written for.
+      if (toolbarVisible) mountToolbar(root!, pinnedCommands, editorSplit);
     } catch (err) {
       console.error('hashpad: failed to mount the toolbar; continuing without it', err);
     }
@@ -243,6 +285,78 @@ async function setToolbarPinned(commandId: string, pinned: boolean): Promise<voi
   } catch (err) {
     console.error('hashpad: failed to persist the toolbar layout', err);
   }
+}
+
+/**
+ * The preview pane, once it has ever been asked for. Lazy per design §2.4: the
+ * pane is off by default, so markdown-it, DOMPurify and everything under
+ * `preview/` cost nothing at startup -- and the handle is cached so the second
+ * Ctrl+Shift+P does not re-import.
+ */
+let previewHandle: PreviewHandle | null = null;
+
+/**
+ * `viewMode` is per *document*, so the one shared pane has to follow whichever
+ * document is on screen -- not just whichever one was toggled. Without this,
+ * switching from a split-mode tab to a source-mode one leaves the pane open
+ * still showing the tab you just left: the pane's own render is skipped for a
+ * document that is not in split mode (preview/pane.ts), so the outgoing
+ * document's HTML simply stays there. The plan does not mention this; it falls
+ * straight out of putting the mode on the document.
+ *
+ * Registered unconditionally at startup, but inert until the first
+ * Ctrl+Shift+P has actually loaded the pane -- a `null` handle costs one
+ * comparison per active-document change.
+ */
+store.subscribe(
+  (state) => activeDocument(state)?.viewMode ?? null,
+  (mode) => {
+    if (previewHandle === null) return;
+    if (mode === 'split') previewHandle.show();
+    else previewHandle.hide();
+  },
+);
+
+/**
+ * Ctrl+Shift+P / View > Preview.
+ *
+ * `setViewMode` runs *before* `show()`, which is not arbitrary: it is the
+ * store write above that opens the pane and renders it, and the explicit
+ * `show()` that follows is then a no-op. Doing it the other way round would
+ * show an empty pane -- the pane skips rendering a document that is not yet
+ * in split mode -- until the user's next keystroke.
+ *
+ * The outgoing mode is handed to `setViewMode` as `remember` only on the way
+ * in, so toggling off restores `'live'` for a document that was in live mode
+ * rather than downgrading it to source.
+ */
+async function togglePreview(): Promise<void> {
+  const active = activeDocument(store.getState());
+  if (active === null) return;
+
+  // Copied into a local before the await below: TypeScript discards a
+  // narrowing of `active.viewMode` across it, and this also pins the mode to
+  // what it was when the toggle was pressed rather than whatever it is by the
+  // time the dynamic import resolves.
+  const mode = active.viewMode;
+
+  // Neither branch calls `show()`/`hide()` itself. The subscription above is
+  // registered at module load and reacts to exactly this `viewMode` write, so
+  // it has already done it by the time `setState` returns -- and it is also
+  // what handles the tab switches this function never sees. Calling it here as
+  // well would be two paths owning the same effect, with the second a silent
+  // no-op that reads as if it were doing the work.
+  if (mode === 'split') {
+    store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
+    return;
+  }
+
+  // Imported before the state write, so the subscription has a handle to call
+  // `show()` on when it fires.
+  if (!previewHandle) {
+    previewHandle = (await import('./preview/pane')).mountPreview(editorSplit);
+  }
+  store.setState((prev) => setViewMode(prev, active.id, 'split', mode));
 }
 
 // There is no OS-level watcher (see internal/app/theme.go), so this is how a
@@ -394,6 +508,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       if (previousId !== null) switchToDocument(previousId);
       break;
     }
+    case 'view.preview':
+      void togglePreview();
+      break;
     case 'theme.system':
       void setThemeMode('system');
       break;

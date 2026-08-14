@@ -36,5 +36,8 @@ export default defineConfig({
     // including the pure ones that never needed it.
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Polyfills the two `Range` methods jsdom omits and CodeMirror's measure
+    // phase calls. Inert under the `node` environment above -- see the file.
+    setupFiles: ['./src/test-setup.ts'],
   },
 });

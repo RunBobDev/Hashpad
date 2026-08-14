@@ -62,6 +62,8 @@ vi.mock('../wailsjs/go/app/App', () => ({
   // which is what pins DEFAULT_PINNED to this exact list.
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
+    // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
+    window: { previewSplitRatio: 0.5 },
     toolbar: {
       visible: true,
       pinned: [
@@ -111,6 +113,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     closedPaths,
     activeFormats: '',
     pinnedToolbarCommands: [],
+    previewSplitRatio: 0.5,
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);

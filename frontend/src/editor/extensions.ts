@@ -164,6 +164,7 @@ export function buildExtensions(isDark: boolean): Extension[] {
         { key: 'Mod-n', run: dispatchCommand('file.new') },
         { key: 'Mod-w', run: dispatchCommand('tab.close') },
         { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },
+        { key: 'Mod-Shift-p', run: dispatchCommand('view.preview') },
         // Ctrl-Tab/Ctrl-Shift-Tab, spelled with the literal Ctrl- modifier
         // rather than Mod-, because SPEC §6.2 fixes this as a Windows-style
         // chord on every platform, not "whatever this OS calls its primary

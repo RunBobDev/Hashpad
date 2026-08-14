@@ -160,7 +160,7 @@ const MENUS: Menu[] = [
       { id: 'theme.system', label: 'Theme: Follow System', enabled: true },
       { id: 'theme.light', label: 'Theme: Light', enabled: true },
       { id: 'theme.dark', label: 'Theme: Dark', enabled: true },
-      { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: false },
+      { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: true },
       { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: false },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: false },
       { id: 'view.fullscreen', label: 'Full Screen', shortcut: 'F11', enabled: false },

@@ -71,6 +71,7 @@ beforeEach(() => {
     closedPaths: [],
     activeFormats: '',
     pinnedToolbarCommands: [],
+    previewSplitRatio: 0.5,
   }));
   vi.clearAllMocks();
 });
@@ -139,6 +140,7 @@ describe('switchToDocument', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -157,6 +159,7 @@ describe('switchToDocument', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -175,6 +178,7 @@ describe('switchToDocument', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -196,6 +200,7 @@ describe('switchToDocument', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -220,6 +225,7 @@ describe('switchToDocument', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
@@ -245,6 +251,7 @@ describe('openDocumentInNewTab', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -279,6 +286,7 @@ describe('openDocumentInNewTab', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -300,6 +308,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(b.editorState);
 
@@ -319,6 +328,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -337,6 +347,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
@@ -358,6 +369,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
@@ -378,6 +390,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -403,6 +416,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -432,6 +446,7 @@ describe('closeDocumentWithPrompt', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -458,6 +473,7 @@ describe('reopenLastClosed', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
 
@@ -476,6 +492,7 @@ describe('reopenLastClosed', () => {
       closedPaths: ['C:\\notes\\b.md'],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -502,6 +519,7 @@ describe('reopenLastClosed', () => {
       closedPaths: ['C:\\notes\\gone.md'],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));

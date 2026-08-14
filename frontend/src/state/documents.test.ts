@@ -10,6 +10,7 @@ import {
   neighbourId,
   REOPEN_STACK_LIMIT,
   reorderDocument,
+  setViewMode,
   takeReopenPath,
 } from './documents';
 
@@ -30,6 +31,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     closedPaths: [],
     activeFormats: '',
     pinnedToolbarCommands: [],
+    previewSplitRatio: 0.5,
   };
 }
 
@@ -237,6 +239,39 @@ describe('takeReopenPath', () => {
     const before: AppState = { ...stateWith([doc('a')]), closedPaths: ['b.md', 'a.md'] };
     takeReopenPath(before);
     expect(before.closedPaths).toEqual(['b.md', 'a.md']);
+  });
+});
+
+describe('setViewMode', () => {
+  it('sets the mode on the named document only', () => {
+    const next = setViewMode(stateWith([doc('a'), doc('b')]), 'a', 'split');
+    expect(next.documents.map((d) => d.viewMode)).toEqual(['split', 'source']);
+  });
+
+  /**
+   * The whole reason `remember` is a separate argument. Toggling the preview
+   * on records the mode being interrupted; toggling it off must not overwrite
+   * that record with 'split', or a document that was in live mode comes back
+   * as source and stays there.
+   */
+  it('records the mode to come back to only when asked', () => {
+    const on = setViewMode(stateWith([doc('a')]), 'a', 'split', 'live');
+    expect(on.documents[0]!.previousViewMode).toBe('live');
+
+    const off = setViewMode(on, 'a', 'live');
+    expect(off.documents[0]!.previousViewMode).toBe('live');
+  });
+
+  it('is a no-op for an unknown id', () => {
+    const before = stateWith([doc('a')]);
+    const next = setViewMode(before, 'nope', 'split');
+    expect(next.documents[0]!.viewMode).toBe('source');
+  });
+
+  it('does not mutate the input state', () => {
+    const before = stateWith([doc('a')]);
+    setViewMode(before, 'a', 'split');
+    expect(before.documents[0]!.viewMode).toBe('source');
   });
 });
 

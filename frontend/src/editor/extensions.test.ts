@@ -24,6 +24,7 @@ function resetStore(): void {
     closedPaths: [],
     activeFormats: '',
     pinnedToolbarCommands: [],
+    previewSplitRatio: 0.5,
   }));
 }
 
@@ -180,6 +181,22 @@ describe('tab command keymap', () => {
     press(view, 't', { ctrlKey: true, shiftKey: true });
 
     expect(seen).toEqual(['tab.reopen']);
+
+    stop();
+    view.destroy();
+  });
+
+  // Ctrl+Shift+P is a Chromium chord (it opens the command menu in DevTools),
+  // so like the Ctrl-Tab case below this one has to be consumed, not merely
+  // observed.
+  it('dispatches view.preview on Mod-Shift-p and consumes the key', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = press(view, 'p', { ctrlKey: true, shiftKey: true });
+
+    expect(seen).toEqual(['view.preview']);
+    expect(notHandled).toBe(false);
 
     stop();
     view.destroy();

@@ -114,6 +114,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     closedPaths: [],
     activeFormats: '',
     pinnedToolbarCommands: [],
+    previewSplitRatio: 0.5,
   };
 }
 

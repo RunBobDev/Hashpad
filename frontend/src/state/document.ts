@@ -12,6 +12,12 @@ export interface Document {
   editorState: EditorState;
   savedDoc: Text;
   viewMode: 'source' | 'live' | 'split';
+  /**
+   * The mode to return to when the preview is toggled off. A document opened
+   * under `editor.defaultViewMode: "live"` must come back as `'live'` rather
+   * than being silently downgraded to `'source'`.
+   */
+  previousViewMode: 'source' | 'live';
   encoding: 'utf-8' | 'utf-8-bom' | 'utf-16le';
   lineEnding: 'lf' | 'crlf';
   /**
@@ -58,6 +64,40 @@ export interface AppState {
    * `onTogglePin` callback -- see that function's header comment for why).
    */
   pinnedToolbarCommands: readonly string[];
+  /**
+   * The share of the editor/preview row given to the *preview* pane, 0..1 --
+   * SPEC §6.13's `window.previewSplitRatio`. Same seed-then-persist
+   * arrangement as `pinnedToolbarCommands` above: main.ts's bootstrap seeds it
+   * from settings, and preview/pane.ts's divider writes it back through
+   * `SaveSettings`. It lives here rather than inside the pane so the width
+   * survives a pane that is hidden and shown again, and so the startup path
+   * can hold the value without importing the lazily loaded preview module.
+   */
+  previewSplitRatio: number;
+}
+
+/**
+ * How far the divider may travel. Not 0..1: a pane dragged to nothing is a
+ * pane whose divider the user then has to hunt for, and an editor squeezed to
+ * zero is worse.
+ */
+export const MIN_SPLIT_RATIO = 0.15;
+export const MAX_SPLIT_RATIO = 0.85;
+export const DEFAULT_SPLIT_RATIO = 0.5;
+
+/**
+ * settings.json is hand-editable, so `window.previewSplitRatio` can arrive as
+ * a string, a NaN, or `40` from someone thinking in percent. A non-number
+ * falls back to the compiled-in default -- clamping `"half"` would be
+ * meaningless -- while a finite number out of range is clamped, because `40`
+ * plainly means "as far over as it goes". Same shape of guard as
+ * ui/toolbar.ts's `validatePinned` and theme.ts's `isValidAccent`, and it
+ * lives in this DOM-free model module so main.ts can validate the setting at
+ * bootstrap without pulling in preview/pane.ts (and with it markdown-it).
+ */
+export function clampSplitRatio(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SPLIT_RATIO;
+  return Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, value));
 }
 
 export function isDirty(doc: Document): boolean {
@@ -72,6 +112,7 @@ export function createUntitledDocument(editorState: EditorState): Document {
     editorState,
     savedDoc: editorState.doc,
     viewMode: 'source',
+    previousViewMode: 'source',
     encoding: 'utf-8',
     lineEnding: 'crlf',
     scrollSnapshot: null,

@@ -135,6 +135,34 @@ export function takeReopenPath(state: AppState): { state: AppState; path: string
   return { state: { ...state, closedPaths: rest }, path };
 }
 
+/**
+ * Sets `id`'s view mode. `remember` is the mode to come back to when the
+ * preview is toggled off again, and is passed *only* by the caller turning the
+ * preview on -- that is the one moment the outgoing mode is still known.
+ * Writing it unconditionally would overwrite it with `'split'` on the way back
+ * out and strand a `'live'` document in source mode for the rest of the
+ * session.
+ *
+ * An unknown `id` is a no-op, matching every other function here.
+ */
+export function setViewMode(
+  state: AppState,
+  id: string,
+  mode: Document['viewMode'],
+  remember?: Document['previousViewMode'],
+): AppState {
+  if (!state.documents.some((d) => d.id === id)) return { ...state };
+
+  return {
+    ...state,
+    documents: state.documents.map((doc) =>
+      doc.id === id
+        ? { ...doc, viewMode: mode, previousViewMode: remember ?? doc.previousViewMode }
+        : doc,
+    ),
+  };
+}
+
 /** The currently active document, or null if there is none. */
 export function activeDocument(state: AppState): Document | null {
   return state.documents.find((d) => d.id === state.activeDocumentId) ?? null;

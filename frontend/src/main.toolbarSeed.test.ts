@@ -36,6 +36,8 @@ vi.mock('../wailsjs/go/app/App', () => ({
   ShowWindow: vi.fn(),
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
+    // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
+    window: { previewSplitRatio: 0.5 },
     // Neither of these is in DEFAULT_PINNED (bold, italic, strikethrough,
     // inlineCode, heading, bulletList, numberedList, taskList, link, table).
     toolbar: { visible: true, pinned: ['blockquote', 'footnote'] },
@@ -84,7 +86,7 @@ describe('bootstrap seeding the toolbar from settings', () => {
       'menubar',
       'tabbar',
       'toolbar',
-      'editor-area',
+      'editor-split',
     ]);
   });
 
@@ -102,7 +104,7 @@ describe('bootstrap seeding the toolbar from settings', () => {
       'menubar',
       'tabbar',
       'toolbar',
-      'editor-area',
+      'editor-split',
     ]);
   });
 });

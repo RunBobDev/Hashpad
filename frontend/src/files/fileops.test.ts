@@ -274,6 +274,7 @@ describe('save-as re-points the asset handler', () => {
       closedPaths: [],
       activeFormats: '',
       pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
     }));
   }
 

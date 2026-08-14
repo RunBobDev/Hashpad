@@ -163,6 +163,7 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
     editorState,
     savedDoc: editorState.doc,
     viewMode: 'source',
+    previousViewMode: 'source',
     // FileContentsLike widens Go's Encoding/LineEnding enums to plain
     // `string` (mirrors wailsjs/go/models.ts's widening of app.FileContents),
     // but Go only ever sends one of Document's literal members — the cast

@@ -439,10 +439,64 @@ body {
   background: var(--border);
 }
 
+/* The editor and the preview share one row inside #app's column, so they need
+   a flex row of their own. main.ts builds it at startup whether or not the
+   preview is on, so toggling never restructures the tree. */
+.editor-split {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Both minimums are load-bearing and neither replaces the other: min-height
+   for #app's column (a flex item's default min-height: auto would let the
+   editor's content push the window taller), min-width for .editor-split's row
+   (same rule on the other axis, which is what lets the divider actually shrink
+   this side instead of jamming at the content's intrinsic width). */
 .editor-area {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   background: var(--bg-editor);
+}
+
+.preview-divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--border);
+  /* The frameless window drags from empty chrome; this is not empty chrome. */
+  --wails-draggable: no-drag;
+}
+
+.preview-divider:hover,
+.preview-divider:focus-visible {
+  background: var(--accent);
+}
+
+/* Width comes from an inline flex-basis (preview/pane.ts's applyRatio), which
+   is why the shorthand here fixes grow and shrink at 0 and leaves the basis to
+   be overridden. */
+.preview-pane {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg-editor);
+}
+
+/* What the pane shows when renderMarkdown throws. Deliberately plain and
+   unmissable: it replaces the render, so it must not read as document text. */
+.preview-error {
+  margin: 12px;
+  padding: 8px 12px;
+  /* --bg-danger is the only red either theme defines, and it is a *background*
+     colour: it is the same #c42b1c in light and dark, so it was never picked
+     to be legible as text on the dark editor surface and its contrast there is
+     unmeasured. The red is a border, the text stays --fg-primary, and
+     Checkpoint H's palette work can add a real foreground token. */
+  border-left: 3px solid var(--bg-danger);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  white-space: pre-wrap;
 }
 
 /*

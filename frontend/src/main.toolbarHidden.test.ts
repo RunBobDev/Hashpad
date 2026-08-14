@@ -29,6 +29,8 @@ vi.mock('../wailsjs/go/app/App', () => ({
   ShowWindow: vi.fn(),
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
+    // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
+    window: { previewSplitRatio: 0.5 },
     toolbar: { visible: false, pinned: ['bold'] },
   }),
   ReadFile: vi.fn(),

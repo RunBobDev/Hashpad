@@ -1,6 +1,6 @@
 import type { EditorView } from '@codemirror/view';
 import { createStore, type Store } from './store';
-import type { AppState } from './document';
+import { DEFAULT_SPLIT_RATIO, type AppState } from './document';
 
 /**
  * The single central store (SPEC §5.1) and the one shared `EditorView` live
@@ -30,6 +30,9 @@ export const store: Store<AppState> = createStore<AppState>({
   closedPaths: [],
   activeFormats: '',
   pinnedToolbarCommands: [],
+  // Placeholder, like `pinnedToolbarCommands` above: main.ts's bootstrap
+  // replaces it with the validated `window.previewSplitRatio` from settings.
+  previewSplitRatio: DEFAULT_SPLIT_RATIO,
 });
 
 let editorView: EditorView | undefined;
