@@ -19,12 +19,13 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { confirmSave } from '../ui/confirmdialog';
-import { ReadFile, SetActiveDocumentDir, WriteFile } from '../../wailsjs/go/app/App';
+import { ReadFile, WriteFile } from '../../wailsjs/go/app/App';
 import { buildExtensions } from '../editor/extensions';
 import { getEditorView, setEditorView, store } from '../state/appcontext';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
 import {
   closeDocumentWithPrompt,
+  documentDirOf,
   makeUntitledDocument,
   openDocumentInNewTab,
   reopenLastClosed,
@@ -37,7 +38,6 @@ vi.mock('../../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn(),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
-  SetActiveDocumentDir: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
   WriteFile: vi.fn(),
@@ -535,31 +535,33 @@ describe('reopenLastClosed', () => {
 });
 
 /**
- * Go's asset handler resolves the preview's relative image paths against a
- * directory it is told about over IPC (design §5.7). Nothing in the rendered
- * output reveals whether that directory is right — a stale one just makes
- * every image 404 — so the publishing has to be pinned here rather than
- * noticed later.
+ * The directory Go's asset handler resolves the preview's relative image paths
+ * against (design §5.7). `preview/pane.ts` calls this per render and puts the
+ * answer in the URL, so a wrong answer here is a wrong `dir=` on every image —
+ * and nothing in the rendered output reveals it, because a 404 image looks the
+ * same as one that was never there.
+ *
+ * These used to assert the same answers through a `SetActiveDocumentDir` IPC
+ * call. That call is gone; the answers still matter, so they are asserted on
+ * the function that produces them.
  */
-describe('publishing the active document directory to the asset handler', () => {
-  it('tells Go the folder of the document being switched to', () => {
-    const doc = cleanDoc('a', 'text');
-    doc.filePath = 'C:\\docs\\notes\\post.md';
-    store.setState((prev) => ({ ...prev, documents: [doc] }));
-
-    switchToDocument('a');
-
-    expect(SetActiveDocumentDir).toHaveBeenCalledWith('C:\\docs\\notes');
+describe('documentDirOf', () => {
+  it('returns the folder of a saved document', () => {
+    expect(documentDirOf('C:\\docs\\notes\\post.md')).toBe('C:\\docs\\notes');
   });
 
-  // An untitled buffer has no folder, and the empty string is the handler's
-  // signal to refuse every request rather than resolve against a stale one.
-  it('sends the empty string for a document that has never been saved', () => {
-    store.setState((prev) => ({ ...prev, documents: [cleanDoc('a', 'text')] }));
+  // An untitled buffer has no folder. `pane.ts` maps this empty string to the
+  // `null` that makes rules/images.ts render its placeholder instead of a URL,
+  // and the handler refuses an empty `dir` besides.
+  it('returns the empty string for a document that has never been saved', () => {
+    expect(documentDirOf(null)).toBe('');
+  });
 
-    switchToDocument('a');
-
-    expect(SetActiveDocumentDir).toHaveBeenCalledWith('');
+  // The dialogs always return absolute paths, so this is defensive -- but a
+  // bare filename has no directory, and guessing one would aim the handler at
+  // whatever the process working directory happens to be.
+  it('returns the empty string for a bare filename with no separator', () => {
+    expect(documentDirOf('post.md')).toBe('');
   });
 
   // A document saved at a drive root. `C:` alone is drive-*relative* on
@@ -574,22 +576,10 @@ describe('publishing the active document directory to the asset handler', () => 
     ],
     ['a POSIX root', '/post.md', '/'],
   ])('keeps the separator for %s', (_label, filePath, expected) => {
-    const doc = cleanDoc('a', 'text');
-    doc.filePath = filePath;
-    store.setState((prev) => ({ ...prev, documents: [doc] }));
-
-    switchToDocument('a');
-
-    expect(SetActiveDocumentDir).toHaveBeenCalledWith(expected);
+    expect(documentDirOf(filePath)).toBe(expected);
   });
 
   it('handles a forward-slash path as well as a backslash one', () => {
-    const doc = cleanDoc('a', 'text');
-    doc.filePath = '/home/user/notes/post.md';
-    store.setState((prev) => ({ ...prev, documents: [doc] }));
-
-    switchToDocument('a');
-
-    expect(SetActiveDocumentDir).toHaveBeenCalledWith('/home/user/notes');
+    expect(documentDirOf('/home/user/notes/post.md')).toBe('/home/user/notes');
   });
 });

@@ -21,7 +21,7 @@
  */
 import type { Text } from '@codemirror/state';
 import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
-import { openDocumentInNewTab, publishActiveDocumentDir } from './documentops';
+import { openDocumentInNewTab } from './documentops';
 import type { SaveChoice } from '../ui/confirmdialog';
 import { isDirty, type Document } from '../state/document';
 import { getEditorView, store } from '../state/appcontext';
@@ -191,16 +191,10 @@ export async function saveDocumentAs(id: string): Promise<boolean> {
     ),
   }));
 
-  // Save As can move a document to a different folder, and relative image
-  // paths in the preview resolve against Go's copy of that folder (design
-  // §5.7). Every *other* way the active document changes funnels through
-  // `switchToDocument`, which republishes there -- this is the one path that
-  // changes the directory without changing which document is active, so it
-  // has to say so itself. Only when this document is the active one: saving a
-  // background tab must not re-point the handler away from what is on screen.
-  if (store.getState().activeDocumentId === doc.id) {
-    publishActiveDocumentDir(path);
-  }
+  // The `filePath` write above is all a Save As into a different folder needs:
+  // relative image paths in the preview resolve against a directory
+  // `preview/pane.ts` derives from it on every render (design §5.7). Nothing
+  // is published, so there is nothing here to keep in step.
   return true;
 }
 

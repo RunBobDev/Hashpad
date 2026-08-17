@@ -11,6 +11,11 @@ function render(markdown: string, documentDir: string | null = 'C:\\docs') {
   };
 }
 
+/** The query half of an asset URL, parsed the way Go's `r.URL.Query()` parses it. */
+function assetParams(src: string): URLSearchParams {
+  return new URLSearchParams(src.slice(src.indexOf('?') + 1));
+}
+
 describe('the cross-task and ordering contracts', () => {
   /**
    * The literal route, not the constant.
@@ -42,8 +47,7 @@ describe('the cross-task and ordering contracts', () => {
   ])('encodes %s once, not twice', (_label, markdown, expected) => {
     const { doc } = render(markdown);
     const src = doc.querySelector('img')!.getAttribute('src')!;
-    const query = src.slice(`${ASSET_ROUTE}?path=`.length);
-    expect(decodeURIComponent(query)).toBe(expected);
+    expect(assetParams(src).get('path')).toBe(expected);
   });
 
   /**
@@ -177,8 +181,45 @@ describe('images', () => {
   it('rewrites a relative path to the asset route', () => {
     const { doc } = render('![alt](assets/pic.png)\n');
     const img = doc.querySelector('img');
-    expect(img?.getAttribute('src')).toBe(`${ASSET_ROUTE}?path=assets%2Fpic.png`);
+    expect(img?.getAttribute('src')).toBe(`${ASSET_ROUTE}?dir=C%3A%5Cdocs&path=assets%2Fpic.png`);
     expect(img?.getAttribute('alt')).toBe('alt');
+  });
+
+  /**
+   * Two documents in different folders naming the same file must not share a
+   * URL. When the directory lived in Go and the URL was just the filename they
+   * did, and the webview cache could then hand one document the other's image
+   * for the rest of the session.
+   */
+  it('gives the same filename in two folders two different URLs', () => {
+    const here = render('![a](pic.png)\n', 'C:\\one').doc.querySelector('img')!.getAttribute('src');
+    const there = render('![a](pic.png)\n', 'C:\\two')
+      .doc.querySelector('img')!
+      .getAttribute('src');
+    expect(here).not.toBe(there);
+  });
+
+  /**
+   * The `src` is the only attacker-controlled input on this path, and the
+   * directory now rides in the same query string — so a document could try to
+   * pick its own. It cannot: `encodeURIComponent` escapes `&` and `=`, so the
+   * whole hostile string lands inside `path` as one value and `dir` stays the
+   * real folder. The Go half (that what arrives is then refused) is
+   * TestAssetHandlerRejectsAnInjectedDirectory in internal/app/assets_test.go.
+   */
+  it('cannot have its dir overridden by a hostile src', () => {
+    // A *second* `dir` key is the only shape that could win -- Go's
+    // `Query().Get` takes the first value of a repeated key, so appending to
+    // `path` achieves nothing. Dropping the `encodeURIComponent` around the
+    // path makes this exact assertion report
+    // `[ 'C:\docs', 'C:\Windows' ]`; with it, `&` and `=` are escaped and the
+    // whole string stays one `path` value.
+    const attack = 'foo.png&dir=C:' + String.fromCharCode(92) + 'Windows&path=win.ini';
+    const { doc } = render(`![x](<${attack}>)\n`);
+
+    const params = assetParams(doc.querySelector('img')!.getAttribute('src')!);
+    expect(params.getAll('dir')).toEqual(['C:\\docs']);
+    expect(params.getAll('path')).toEqual([attack]);
   });
 
   it('replaces a remote image with a placeholder showing its URL', () => {

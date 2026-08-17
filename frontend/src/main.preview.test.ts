@@ -38,7 +38,6 @@ vi.mock('../wailsjs/go/app/App', () => ({
   }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
-  SetActiveDocumentDir: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
   SystemThemeIsDark: vi.fn().mockResolvedValue(false),
@@ -49,11 +48,25 @@ function emit(command: string): void {
   document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: command }));
 }
 
-/** The toggle is async (it imports the pane), so every case has to wait. */
+/**
+ * The toggle is async (it imports the pane), so every case has to wait.
+ *
+ * The explicit timeout is not padding. `vi.waitFor` defaults to 1000 ms, and
+ * what this waits on is a dynamic import of the whole preview chunk --
+ * markdown-it, DOMPurify, style-mod and CodeMirror's language data, ~155 kB,
+ * transformed on first use. Alone on an idle machine that lands in ~500 ms; in
+ * a full-suite run competing with 25 other files it has been measured at
+ * 1279 ms, and every `view.preview` case then failed at once with "expected
+ * false to be true". A test whose result depends on how busy the machine is
+ * reports a load average, not a defect.
+ */
 function waitForPane(present: boolean): Promise<void> {
-  return vi.waitFor(() => {
-    expect(document.querySelector('.preview-pane') !== null).toBe(present);
-  });
+  return vi.waitFor(
+    () => {
+      expect(document.querySelector('.preview-pane') !== null).toBe(present);
+    },
+    { timeout: 10_000 },
+  );
 }
 
 /**

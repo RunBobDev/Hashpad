@@ -201,6 +201,18 @@ Automation covers the traversal rejections; these are the ones it cannot reach.
 - [ ] **Save As into a different folder**, then confirm relative images still
       resolve. This is the one path that changes the document's folder without
       changing which document is active.
+- [ ] **Two folders, same filename.** Put a *different* `pic.png` in each of two
+      folders, open a document from each referencing `pic.png`, and switch tabs
+      back and forth several times. Each tab must keep showing its own image.
+      jsdom never issues the `<img>` GET, so no automated test in this repo can
+      reach this: the whole failure lives in when the webview fetches and what
+      it caches. It used to fail both ways — the directory was server-side state
+      set by an async IPC call the render did not wait for, and the two URLs were
+      byte-identical so the cache could pin the wrong answer for the session.
+      The directory now rides in the URL, which is also what makes the two URLs
+      differ. **Also confirm the reverse**: a name that exists in only one of the
+      two folders shows there and shows a broken image in the other, rather than
+      silently showing the other folder's file.
 - [ ] **An image with a non-ASCII or spaced filename** (`café.png`,
       `my pic.png`) loads. Percent-encoding is applied exactly once; encoding
       twice makes every such file 404.

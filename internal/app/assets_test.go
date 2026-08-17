@@ -22,9 +22,7 @@ func TestAssetHandler(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	a := New()
-	a.SetActiveDocumentDir(dir)
-	handler := AssetHandler(a)
+	handler := AssetHandler()
 
 	cases := []struct {
 		name string
@@ -48,13 +46,38 @@ func TestAssetHandler(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/__hashpad/asset?path="+urlEscape(tc.path), nil)
 			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
+			handler.ServeHTTP(rec, assetRequest(dir, tc.path))
 			if rec.Code != tc.want {
 				t.Errorf("path %q: got %d, want %d", tc.path, rec.Code, tc.want)
 			}
 		})
+	}
+}
+
+// The one input an attacker controls is the document's `src`, and it reaches
+// the URL through encodeURIComponent, which escapes `&` and `=` -- so a src of
+// `foo.png&dir=C:\Windows&path=win.ini` arrives whole inside the `path` value
+// instead of adding a second `dir` key.
+//
+// That the escaping holds is asserted where the escaping happens, in
+// preview/rules/rules.test.ts ("cannot have its dir overridden by a hostile
+// src"); asserting it again here would only be testing net/url. This is the
+// other half: what arrives is refused rather than served.
+//
+// It is the extension allow-list that refuses this one, on the trailing
+// `.ini`. Worth knowing where the line actually falls: the same src ending
+// `.png` passes the allow-list and is looked up as a literal filename inside
+// the *real* directory, which on Windows returns 500 rather than 404 because
+// the `:` makes it an illegal name (measured, this machine). Still contained,
+// still nothing served -- but it is the containment checks doing that work,
+// not the allow-list.
+func TestAssetHandlerRejectsAnInjectedDirectory(t *testing.T) {
+	rec := httptest.NewRecorder()
+	AssetHandler().ServeHTTP(rec, assetRequest(t.TempDir(), `foo.png&dir=C:\Windows&path=win.ini`))
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("got %d, want %d", rec.Code, http.StatusForbidden)
 	}
 }
 
@@ -67,11 +90,8 @@ func TestAssetHandler(t *testing.T) {
 func TestAssetHandlerRejectsARelativeDirectory(t *testing.T) {
 	for _, dir := range []string{"C:", "relative/dir", "."} {
 		t.Run(dir, func(t *testing.T) {
-			a := New()
-			a.SetActiveDocumentDir(dir)
-			req := httptest.NewRequest(http.MethodGet, assetRoute+"?path=pic.png", nil)
 			rec := httptest.NewRecorder()
-			AssetHandler(a).ServeHTTP(rec, req)
+			AssetHandler().ServeHTTP(rec, assetRequest(dir, "pic.png"))
 			if rec.Code != http.StatusForbidden {
 				t.Errorf("dir %q: got %d, want %d", dir, rec.Code, http.StatusForbidden)
 			}
@@ -88,12 +108,8 @@ func TestAssetHandlerSendsSecurityHeaders(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "pic.svg"), []byte("<svg/>"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	a := New()
-	a.SetActiveDocumentDir(dir)
-
-	req := httptest.NewRequest(http.MethodGet, assetRoute+"?path=pic.svg", nil)
 	rec := httptest.NewRecorder()
-	AssetHandler(a).ServeHTTP(rec, req)
+	AssetHandler().ServeHTTP(rec, assetRequest(dir, "pic.svg"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("got %d, want 200", rec.Code)
@@ -107,16 +123,16 @@ func TestAssetHandlerSendsSecurityHeaders(t *testing.T) {
 }
 
 func TestAssetHandlerWithNoActiveDocument(t *testing.T) {
-	a := New()
-	a.SetActiveDocumentDir("")
-	req := httptest.NewRequest(http.MethodGet, "/__hashpad/asset?path=x.png", nil)
 	rec := httptest.NewRecorder()
-	AssetHandler(a).ServeHTTP(rec, req)
+	AssetHandler().ServeHTTP(rec, assetRequest("", "x.png"))
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("unsaved document: got %d, want %d", rec.Code, http.StatusForbidden)
 	}
 }
 
-func urlEscape(s string) string {
-	return (&url.URL{Path: s}).EscapedPath()
+// Both values escaped the way rules/images.ts escapes them -- encodeURIComponent
+// per value, which is what makes a `&` inside either one inert.
+func assetRequest(dir, path string) *http.Request {
+	q := url.Values{"dir": {dir}, "path": {path}}
+	return httptest.NewRequest(http.MethodGet, assetRoute+"?"+q.Encode(), nil)
 }

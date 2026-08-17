@@ -82,7 +82,6 @@ vi.mock('../wailsjs/go/app/App', () => ({
   }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
-  SetActiveDocumentDir: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
   SystemThemeIsDark: vi.fn().mockResolvedValue(false),

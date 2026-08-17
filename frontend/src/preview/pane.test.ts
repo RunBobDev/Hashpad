@@ -19,18 +19,12 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import { mountPreview, type PreviewHandle } from './pane';
 
 /**
- * Every handle a test mounts, torn down in `afterEach` whether or not the test
- * got as far as its own `destroy()`. A handle that outlives its test keeps its
- * store subscription, and the store is module state shared by the whole file --
- * so one failing assertion would otherwise leave a second pane reacting to
- * every later test's keystrokes, and the real failure would arrive wearing
- * three unrelated ones. Destroying twice is deliberately harmless.
- */
-/**
  * Everything a test mounts, torn down in `afterEach` rather than at the end of
  * each test body. A failing assertion aborts the test before its own
- * `destroy()` line, and a pane left subscribed then reacts to *later* tests --
- * which turns one real failure into a cascade of unrelated ones.
+ * `destroy()` line, and a handle that outlives its test keeps its store
+ * subscription -- the store being module state shared by the whole file. One
+ * real failure would then arrive wearing three unrelated ones. Destroying
+ * twice is deliberately harmless.
  *
  * The views matter as much as the handles: `mount()` replaces `document.body`
  * wholesale, so a view that is not destroyed is merely orphaned, and it keeps
@@ -84,7 +78,6 @@ vi.mock('../../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn(),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
-  SetActiveDocumentDir: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
   ShowWindow: vi.fn(),
@@ -422,12 +415,16 @@ describe('a renderer that throws', () => {
 });
 
 describe('local images', () => {
+  // The folder rides in the URL rather than being published to Go ahead of the
+  // render, which is what makes this assertion worth making here: it is the
+  // whole chain -- the active document's `filePath`, through `documentDirOf`,
+  // into the `dir=` the handler will resolve against -- in one string.
   it('resolves them against the active document’s folder', () => {
     const { split, handle } = mount('![a](pic.png)\n', 'C:\\notes\\post.md');
     handle.show();
 
     expect(paneOf(split).querySelector('img')?.getAttribute('src')).toBe(
-      '/__hashpad/asset?path=pic.png',
+      '/__hashpad/asset?dir=C%3A%5Cnotes&path=pic.png',
     );
     handle.destroy();
   });

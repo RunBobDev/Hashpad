@@ -11,14 +11,13 @@ import {
   saveDocumentAs,
   windowTitle,
 } from './fileops';
-import { SetActiveDocumentDir, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
+import { ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
   LoadSettings: vi.fn(),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
-  SetActiveDocumentDir: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
   WriteFile: vi.fn(),
@@ -247,13 +246,13 @@ describe('resolveDocumentsBeforeQuit', () => {
 });
 
 /**
- * Save As is the one way the active document's folder changes without the
- * active document changing, so it is the one path `switchToDocument` does not
- * cover. Getting it wrong leaves Go's asset handler pointed at the old folder
- * and every relative image in the preview 404s — silently, because a broken
- * image looks the same as one that was never there.
+ * Save As can move a document to a different folder, and the stored `filePath`
+ * is the only record of that: `preview/pane.ts` derives the `dir=` on every
+ * relative image URL from it on each render (design §5.7). Writing it to the
+ * wrong document, or not at all, leaves every image in the preview 404ing —
+ * silently, because a broken image looks the same as one that was never there.
  */
-describe('save-as re-points the asset handler', () => {
+describe('save-as records the new path on the document it saved', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(WriteFile).mockResolvedValue(undefined as never);
@@ -278,33 +277,38 @@ describe('save-as re-points the asset handler', () => {
     }));
   }
 
-  it('publishes the new folder when the saved document is the active one', async () => {
-    const doc = cleanDoc({ id: 'a' });
-    seed('a', [doc]);
+  function pathOf(id: string): string | null {
+    return store.getState().documents.find((d) => d.id === id)!.filePath;
+  }
+
+  it('records the new folder when the saved document is the active one', async () => {
+    seed('a', [cleanDoc({ id: 'a' })]);
     vi.mocked(ShowSaveDialog).mockResolvedValue('D:\\elsewhere\\moved.md');
 
     await saveDocumentAs('a');
 
-    expect(SetActiveDocumentDir).toHaveBeenCalledWith('D:\\elsewhere');
+    expect(pathOf('a')).toBe('D:\\elsewhere\\moved.md');
   });
 
-  // Saving a background tab must not drag the handler away from the document
-  // actually on screen — the preview is showing that one, not this one.
-  it('leaves the handler alone when a background document is saved', async () => {
+  // Saving a background tab must write the path onto that tab, not onto the
+  // one on screen — otherwise the visible document's images start resolving
+  // against a folder it was never saved to.
+  it('records it on the background document, not the active one', async () => {
     seed('front', [cleanDoc({ id: 'front' }), cleanDoc({ id: 'back' })]);
     vi.mocked(ShowSaveDialog).mockResolvedValue('D:\\elsewhere\\moved.md');
 
     await saveDocumentAs('back');
 
-    expect(SetActiveDocumentDir).not.toHaveBeenCalled();
+    expect(pathOf('back')).toBe('D:\\elsewhere\\moved.md');
+    expect(pathOf('front')).toBeNull();
   });
 
-  it('publishes nothing when the dialog is cancelled', async () => {
+  it('records nothing when the dialog is cancelled', async () => {
     seed('a', [cleanDoc({ id: 'a' })]);
     vi.mocked(ShowSaveDialog).mockResolvedValue('');
 
     await saveDocumentAs('a');
 
-    expect(SetActiveDocumentDir).not.toHaveBeenCalled();
+    expect(pathOf('a')).toBeNull();
   });
 });

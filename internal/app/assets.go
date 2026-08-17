@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 // assetRoute is the path frontend/src/preview/rules/images.ts rewrites relative
@@ -22,31 +21,19 @@ var imageExtensions = map[string]bool{
 	".webp": true, ".bmp": true, ".svg": true, ".avif": true, ".ico": true,
 }
 
-// activeDocumentDir is read by the HTTP handler on a Wails-owned goroutine and
-// written from the frontend's IPC calls, so it needs the mutex.
-type assetState struct {
-	mu  sync.RWMutex
-	dir string
-}
-
-// SetActiveDocumentDir tells the asset handler which directory relative image
-// paths resolve against. The frontend calls this whenever the active document
-// changes -- on open, on tab switch, and after a save-as moves a document.
-// An empty string means the active document has never been saved and therefore
-// has no directory; the handler then refuses everything.
-func (a *App) SetActiveDocumentDir(dir string) {
-	a.assets.mu.Lock()
-	defer a.assets.mu.Unlock()
-	a.assets.dir = dir
-}
-
-func (a *App) activeDocumentDir() string {
-	a.assets.mu.RLock()
-	defer a.assets.mu.RUnlock()
-	return a.assets.dir
-}
-
-// AssetHandler serves images from the active document's directory.
+// AssetHandler serves images from the directory named in the request.
+//
+// **The directory travels in the URL, not in server state.** It used to live in
+// a mutex-guarded field the frontend set over IPC before each render, which was
+// a race: on a tab switch the new <img> is in the DOM the moment the IPC call
+// is *dispatched*, so the GET could resolve against the outgoing document's
+// folder -- two documents in different folders both naming `pic.png` showed
+// each other's image, and a name only the new folder had 404'd. Because the URL
+// was byte-identical either way, the webview cache could then hold the wrong
+// result for the rest of the session. Putting the directory in the query fixes
+// the cache problem as a side effect: different folders now mean different
+// URLs. It is no weaker security-wise -- the frontend was always the source of
+// this string, and every check below still runs on it.
 //
 // This is the one place path traversal is rejected (design §5.7). Every check
 // below is lexical and runs before any filesystem access.
@@ -60,17 +47,18 @@ func (a *App) activeDocumentDir() string {
 // it to images. Recorded in docs/testing.md as a manual check rather than left
 // implicit.
 //
-// A package-level function taking *App, not a method on *App. Wails binds
-// every exported method of any struct passed to options.App.Bind, with no
-// per-method opt-out -- confirmed against wails v2.13.0's internal/binding:
-// the only exemption list (app_bindings.go's bindingExemptions) is hardcoded
-// to the lifecycle methods Wails itself calls, not something App options can
-// extend. A method here would have been auto-bound and exposed on
-// window.go.app.App despite returning something no frontend call can use;
-// `wails generate module` confirmed the failure mode on the first attempt --
-// it emitted `Promise<http.Handler>` in App.d.ts, importing a `http`
-// namespace that does not exist in models.ts, which fails `tsc --noEmit`.
-func AssetHandler(a *App) http.Handler {
+// A package-level function, not a method on *App -- and it must stay one even
+// though it no longer needs the *App at all. Wails binds every exported method
+// of any struct passed to options.App.Bind, with no per-method opt-out --
+// confirmed against wails v2.13.0's internal/binding: the only exemption list
+// (app_bindings.go's bindingExemptions) is hardcoded to the lifecycle methods
+// Wails itself calls, not something App options can extend. A method here
+// would be auto-bound and exposed on window.go.app.App despite returning
+// something no frontend call can use; `wails generate module` confirmed the
+// failure mode on the first attempt -- it emitted `Promise<http.Handler>` in
+// App.d.ts, importing a `http` namespace that does not exist in models.ts,
+// which fails `tsc --noEmit`.
+func AssetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != assetRoute {
 			http.NotFound(w, r)
@@ -83,7 +71,18 @@ func AssetHandler(a *App) http.Handler {
 			return
 		}
 
-		dir := a.activeDocumentDir()
+		// images.ts renders a placeholder rather than a URL when the document
+		// has no directory, so an empty `dir` should never arrive -- but this
+		// is the trust boundary, so it refuses rather than assumes.
+		//
+		// No test distinguishes *this line*: measured by deleting it, and
+		// TestAssetHandlerWithNoActiveDocument stays green, because
+		// filepath.IsAbs("") is false and the guard below returns the same 403
+		// one step later. The behaviour is covered; the line is not. It is kept
+		// because "no directory" and "a directory that is not absolute" are
+		// different refusals and reading them as one costs the next person a
+		// detour through IsAbs's empty-string case.
+		dir := r.URL.Query().Get("dir")
 		if dir == "" {
 			http.Error(w, "", http.StatusForbidden)
 			return
@@ -169,8 +168,9 @@ func AssetHandler(a *App) http.Handler {
 		// origin it can carry script, and `index.html`'s CSP is a `<meta>`
 		// tag, which does not apply to a document the webview *navigates to*.
 		// Once the preview pane lands, a link is a plain `<a href>` that
-		// DOMPurify keeps by design, so `[x](/__hashpad/asset?path=evil.svg)`
-		// in an untrusted document would be a top-level navigation to
+		// DOMPurify keeps by design, so a hand-written
+		// `[x](/__hashpad/asset?dir=...&path=evil.svg)` in an untrusted
+		// document would be a top-level navigation to
 		// attacker-authored content at an origin where Wails' runtime -- and
 		// therefore every bound method -- is reachable. Wails' own asset
 		// server sets no security headers either (checked v2.13.0: it sets

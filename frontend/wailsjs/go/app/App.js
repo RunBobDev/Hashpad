@@ -18,10 +18,6 @@ export function SaveSettings(arg1) {
   return window['go']['app']['App']['SaveSettings'](arg1);
 }
 
-export function SetActiveDocumentDir(arg1) {
-  return window['go']['app']['App']['SetActiveDocumentDir'](arg1);
-}
-
 export function ShowOpenDialog() {
   return window['go']['app']['App']['ShowOpenDialog']();
 }

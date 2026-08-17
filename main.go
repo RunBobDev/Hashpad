@@ -38,7 +38,7 @@ func main() {
 			// Wails calls this for any GET the embedded assets cannot serve.
 			// app.AssetHandler is a package-level function, not a bound
 			// method -- see its doc comment for why that distinction matters.
-			Handler: app.AssetHandler(application),
+			Handler: app.AssetHandler(),
 		},
 		// SPEC §6.1 draws the menu bar and window controls on one row, which a
 		// native OS frame/menu cannot do, so the window is frameless and the

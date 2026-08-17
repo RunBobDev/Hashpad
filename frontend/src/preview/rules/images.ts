@@ -111,8 +111,20 @@ export function imagePlugin(md: MarkdownIt): void {
     // filename. Decoding back to the raw path and encoding once is what makes
     // Go's `r.URL.Query().Get("path")` yield the name that is actually on
     // disk. Round-trip verified for accents, spaces and backslashes.
+    // The directory travels in the URL beside the path. It used to live in a
+    // field the frontend set over IPC before each render, which raced: on a tab
+    // switch the new <img> is in the DOM the moment that call is *dispatched*,
+    // so the GET could resolve against the outgoing document's folder. It also
+    // meant two documents in different folders produced byte-identical URLs for
+    // the same filename, so the webview cache could serve one document's image
+    // to the other; distinct URLs fix that as a side effect.
+    //
+    // Both values go through `encodeURIComponent` separately, which escapes `&`
+    // and `=`. That is what keeps a hostile `src` from smuggling in its own
+    // `dir` -- see rules.test.ts, and the Go half in assets_test.go.
     const raw = md.normalizeLinkText(src);
-    token.attrSet('src', `${ASSET_ROUTE}?path=${encodeURIComponent(raw)}`);
+    const query = `dir=${encodeURIComponent(ctx.documentDir)}&path=${encodeURIComponent(raw)}`;
+    token.attrSet('src', `${ASSET_ROUTE}?${query}`);
     return self.renderToken(tokens, index, options);
   };
 }
