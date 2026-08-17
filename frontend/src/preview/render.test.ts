@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { LanguageDescription } from '@codemirror/language';
 import { MARKDOWN_CODE_LANGUAGES } from '../editor/languages';
 import { purifierForTests, renderMarkdown } from './render';
@@ -183,5 +185,60 @@ describe('sanitisation', () => {
     });
     expect(output).not.toContain('secret');
     expect(output).toContain('a');
+  });
+});
+
+/**
+ * SPEC §5.3: `variables.css` is the only file allowed to name a colour.
+ *
+ * Both shipped stylesheets are scanned, not only the new one. `app.css` is
+ * clean today and the rule it obeys is the same rule; a check that covers one
+ * file lets the next literal land in the other. `variables.css` is excluded by
+ * definition -- it is the place the colours live.
+ */
+describe('the stylesheets name no colours', () => {
+  it.each(['../styles/preview.css', '../styles/app.css'])('%s', (relative) => {
+    const css = readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+    // Strip comments first: the explanatory ones cite hex values on purpose --
+    // both files record measured contrast ratios against named colours.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Guard: a path typo, or a regex that matched the whole file, would make
+    // the assertion below vacuously true.
+    expect(withoutComments).toContain('var(--');
+
+    expect(withoutComments.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
+
+    // Hex was all this checked at first, which was too narrow to be worth much:
+    // measured, `color: red; border-color: color-mix(in oklab, red 50%, white);
+    // outline-color: oklch(70% 0.2 20)` left the test green. Enumerating the 148
+    // named colours and every modern colour function would be its own
+    // maintenance burden, so the rule is inverted instead: every declaration of
+    // a colour-valued property must resolve through a token. That catches
+    // anything nameable, in any syntax, and needs no list.
+    //
+    // Blacklisting the functions themselves was the first attempt and was wrong:
+    // `app.css` composes two tokens with `color-mix(in oklab, var(--accent) 85%,
+    // var(--fg-primary))`, which names no colour and is exactly the kind of
+    // derivation this file should be free to do. Requiring `var(--)` in the value
+    // permits that and still rejects a mix of literals.
+    //
+    // Deliberately only the properties whose entire value **is** a colour.
+    // Shorthands (`border`, `outline`, `box-shadow`) are left out: their values
+    // mix lengths, styles and keywords, so telling "names a colour" from "names
+    // a width" needs a real CSS parser, and every attempt at a regex for it
+    // produced false positives on the declarations already in these files
+    // (`border: 0`, `border-bottom: 2px solid transparent`). Hex in a shorthand
+    // is still caught by the check above; a *named* colour in one is the hole,
+    // and it is stated here rather than papered over. Same for a literal mixed
+    // with a token, as in `color-mix(in oklab, var(--accent) 50%, red)`.
+    const COLOUR_PROPERTY =
+      /(?:^|[;{]\s*)(color|background|background-color|border-color|outline-color|fill|stroke|caret-color|text-decoration-color)\s*:\s*([^;}]+)/g;
+    /** Values that name no colour, so they need no token. */
+    const COLOURLESS = /^(none|transparent|inherit|initial|unset|currentColor)$/i;
+    const untokenised = [...withoutComments.matchAll(COLOUR_PROPERTY)]
+      .map(([, property, value]) => [property!, value!.trim()] as const)
+      .filter(([, value]) => !value.includes('var(--') && !COLOURLESS.test(value))
+      .map(([property, value]) => `${property}: ${value}`);
+    expect(untokenised).toEqual([]);
   });
 });

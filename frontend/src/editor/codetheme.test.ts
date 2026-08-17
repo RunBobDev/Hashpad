@@ -11,6 +11,13 @@ import { MARKDOWN_CODE_LANGUAGES } from './languages';
  * This parses variables.css rather than importing a JS copy of the values,
  * because the CSS file is what ships -- a JS mirror could drift from it and
  * this test would happily verify the mirror.
+ *
+ * The last block in this file measures the *preview* stylesheet's muted
+ * foregrounds rather than the code palette. It lives here because this is where
+ * `luminance`/`contrast` and the theme-block parser are, and copying fifteen
+ * lines of colour maths into a second file is how the two drift apart -- the
+ * question ("is every colour we ship legible on the surface it lands on?") is
+ * one question, wherever the colour is used.
  */
 function read(relative: string): string {
   return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
@@ -104,14 +111,33 @@ describe('the fenced-code palette', () => {
     expect(missing).toEqual([]);
   });
 
-  it.each(['light', 'dark'] as const)('clears WCAG AA against --bg-editor in %s', (theme) => {
-    const background = valueOf('bg-editor', theme);
+  /**
+   * Both surfaces a code token is ever composited over, not just the plain
+   * editor background.
+   *
+   * `--syn-code-bg` is the one that matters and the one this originally missed:
+   * `editor/highlight.ts` gives `tags.monospace` a `--syn-code-bg`
+   * `backgroundColor`, and `styles/preview.css` gives `pre` and inline `code`
+   * the same tint, so a code token is *never* actually painted on
+   * `--bg-editor`. The tint costs roughly 0.6 in light, and checking
+   * `--bg-editor` alone let `--syn-code-keyword` `#8250df` pass at 5.05:1 while
+   * rendering at 4.43:1 -- every keyword in every light-theme fence, below AA.
+   *
+   * `--bg-editor` is kept in the list rather than replaced. It is the surface
+   * these tokens would fall back to the day anyone drops the tint, and
+   * `variables.css`'s own header says to check every surface a token is
+   * composited over rather than picking one.
+   */
+  it.each(['light', 'dark'] as const)('clears WCAG AA on every surface in %s', (theme) => {
     const failures: string[] = [];
-    for (const token of REFERENCED) {
-      const value = valueOf(token.slice(2), theme);
-      const ratio = contrast(value, background);
-      if (ratio < 4.5) {
-        failures.push(`${token} ${value} on ${background} = ${ratio.toFixed(2)}:1`);
+    for (const surface of ['bg-editor', 'syn-code-bg'] as const) {
+      const background = valueOf(surface, theme);
+      for (const token of REFERENCED) {
+        const value = valueOf(token.slice(2), theme);
+        const ratio = contrast(value, background);
+        if (ratio < 4.5) {
+          failures.push(`${token} ${value} on --${surface} ${background} = ${ratio.toFixed(2)}:1`);
+        }
       }
     }
     expect(failures).toEqual([]);
@@ -211,5 +237,99 @@ describe('the palette colours what it took responsibility for', () => {
     expect(byText.get('-removed')).toBeDefined();
     expect(byText.get('+added')).toBeDefined();
     expect(byText.get('-removed')).not.toBe(byText.get('+added'));
+  });
+});
+
+/**
+ * The preview's deliberately dim text, measured rather than eyeballed.
+ *
+ * Task 8's own plan asked only that someone *look* at the front-matter card and
+ * the image placeholder in both themes. Looking is still necessary -- nothing
+ * here can tell you whether the card reads as a card -- but it leaves nothing
+ * behind, and these are the two surfaces most likely to drift under AA because
+ * being dim is the point of both. So the pairing is pinned as a number.
+ *
+ * Each row is checked in two halves, and both halves matter:
+ *
+ * - **The pairing is real.** `preview.css` must actually declare that
+ *   foreground on that selector, and the background must actually come from the
+ *   rule named in `bgFrom`. Without this the ratio below is arithmetic about a
+ *   pairing the stylesheet may no longer have -- swapping the card to
+ *   `--fg-secondary` would leave a "passing" test measuring the old colour.
+ * - **The ratio clears AA.** Retuning either token in variables.css reddens it.
+ */
+describe("the preview's muted foregrounds", () => {
+  const PREVIEW_CSS = read('../styles/preview.css');
+
+  /** The declarations inside one rule. CSS has no nesting here, so `[^}]*` is enough. */
+  function block(selector: string): string {
+    const match = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(PREVIEW_CSS);
+    expect(match, `preview.css has no standalone \`${selector}\` rule`).not.toBeNull();
+    return match![1]!;
+  }
+
+  const SURFACES = [
+    // Dimmed because front matter is metadata, not prose (design §2.2). The
+    // tightest pairing in the file.
+    {
+      selector: '.preview-frontmatter',
+      fg: 'fg-muted',
+      bg: 'bg-hover',
+      bgFrom: '.preview-frontmatter',
+    },
+    // The placeholder has no background of its own; it sits on the pane.
+    {
+      selector: '.preview-image-placeholder',
+      fg: 'fg-muted',
+      bg: 'bg-editor',
+      bgFrom: '.preview-pane',
+    },
+    // Not muted, but it is the one colour in preview.css that changed for this
+    // reason: --bg-danger measured 3.07:1 as text on the dark editor. The
+    // palette block above already asserts --syn-code-invalid against
+    // --bg-editor as a *code token*; this pins the same number for the error
+    // card, which is a different reason to care about it.
+    {
+      selector: '.preview-error',
+      fg: 'syn-code-invalid',
+      bg: 'bg-editor',
+      bgFrom: '.preview-pane',
+    },
+  ] as const;
+
+  it.each(SURFACES)(
+    '$selector pairs $fg with $bg in preview.css',
+    ({ selector, fg, bg, bgFrom }) => {
+      expect(block(selector)).toContain(`color: var(--${fg})`);
+      expect(block(bgFrom)).toContain(`background: var(--${bg})`);
+      // When the background comes from an *ancestor*, the element must not
+      // acquire one of its own -- otherwise the ratio above is measured against
+      // a surface the text no longer sits on. This is not hypothetical: the
+      // error card's own comment records that `--syn-code-invalid` drops to
+      // 4.41:1 on `--bg-hover`, so a well-meaning tint on that card would take
+      // it below AA with every assertion here still green. Measured: adding
+      // `background: var(--bg-hover)` to `.preview-error` left the whole suite
+      // passing before this line existed.
+      if (bgFrom !== selector) {
+        expect(
+          block(selector),
+          `${selector} must inherit its background from ${bgFrom}`,
+        ).not.toMatch(/(^|[;\s])background(-color)?\s*:/);
+      }
+    },
+  );
+
+  it.each(
+    (['light', 'dark'] as const).flatMap((theme) =>
+      SURFACES.map((surface) => ({ theme, ...surface })),
+    ),
+  )('$selector clears AA in $theme', ({ theme, fg, bg }) => {
+    const foreground = valueOf(fg, theme);
+    const background = valueOf(bg, theme);
+    const ratio = contrast(foreground, background);
+    expect(
+      ratio,
+      `--${fg} ${foreground} on --${bg} ${background} = ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(4.5);
   });
 });

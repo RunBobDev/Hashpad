@@ -182,6 +182,53 @@ real keyboard proves the real path.
 - [ ] With `- [x] done` selected alongside a plain line, apply Bullet list and
       confirm the checkbox survives.
 
+## Checkpoint F measurements
+
+Recorded 2026-08-17 on the same VMware VM as the Checkpoint A baseline, via
+`powershell.exe -ExecutionPolicy Bypass -File scripts/measure.ps1` against a
+fresh `wails build`, plus `npm run build` for the bundle figures.
+
+```
+Binary size      : 12.53 MB  (budget 25 MB) [PASS]
+Cold start        : median 53.8 ms  (avg 262.8, min 46.1, max 1103.8 ms, n=5)
+  per-run (ms)    : 1103.8, 52.7, 46.1, 53.8, 57.5
+Memory, one empty document:
+  hashpad.exe working set    : 26.8 MB
+  whole tree working set     : 327 MB  (6 descendant processes, 7 total)
+  whole tree private commit  : 173.2 MB
+```
+
+| Figure | This checkpoint | Reference | Verdict |
+|---|---|---|---|
+| Binary | 12.53 MB | 25 MB budget | PASS, half the budget |
+| Entry chunk | 578.54 kB (198.66 kB gzip) | 577.51 kB pre-Checkpoint-F | +1.03 kB, +0.18% |
+| Preview chunk | 156.81 kB (63.63 kB gzip) | — | separate, lazy |
+| Stylesheet | 12.02 kB (2.89 kB gzip) | ~9.47 kB before Task 8 | +2.55 kB, all of it `preview.css` |
+| Cold start | median 53.8 ms | 53.9 ms at Checkpoint E | unchanged |
+
+The whole preview feature costs the entry bundle **1.03 kB**. markdown-it,
+DOMPurify and the render pipeline are all in `pane-*.js`, which is reached only
+through a dynamic `import()` — the lazy split is real and was verified by grep in
+Task 6. The stylesheet grew by the whole of `preview.css`, which is expected:
+`vite.config.ts` sets `cssCodeSplit: false`, so there is exactly one CSS file and
+it is always loaded.
+
+**Two caveats on these numbers, both real:**
+
+- **Cold start's mean is meaningless here and the median is what to read.** One
+  run of five came back at 1103.8 ms against four in the 46–58 ms band. That is
+  the same `WaitForInputIdle` unreliability the Checkpoint A baseline documents
+  at length, not a regression: the median moved 0.1 ms. Cold start remains
+  **provisional** until the frontend reports a `performance.now()` mark back to
+  Go, and it is measured on a virtual GPU, which the script detects and flags.
+- **The memory figure is not trustworthy and no conclusion is drawn from it.**
+  Both tree figures remain over the nominal 100 MB budget, as they have since
+  Checkpoint A, and which of the three numbers the budget refers to is still
+  open. This run resolved 7 processes (1 `hashpad.exe` + 6 `msedgewebview2.exe`),
+  matching Checkpoints A and D — the process-count defect seen elsewhere in this
+  checkpoint, where the script reported 1, did **not** reproduce here.
+  Deliberately not investigated in this task.
+
 ## Checkpoint F — local image serving (Task 4)
 
 Automation covers the traversal rejections; these are the ones it cannot reach.
@@ -258,3 +305,124 @@ looks right without one.
       guard is cleared on an animation frame, and Chromium defers frame callbacks
       for a window that is not painting rather than dropping them — that is the
       reasoning, not a measurement against WebView2.
+
+## Checkpoint F — the pane, the divider, and the styling (Tasks 2, 5, 8)
+
+The rest of Checkpoint F. jsdom has no layout engine, never issues an `<img>`
+GET, and cannot judge whether a colour reads — so everything below needs a human
+running `build/bin/hashpad.exe`. **Nothing in this section has been ticked by an
+agent; every box is genuinely open.**
+
+**Use `docs/fixtures/preview-checks.md`**, which exercises every construct these
+checks name — front matter including a malformed line, headings down to `h4`, a
+blockquote, a five-row table, a task list, `==highlight==`, a footnote, inline
+code, four fenced blocks, a horizontal rule, a local image, a remote one, and
+enough filler to scroll. Copy it out of the repo first and drop any image beside
+it named `pic.png`; nothing in this repo can ship a binary, so that one reference
+is broken until you do.
+
+**The toggle and the divider.**
+
+- [ ] **Ctrl+Shift+P toggles the pane**, and **View > Preview** does the same
+      thing. Both are new in this checkpoint; the chord is matched through
+      CodeMirror's base-layout fallback like the Checkpoint E chords, so a
+      non-US keyboard layout is where it would fail.
+- [ ] **Toggle it off and on again on the same tab**: the pane comes back at the
+      width you left it, not at the default ratio.
+- [ ] **Switch to a tab that has never had the preview open**, and confirm it
+      opens in source mode — the mode is per document, the divider ratio is per
+      window.
+- [ ] **Dragging the divider feels right.** No lag behind the pointer, no jump
+      when the drag starts, and it stops rather than inverting when you drag it
+      past either end. Drag is a real OS pointer gesture; the tests drive
+      synthetic events.
+- [ ] **The divider moves with the keyboard too** — focus it with Tab and use
+      Left/Right. This is the only keyboard path to a width, so if it is
+      unusable the pane is mouse-only.
+- [ ] **The position survives a restart.** Drag it well off centre, close
+      Hashpad completely, relaunch, and open the preview: it must come back at
+      the width you left. `window.previewSplitRatio` crosses the Go↔TS boundary
+      and no automated test crosses it.
+- [ ] **Drag it to each extreme and restart from there.** The clamp is applied
+      on the way in as well as on the way out, so a ratio saved at the limit
+      must not come back as a pane you cannot see or cannot get rid of.
+- [ ] **Typing feels like it re-renders about 150 ms after you stop**, not on
+      every keystroke and not seconds later. Then switch tabs: that one must
+      re-render immediately, with no visible pause showing the previous
+      document's render.
+
+**Images.** The local-image paths are in the Task 4 section above; these two are
+the placeholders, which that section does not cover.
+
+- [ ] **A local image loads** (`![x](pic.png)` beside a saved document) — the
+      short version of the Task 4 checks, worth doing first because everything
+      there assumes it.
+- [ ] **A remote image shows the placeholder with its URL**, not a broken-image
+      icon and not a network request. SPEC §2.1 is zero-network; the placeholder
+      is the whole feature. Confirm the URL is readable inside the dashed box and
+      wraps rather than overflowing the pane — it is set to `break-all` for long
+      URLs, which is untested against a real one.
+- [ ] **An unsaved document shows "save the document to load local images"**
+      rather than a broken image. Then save it and confirm the image appears
+      without needing a restart.
+
+**Legibility, both themes, real hardware.** The ratios are asserted as numbers by
+`editor/codetheme.test.ts`, so what is left is everything a number does not say.
+Do each of these in **light and dark**, switching with View > Theme.
+
+- [ ] **The front-matter card reads as a card**, set apart from the document
+      rather than looking like the first paragraph. It is the tightest contrast
+      pairing in `styles/preview.css` — `--fg-muted` on `--bg-hover`, 4.73:1
+      light and 4.54:1 dark — so it is dim on purpose and the question is
+      whether it is dim *and comfortable*, not whether it clears a threshold.
+- [ ] **A front-matter line with no colon** (type a bare `notes` line inside the
+      `---` fences) spans the full width of the card instead of being squeezed
+      into the narrow key column. This is also the shape malformed YAML takes.
+- [ ] **The image placeholder is legible and obviously a placeholder.** Dashed
+      border, muted text, 5.74:1 in both themes.
+- [ ] **The table's banded rows are visible but not stripey.** `--bg-hover` is
+      the same tint the header row uses, which is deliberate; confirm the header
+      still reads as a header.
+- [ ] **The fenced block's tint separates it from the prose** without looking
+      like a hole in the page, and its colours match what the editor shows for
+      the same code — one `HighlightStyle` feeds both panes.
+- [ ] **`h1` and `h2` rules read as section breaks**, and no heading below `h2`
+      has one.
+- [ ] **The light-theme fence's keywords are comfortable to read.** This is the
+      one pairing in the checkpoint that shipped below AA and was caught by
+      measurement rather than by looking: `--syn-code-keyword` was 5.05:1 against
+      the editor background but **4.43:1** on `--syn-code-bg`, the tint a fence
+      actually has. Retuned to 5.71:1. Worth a specific look because it is the
+      case a human eye would most plausibly have caught first, and did not.
+- [ ] **The footnote block reads as apparatus, not prose.** Dimmer and smaller
+      than the body, behind its rule, with the `↩` backrefs visible as links but
+      not underlined. It had no styling at all until the Task 8 review noticed
+      that a whole rendered construct had been given no styling decision, so this
+      is the least-looked-at part of the pane.
+- [ ] **A long line inside a fence scrolls the fence, not the pane.** The
+      horizontal scrollbar should appear on the code block.
+- [ ] **Task list items have no bullet beside the checkbox**, and the checkboxes
+      do not respond to a click — the preview renders the document, it does not
+      edit it.
+- [ ] **`==highlight==` renders as a wash** in the preview, matching what the
+      editor shows.
+- [ ] **Break the renderer on purpose if you can** and check the error card:
+      red rule down its left, the message readable, and it replaces the render
+      rather than sitting under a stale one. Its colour changed in Task 8 from
+      `--bg-danger` to `--syn-code-invalid` precisely because `--bg-danger`
+      measured **3.07:1** as text on the dark editor background; if the card
+      still looks washed out in dark mode, that swap did not take.
+
+**Known and accepted.**
+
+- [ ] **A fenced code block may render unhighlighted for one frame**, then
+      recolour. CodeMirror loads grammars lazily and the preview renders from the
+      same parsers, so a fence whose language has not loaded yet renders as plain
+      escaped code and is coloured on the next render. Confirm it is a flash and
+      not a stuck state: the block must end up coloured without further edits.
+      **This is acceptable, not a bug to file** — the alternative is bundling
+      every grammar eagerly, which §6.4 of the design document rules out.
+- [ ] **The symlink limitation from Task 4 is understood**, not just observed:
+      containment is decided lexically, so a symlink inside a document's folder
+      pointing outside it will be served. See the Task 4 section for the full
+      reasoning and the one file to change if that trade stops being acceptable.

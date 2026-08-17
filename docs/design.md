@@ -416,10 +416,105 @@ and `![alt](u)` was underlined — brackets, parens and title included — while
 Ours now sets `textDecoration: 'none'` explicitly. Links remain distinguished by
 `--syn-link`, and source mode shows the bracket syntax regardless.
 
-**Still open, and larger than this decision:** `defaultHighlightStyle` is CodeMirror's
-*light* palette, and it is what colours all fenced code in both themes. On `#1a1a1a`
-its values run from about 1.33:1 to 2.6:1. Dark-mode fenced code is largely
-illegible, and fixing it means a dark code palette, not another rule.
+**Closed by §4.18, and it was larger than this decision:** `defaultHighlightStyle` is
+CodeMirror's *light* palette, and it used to colour all fenced code in both themes. On
+`#1a1a1a` its values run from about 1.33:1 to 2.6:1 — dark-mode fenced code was largely
+illegible, and fixing it meant a dark code palette, not another rule. Checkpoint F built
+one; §4.18 records it. Everything above still describes the division of labour
+correctly, but the style our rules now share the stylesheet with is
+`codeHighlightStyle`, not `defaultHighlightStyle`, and the `#404740` and `#940` leaks
+named above are gone with it.
+
+### 4.17 Preview scroll sync is line-anchored, not proportional by pixel
+
+SPEC §6.7 says the two panes scroll "proportional by position". The literal reading is
+a pixel fraction: `preview.scrollTop = editor.scrollTop / editorMax * previewMax`. Five
+lines, no state, and wrong the moment rendered height diverges from source height —
+which is the normal case, not the edge one. A tall image is *one* source line and
+several hundred rendered pixels. A twenty-line fenced block often renders *shorter*
+than its source. Front matter is a dozen source lines and one small card. In a document
+with any of those, a pixel fraction puts the panes visibly out of step in the middle
+while agreeing perfectly at both ends, which reads as a bug that comes and goes.
+
+**Decision: every block element carries `data-source-line`, and sync interpolates
+between the two anchors bracketing the top visible line.** Owner's call, taken
+2026-08-11.
+
+Rejected alternatives:
+
+- **Pixel fraction** (above). Cheapest, and the plain reading of the spec. Rejected on
+  the divergence cases, which are the cases the preview exists for.
+- **Sync only editor → preview.** Needs no re-entrancy guard at all, which is the whole
+  cost of bidirectional sync. Rejected because scrolling the preview and having it snap
+  back on the next keystroke is a worse experience than the guard is a maintenance
+  burden. The guard is an `applying` flag cleared on the next animation frame; the
+  browser fires `scroll` asynchronously after `scrollTop` is assigned, so it cannot be
+  cleared synchronously.
+- **Sync by caret rather than by scroll position.** Simpler mapping (one line number,
+  no interpolation), but it only updates when the caret moves, so scrolling with the
+  wheel or the scrollbar — the common case — would not move the other pane.
+
+Two things make the price lower than it looks. The anchor map is exactly the structure
+Checkpoint G's document outline needs, so it is built once rather than twice. And
+`data-source-line` is emitted by one small markdown-it rule
+(`preview/rules/sourceline.ts`), not threaded through the renderer.
+
+**The residual inaccuracy is known and recorded rather than fixed:** a fenced block's
+`data-source-line` lands on the inner `<code>`, not the `<pre>`, so its measured top is
+the top of the first line box — one padding below the block's real top. Small, and
+`docs/testing.md`'s scroll-sync checks ask a human whether it is visible.
+
+### 4.18 Fenced code takes its own `--syn-code-*` palette, shared by both panes
+
+Until Checkpoint F, fenced code in both the editor and (about to be) the preview was
+coloured by CodeMirror's `defaultHighlightStyle`. That is a *light* palette with
+hard-coded values; against the dark `--bg-editor` its colours measured 1.33:1 to 2.6:1
+(§4.16). It also violates SPEC §5.3 by construction — those colours are defined in a
+node module, not in `variables.css` — which is not a technicality here, because it is
+why they could not follow the theme.
+
+**Decision: ten `--syn-code-*` tokens per theme in `variables.css`, driving one
+`HighlightStyle` (`editor/codetheme.ts`) registered by both the editor and the
+preview's markdown-it `highlight` hook.** Owner's call, taken 2026-08-11. Starting
+values are adapted from GitHub's Primer palettes, which are themselves contrast-tuned;
+every one is asserted at 4.5:1 or better in both themes by `editor/codetheme.test.ts`,
+which reads the token list out of the emitted CSS rather than from a hand-written list,
+so a renamed or added token cannot slip past it.
+
+**The assertion is against every surface the tokens are composited over, not just
+`--bg-editor`, and that distinction caught a shipped failure.** Code tokens are never
+painted on the plain editor background: `editor/highlight.ts` gives `tags.monospace` a
+`--syn-code-bg` background and `styles/preview.css` gives `pre` and inline `code` the
+same tint. An earlier version of this section — and of the test — named `--bg-editor`
+alone, under which `--syn-code-keyword` `#8250df` measured 5.05:1 and passed, while
+rendering at **4.43:1** on the tint. That is every keyword in every light-theme fence,
+below AA. Retuned to `#6f42c1` (5.71:1 on the tint), and the test now iterates both
+surfaces. `variables.css`'s own header had already stated the rule the test was
+breaking: check every surface a token lands on, not the one the file happens to name.
+
+Rejected alternatives:
+
+- **Keep `defaultHighlightStyle` and override only the worst tokens.** Smaller diff.
+  Rejected because the overrides would live wherever we put them while the base
+  palette stayed in a dependency: the next CodeMirror release could reintroduce the
+  problem silently, and SPEC §5.3's "one place colours are defined" would be false in a
+  way no test could state.
+- **A separate palette for the preview.** The preview is HTML and could have taken plain
+  CSS classes. Rejected on §6.3's own argument for bridging to Lezer in the first place:
+  the point of reusing the editor's parsers is that the two panes agree by construction.
+  Two palettes would let them disagree, and the same fence would be two different
+  colours a pane apart.
+- **A third-party highlighter for the preview** (highlight.js, Shiki). Already declined
+  in §6.3 on dependency weight; a second palette to maintain is a further reason.
+
+Two consequences worth naming. `codeHighlightStyle` had to take over every tag
+`defaultHighlightStyle` used to cover, and the first draft dropped `inserted`, `deleted`
+and `meta` — a ```` ```diff ```` fence rendered with zero spans, which reads as
+deliberate rather than broken; `codetheme.test.ts` now asserts coverage positively, on
+real fences. And in the dark theme `inserted` deliberately repeats `type` and `deleted`
+repeats `invalid`: neither pair co-occurs in a way a reader would need to tell apart,
+and separate token names keep them independently retunable. Both are noted in
+`variables.css` so they do not read as oversights.
 
 ---
 
@@ -595,15 +690,35 @@ the same situation as `golang.org/x/sys` in Checkpoint D.
 | YAML front matter for the metadata card (SPEC §6.8) | `js-yaml`, ~60 KB | Naive split on the first colon; covers title/date/tags/author, i.e. essentially all real front matter. Shows the raw line if it does not split. |
 | Syntax highlighting inside preview code blocks (SPEC §6.7 is silent) | highlight.js, Shiki — both heavy | Bridge to CodeMirror's own Lezer parsers and `HighlightStyle`. Zero new dependencies, and editor and preview agree by construction, per SPEC §3.1's one-source-of-truth reasoning. |
 
-### 6.4 Language mode curation
+### 6.4 Language mode curation — measured, and abandoned
 
-`@codemirror/language-data` references roughly 130 language packages. They are lazy at
-runtime, but Vite embeds all of them in the binary.
+**This section described a decision that does not work. It is corrected rather than
+deleted, because the assumption behind it is an easy one to make again.**
 
-**Decision:** curate approximately 20 common languages in a single exported array
-(JavaScript, TypeScript, JSX/TSX, Python, Go, Rust, C/C++, Java, C#, HTML, CSS, JSON,
-YAML, XML, SQL, shell, PHP, Ruby, Markdown). Trivial to extend, meaningfully smaller
-binary. Final list confirmed against what `language-data` actually offers.
+The original decision was: `@codemirror/language-data` references roughly 130 language
+packages, they are lazy at runtime but Vite embeds all of them in the binary, so curate
+about 20 common languages in a single exported array — trivial to extend, meaningfully
+smaller binary.
+
+**Checkpoint D task 5 implemented it, measured it, and removed it.** A build with the
+21-name filter and a build passing `languages` through unfiltered came out **within 4
+bytes of each other**, in the main entry chunk and in the total `dist/` output alike.
+Rollup's code splitting follows the *static* `import()` call sites in language-data's own
+module — one per language, all ~140 always present in that one file — not which array
+elements survive a `.filter()` at runtime. Every grammar chunk is emitted regardless of
+whether our code ever references that particular `LanguageDescription`; filtering the
+array we hold a reference to cannot un-emit a chunk Rollup already decided to build from
+the dependency's source. The full comparison is in that task's report.
+
+With the size rationale gone, the filter cost complexity — a hand-maintained list that
+has to track upstream renames — for a strictly worse result: fewer fenced-code languages
+highlight, for a build that is the same size either way.
+
+**Decision, as shipped:** `frontend/src/editor/languages.ts` exports
+`@codemirror/language-data`'s `languages` unmodified. Its header comment carries the same
+reasoning at the call site, since that is where someone would next think of trimming it.
+A smaller binary from this direction needs a build-time change — a Rollup plugin, or
+vendoring a trimmed `language-data` — not a runtime filter.
 
 ### 6.5 Dev dependencies — never shipped
 

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { isValidAccent, resolveIsDark } from './theme';
 import { ACCENT_PRESETS } from './accents';
 
@@ -49,5 +51,29 @@ describe('ACCENT_PRESETS', () => {
   it('every preset has a distinct name and value', () => {
     expect(new Set(ACCENT_PRESETS.map((p) => p.name)).size).toBe(ACCENT_PRESETS.length);
     expect(new Set(ACCENT_PRESETS.map((p) => p.value)).size).toBe(ACCENT_PRESETS.length);
+  });
+
+  /**
+   * `accents.ts` is the one file outside `variables.css` that names colours, and
+   * it is deliberate: these are user-selectable *data*, a menu of values, not
+   * style declarations. What is not deliberate is that one of them is the same
+   * colour as `--accent-base`, written out twice with nothing tying the two
+   * together. `accents.ts` marks Blue "current default"; retune `--accent-base`
+   * and that label silently becomes a lie, with the picker showing no preset as
+   * selected on a fresh install.
+   *
+   * Pinned rather than deduplicated: `accents.ts` cannot read a CSS custom
+   * property without a DOM, and importing one into the other to save a literal
+   * would couple a data table to the stylesheet for no gain. This test is the
+   * link.
+   */
+  it("the preset marked default is the same colour as variables.css's --accent-base", () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('../styles/variables.css', import.meta.url)),
+      'utf8',
+    );
+    const base = /--accent-base:\s*(#[0-9a-fA-F]{6})/.exec(css)?.[1];
+    expect(base, 'variables.css declares no --accent-base').toBeDefined();
+    expect(ACCENT_PRESETS.map((p) => p.value)).toContain(base!.toLowerCase());
   });
 });

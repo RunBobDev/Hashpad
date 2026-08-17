@@ -1,4 +1,10 @@
 @import './variables.css';
+/* The preview pane and the prose it renders. Split out because it is
+   self-contained and carries its own reasoning, not because it loads separately
+   -- see that file's header for why the import site is irrelevant to bundle
+   size. No line count here: the first version of this comment guessed one and
+   was wrong within the same task. */
+@import './preview.css';
 
 /*
  * Chrome layout for SPEC §6.1. Rows are fixed height; the editor area takes the
@@ -460,44 +466,10 @@ body {
   background: var(--bg-editor);
 }
 
-.preview-divider {
-  flex: 0 0 5px;
-  cursor: col-resize;
-  background: var(--border);
-  /* The frameless window drags from empty chrome; this is not empty chrome. */
-  --wails-draggable: no-drag;
-}
-
-.preview-divider:hover,
-.preview-divider:focus-visible {
-  background: var(--accent);
-}
-
-/* Width comes from an inline flex-basis (preview/pane.ts's applyRatio), which
-   is why the shorthand here fixes grow and shrink at 0 and leaves the basis to
-   be overridden. */
-.preview-pane {
-  flex: 0 0 auto;
-  min-width: 0;
-  overflow: auto;
-  background: var(--bg-editor);
-}
-
-/* What the pane shows when renderMarkdown throws. Deliberately plain and
-   unmissable: it replaces the render, so it must not read as document text. */
-.preview-error {
-  margin: 12px;
-  padding: 8px 12px;
-  /* --bg-danger is the only red either theme defines, and it is a *background*
-     colour: it is the same #c42b1c in light and dark, so it was never picked
-     to be legible as text on the dark editor surface and its contrast there is
-     unmeasured. The red is a border, the text stays --fg-primary, and
-     Checkpoint H's palette work can add a real foreground token. */
-  border-left: 3px solid var(--bg-danger);
-  color: var(--fg-primary);
-  font-family: var(--font-ui);
-  white-space: pre-wrap;
-}
+/* `.preview-divider`, `.preview-pane` and `.preview-error` used to live here.
+   They moved to preview.css with the prose styling in Checkpoint F Task 8 --
+   `.editor-split` and `.editor-area` above stay, because that row exists
+   whether or not the preview is on. */
 
 /*
  * The blockquote line decoration (editor/blockquote.ts). Qualified with

@@ -27,8 +27,22 @@
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --font-editor: 'Cascadia Mono', Consolas, ui-monospace, monospace;
 
+  /* The preview renders prose, not source, so it takes a proportional face and
+     a little more size than the editor's 14px monospace.
+
+     Deliberately its own token even though it resolves to --font-ui today: the
+     preview is document content, and the chrome is not. `PreviewSettings`
+     already has `FontFamily`/`FontSize` fields on the Go side, but nothing in
+     the frontend reads `settings.editor.fontFamily` either -- the editor takes
+     --font-editor/--size-editor compiled in from this file, and wiring the
+     font settings through is a later checkpoint's job for both panes at once.
+     Until then these two are where the preview's typography is set, so there is
+     one pattern rather than two. */
+  --font-preview: var(--font-ui);
+
   --size-ui: 14px;
   --size-editor: 14px;
+  --size-preview: 15px;
   --line-editor: 1.6;
 
   /* Editor padding — SPEC §6.1 asks for roughly 24px horizontal. */
@@ -73,7 +87,13 @@
 
   /* Windows' standard close red. Deliberately identical in both themes — it is
      the one colour users read as "this closes the window", so it should not
-     shift with the theme. White on it scores 5.7:1. */
+     shift with the theme. White on it scores 5.7:1.
+
+     Background only, and the "bg" in the name is load-bearing: measured as
+     *text* it is 5.66:1 on the light editor background but only 3.07:1 on the
+     dark one, so it fails AA in one theme. Use --syn-code-invalid for red text
+     — preview.css's error card did use this token and was changed for exactly
+     that reason. */
   --bg-danger: #c42b1c;
   --fg-on-danger: #ffffff;
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 18%);
@@ -119,8 +139,20 @@
      retune one, the test is the authority, not this comment. Starting values
      are adapted from GitHub's Primer palettes, which are themselves
      contrast-tuned; they live here because SPEC §5.3 allows colours nowhere
-     else, not because the preview is imitating GitHub (design §2.3). */
-  --syn-code-keyword: #8250df;
+     else, not because the preview is imitating GitHub (design §2.3).
+
+     Measured against **--syn-code-bg, not --bg-editor**, and that distinction
+     shipped a real failure. Code tokens are never painted on the plain editor
+     background: editor/highlight.ts gives tags.monospace a --syn-code-bg
+     backgroundColor, and preview.css gives `pre` and inline `code` the same
+     tint. The tint moves every ratio *down* -- light #f0f0f0 against #ffffff
+     costs about 0.6 -- and the original test checked --bg-editor only, so
+     --syn-code-keyword #8250df passed review at 5.05:1 while rendering at
+     4.43:1 on the surface it is actually composited over. That is every
+     keyword in every light-theme fence, below AA. Now #6f42c1: 5.71:1 on the
+     tint, 6.51:1 on the plain background. The test now measures both surfaces,
+     which is what the header of this file already told everyone to do. */
+  --syn-code-keyword: #6f42c1;
   --syn-code-string: #0a3069;
   --syn-code-literal: #0550ae;
   --syn-code-comment: #656d76;
@@ -157,6 +189,8 @@
   --selection: color-mix(in oklab, var(--accent-base) 34%, transparent);
   --drop-indicator: var(--accent);
 
+  /* See the light block: same value in both themes, and background-only there
+     too — this is the theme it measures 3.07:1 as text on. */
   --bg-danger: #c42b1c;
   --fg-on-danger: #ffffff;
   /* Deeper than light mode: a shadow at 18% is invisible against dark chrome. */
@@ -187,7 +221,10 @@
      it still clears AA on this specific background. */
   --syn-highlight-marker: #c4c4c4; /* 4.93:1 on --syn-highlight-bg */
 
-  /* See the light block. Measured against --bg-editor #1a1a1a. */
+  /* See the light block. Measured against both surfaces a code token is
+     composited over: --bg-editor #1a1a1a and --syn-code-bg #262626. Dark had
+     margin to spare and needed no retune -- the thinnest here is
+     --syn-code-comment at 5.20:1 on the tint. */
   --syn-code-keyword: #ff7b72;
   --syn-code-string: #a5d6ff;
   --syn-code-literal: #79c0ff;

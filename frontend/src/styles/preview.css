@@ -1,0 +1,344 @@
+/*
+ * The preview pane and the prose it renders.
+ *
+ * GitHub's *structural* conventions -- bordered top-level headings, a rule down
+ * the left of a blockquote, banded table rows, a tinted code fence -- on
+ * Hashpad's own palette (design §2.3). Matching GitHub's actual greys would
+ * need a second palette and would stop the preview following the user's accent,
+ * so nothing here picks a colour: **every colour in this file is a var(--…)**,
+ * per SPEC §5.3, and `render.test.ts` asserts that mechanically.
+ *
+ * Reached through `@import` from app.css rather than an `import` in main.ts or
+ * in preview/pane.ts. All three are identical for bundle size -- vite.config.ts
+ * sets `cssCodeSplit: false`, so every stylesheet the graph reaches is merged
+ * into one file no matter who imports it -- so this is not a lazy-loading
+ * decision and should not be read as one. It is here because app.css is the
+ * stylesheet root the app already has, and because `pane.ts` is loaded through
+ * a dynamic `import()`: hiding the import inside the lazy module would tie the
+ * pane's styling to whether that chunk has arrived, for no saving at all.
+ */
+
+/* ---- The pane itself -------------------------------------------------- */
+
+.preview-divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--border);
+  /* The frameless window drags from empty chrome; this is not empty chrome. */
+  --wails-draggable: no-drag;
+}
+
+.preview-divider:hover,
+.preview-divider:focus-visible {
+  background: var(--accent);
+}
+
+/* Width comes from an inline flex-basis (preview/pane.ts's applyRatio), which
+   is why the shorthand here fixes grow and shrink at 0 and leaves the basis to
+   be overridden. */
+.preview-pane {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--pad-editor);
+  background: var(--bg-editor);
+  color: var(--fg-primary);
+  font-family: var(--font-preview);
+  font-size: var(--size-preview);
+  /* Same 1.6 as the editor (--line-editor), deliberately: scroll sync
+     interpolates between the two panes' heights, and matching leading is one
+     fewer source of divergence between them. */
+  line-height: var(--line-editor);
+}
+
+/* The first block's top margin would otherwise stack on the pane's padding and
+   push the document down by a heading's worth of space. */
+.preview-pane > :first-child {
+  margin-top: 0;
+}
+
+/* ---- Prose ------------------------------------------------------------ */
+
+.preview-pane h1,
+.preview-pane h2,
+.preview-pane h3,
+.preview-pane h4,
+.preview-pane h5,
+.preview-pane h6 {
+  margin: 24px 0 16px;
+  line-height: 1.25;
+  color: var(--syn-heading);
+}
+
+/* Only the top two levels get a rule, which is what makes it read as a section
+   break rather than as decoration on every heading. */
+.preview-pane h1,
+.preview-pane h2 {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-pane h1 {
+  font-size: 1.8em;
+}
+
+.preview-pane h2 {
+  font-size: 1.45em;
+}
+
+.preview-pane h3 {
+  font-size: 1.2em;
+}
+
+.preview-pane p,
+.preview-pane ul,
+.preview-pane ol,
+.preview-pane blockquote,
+.preview-pane table,
+.preview-pane pre {
+  margin: 0 0 16px;
+}
+
+.preview-pane a {
+  color: var(--syn-link);
+}
+
+.preview-pane hr {
+  height: 1px;
+  margin: 24px 0;
+  border: 0;
+  background: var(--border);
+}
+
+.preview-pane img {
+  max-width: 100%;
+}
+
+.preview-pane mark {
+  background: var(--syn-highlight-bg);
+  color: var(--syn-highlight-fg);
+}
+
+/* The same 3px rule the editor draws down a blockquote line (app.css's
+   `.cm-blockquote`), so the two panes agree on what a quote looks like. */
+.preview-pane blockquote {
+  padding: 0 12px;
+  border-left: 3px solid var(--syn-quote-border);
+  color: var(--syn-quote-fg);
+}
+
+.preview-pane blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---- Code ------------------------------------------------------------- */
+
+/* Inline code and the fence share the tint; the fence adds the box. Both fonts
+   come from --font-editor rather than --font-preview: code in the preview is
+   the same code as in the editor, and the two should line up character for
+   character. */
+.preview-pane code {
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius);
+  background: var(--syn-code-bg);
+  color: var(--syn-code-fg);
+  font-family: var(--font-editor);
+  font-size: 0.9em;
+}
+
+.preview-pane pre {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--syn-code-bg);
+  /* A long line scrolls the fence, never the pane. */
+  overflow-x: auto;
+}
+
+/* Inside a fence the tint is already on the <pre>, and the token colours come
+   from codetheme.ts's spans; the <code> must not repaint over them or add a
+   second box. --fg-primary rather than `inherit` so an uncoloured token (a
+   grammar that has not loaded, or a node with no rule) is legible rather than
+   whatever the surrounding prose happened to set. */
+.preview-pane pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--fg-primary);
+  font-size: 1em;
+}
+
+/* ---- Tables ----------------------------------------------------------- */
+
+.preview-pane table {
+  border-collapse: collapse;
+  /* Not `width: 100%`: a two-column table stretched across a wide pane reads
+     as a layout, not as data. */
+  max-width: 100%;
+}
+
+.preview-pane th,
+.preview-pane td {
+  padding: 6px 13px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.preview-pane thead th {
+  background: var(--bg-hover);
+}
+
+/* Banding, so a wide row stays readable across. --bg-hover is the same tint the
+   header uses, which is fine: the header is also bold, and a third background
+   token would be a colour decision this file is not allowed to make. */
+.preview-pane tbody tr:nth-child(even) {
+  background: var(--bg-hover);
+}
+
+/* ---- Task lists ------------------------------------------------------- */
+
+/* The bullet would sit beside a checkbox that already marks the item. The
+   checkbox itself is `disabled` (rules/tasklist.ts) -- the preview renders the
+   document, it does not edit it. */
+.preview-task-item {
+  list-style: none;
+}
+
+.preview-task-item input[type='checkbox'] {
+  vertical-align: middle;
+}
+
+/* ---- Front matter ----------------------------------------------------- */
+
+/*
+ * A card, not document text: front matter is metadata about the document
+ * (design §2.2), so it is set apart and dimmed rather than rendered as prose.
+ *
+ * --fg-muted on --bg-hover is 4.73:1 light and 4.54:1 dark -- above AA in both,
+ * but by the smallest margin of anything in this file, which is why
+ * codetheme.test.ts asserts this exact pairing rather than trusting the eye.
+ */
+.preview-frontmatter {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 24px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 0.85em;
+}
+
+.preview-frontmatter dt {
+  font-weight: 600;
+}
+
+.preview-frontmatter dd {
+  margin: 0;
+}
+
+/* A front-matter line with no colon is emitted as a bare div
+   (rules/frontmatter.ts) -- not a key/value pair, so it belongs across both
+   grid tracks rather than squeezed into the narrow key column. It is also the
+   shape malformed YAML takes, so it should stay readable. */
+.preview-frontmatter__raw {
+  grid-column: 1 / -1;
+  font-family: var(--font-editor);
+  white-space: pre-wrap;
+}
+
+/* ---- Image placeholders ----------------------------------------------- */
+
+/*
+ * A remote image, or a local one in a document that has never been saved
+ * (rules/images.ts). Dashed, because the border marks an absence -- there is a
+ * box here but nothing arrived to fill it.
+ *
+ * --fg-muted on the pane's --bg-editor is 5.74:1 in both themes; asserted in
+ * codetheme.test.ts alongside the front-matter card.
+ */
+.preview-image-placeholder {
+  display: inline-block;
+  padding: 8px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+/* The URL or path. Same --fg-muted as its parent rather than something dimmer:
+   a second, dimmer grey would be a new token below AA, and the distinction is
+   carried by the monospace face and the line break instead. */
+.preview-image-placeholder__detail {
+  display: block;
+  font-family: var(--font-editor);
+  font-size: 0.9em;
+  word-break: break-all;
+}
+
+/* ---- The error card --------------------------------------------------- */
+
+/*
+ * What the pane shows when renderMarkdown throws. Deliberately plain and
+ * unmissable: it replaces the render, so it must not read as document text.
+ *
+ * --syn-code-invalid, not --bg-danger. --bg-danger is a *background* colour and
+ * is the same #c42b1c in both themes, so it was never tuned to be read as text
+ * on the dark editor surface -- measured for this task, it is 5.66:1 light but
+ * only **3.07:1** dark, below AA. --syn-code-invalid is the theme-tuned red
+ * this checkpoint introduced (5.36:1 light, 8.95:1 dark on --bg-editor, both
+ * asserted by codetheme.test.ts), and it carries the same meaning.
+ *
+ * It stays on the pane's --bg-editor for that reason: on --bg-hover the light
+ * value drops to 4.41:1, so this card must not gain a background tint.
+ */
+.preview-error {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--syn-code-invalid);
+  color: var(--syn-code-invalid);
+  font-family: var(--font-ui);
+  white-space: pre-wrap;
+}
+
+/*
+ * Footnotes (markdown-it-footnote). The plan's construct list omitted these and
+ * so did the first pass, which left an entire rendered construct with no
+ * styling decision -- a `<section class="footnotes">` carrying an `<hr>`, an
+ * ordered list and backref arrows, inheriting prose styling as if it were
+ * prose. It is apparatus, not prose, so it reads dimmer and smaller and sits
+ * behind a rule.
+ *
+ * `footnotes-sep` is the `<hr>` markdown-it-footnote emits; it already picks up
+ * the `hr` rule above, so the only job here is the spacing that separates the
+ * block from the body text. The backref is an `<a>` and so already takes
+ * --syn-link.
+ *
+ * The reference marker is a `<sup>`: left at the browser default size, because
+ * shrinking it further makes a single digit hard to hit with a mouse, and it is
+ * the one part of the construct that lives inside prose.
+ */
+.preview-pane .footnotes {
+  margin-top: 32px;
+  color: var(--fg-secondary);
+  font-size: 0.9em;
+}
+
+.preview-pane .footnotes-sep {
+  margin-bottom: 8px;
+}
+
+.preview-pane .footnotes-list {
+  padding-left: 20px;
+}
+
+.preview-pane .footnote-item p {
+  margin: 0 0 4px;
+}
+
+/* Distinguishable from the note's own links without being decoration: it is a
+   navigation control, so it stays a link colour and only loses the underline. */
+.preview-pane .footnote-backref {
+  text-decoration: none;
+}
