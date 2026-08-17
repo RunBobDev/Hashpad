@@ -6,8 +6,10 @@ import { purifierForTests, renderMarkdown } from './render';
 
 /** Parses the rendered HTML so assertions are about structure, not substrings. */
 function render(markdown: string): Document {
-  const { html } = renderMarkdown(markdown, { documentDir: null });
-  return new DOMParser().parseFromString(html, 'text/html');
+  return new DOMParser().parseFromString(
+    renderMarkdown(markdown, { documentDir: null }),
+    'text/html',
+  );
 }
 
 describe('renderMarkdown', () => {

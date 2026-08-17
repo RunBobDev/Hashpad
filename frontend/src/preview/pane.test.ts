@@ -8,7 +8,7 @@
  * poked the store directly would pass even if nothing were wired to the editor
  * at all, which is exactly the failure this suite has to be able to see.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { buildExtensions } from '../editor/extensions';
@@ -85,7 +85,7 @@ vi.mock('../../wailsjs/go/app/App', () => ({
   WriteFile: vi.fn(),
 }));
 
-function seedStore(documents: Document[], activeId: string, ratio = 0.5): void {
+function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScroll = true): void {
   store.setState(() => ({
     documents,
     activeDocumentId: activeId,
@@ -94,6 +94,7 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5): void {
     activeFormats: '',
     pinnedToolbarCommands: [],
     previewSplitRatio: ratio,
+    syncScroll,
   }));
 }
 
@@ -104,7 +105,7 @@ function splitDoc(id: string, text: string, filePath: string | null = null): Doc
 }
 
 /** The split container with a real editor in it, the shape main.ts builds. */
-function mount(text = '# One\n', filePath: string | null = null, ratio = 0.5) {
+function mount(text = '# One\n', filePath: string | null = null, ratio = 0.5, syncScroll = true) {
   document.body.innerHTML = '<div class="editor-split"><div class="editor-area"></div></div>';
   const split = document.querySelector<HTMLElement>('.editor-split')!;
   const doc = splitDoc('a', text, filePath);
@@ -113,8 +114,8 @@ function mount(text = '# One\n', filePath: string | null = null, ratio = 0.5) {
     parent: split.querySelector<HTMLElement>('.editor-area')!,
   });
   views.push(view);
-  seedStore([doc], 'a', ratio);
-  const handle = mountPreview(split);
+  seedStore([doc], 'a', ratio, syncScroll);
+  const handle = mountPreview(split, view);
   handles.push(handle);
   return { split, view, handle };
 }
@@ -136,6 +137,34 @@ function dividerOf(split: HTMLElement): HTMLElement {
 function giveWidth(split: HTMLElement, left: number, right: number): void {
   split.getBoundingClientRect = () =>
     ({ left, right, width: right - left, top: 0, bottom: 0, height: 0 }) as DOMRect;
+}
+
+function rectAt(top: number): DOMRect {
+  return { top, bottom: top, left: 0, right: 0, width: 0, height: 0 } as DOMRect;
+}
+
+/**
+ * States where each `data-source-line` element sits, in document order -- jsdom
+ * has no layout engine, so every rect it reports is zero and the pane would
+ * otherwise measure every anchor at the same place. Call it after a render: the
+ * stubs go on the elements that render produced, and the next one replaces them.
+ *
+ * `tops` are positions in the pane's *content*, and the stub subtracts the
+ * pane's scroll position the way a real rect does -- a bounding rect is a screen
+ * position, so scrolling the container moves it. A stub that returned a fixed
+ * top would make the pane's measurement look wrong when it is right, since the
+ * pane subtracts that same scroll back out.
+ *
+ * The length assertion is what keeps the fixture honest. It fails the moment a
+ * document stops producing the elements a case thinks it is describing.
+ */
+function giveAnchorTops(pane: HTMLElement, tops: number[]): void {
+  pane.getBoundingClientRect = () => rectAt(0);
+  const elements = [...pane.querySelectorAll<HTMLElement>('[data-source-line]')];
+  expect(elements).toHaveLength(tops.length);
+  elements.forEach((element, index) => {
+    element.getBoundingClientRect = () => rectAt(tops[index]! - pane.scrollTop);
+  });
 }
 
 beforeEach(() => {
@@ -444,6 +473,378 @@ describe('local images', () => {
       'Local image unavailable',
     );
     handle.destroy();
+  });
+});
+
+/**
+ * What jsdom can and cannot say about this. CodeMirror's *height map* works
+ * here -- it estimates line heights rather than measuring them -- so
+ * `lineBlockAt`/`lineBlockAtHeight` return real numbers and the editor half of
+ * the mapping is genuinely exercised. Nothing else about layout is: every rect
+ * is zero and `documentTop` is zero at any scroll position, so the pane's
+ * anchor tops and the editor's screen geometry are both stated by the helpers
+ * above. What that buys is the arithmetic and the wiring; what it cannot show is
+ * that the numbers a real browser reports are the ones assumed here. Only a real
+ * build can (see docs/testing.md).
+ */
+describe('scroll sync', () => {
+  /**
+   * Line 1 renders to *two* elements -- markdown-it stamps the blockquote and
+   * the paragraph inside it with the same line -- and line 3 is the second
+   * paragraph. Line 2 is blank and has no element of its own.
+   */
+  const NESTED = '> quoted\n\npara\n';
+  /** In document order: the blockquote, its paragraph, the second paragraph. */
+  const TOPS = [0, 12, 600];
+  /** Where the editor's scroller sits down the window, once the chrome is above it. */
+  const SCROLLER_TOP = 100;
+  /** An arbitrary position the editor is already at, so "it moved" isn't enough. */
+  const PRIOR_SCROLL = 37;
+
+  function blockTopOf(view: EditorView, line: number): number {
+    return view.lineBlockAt(view.state.doc.line(line).from).top;
+  }
+
+  /**
+   * Gives the editor's scroller the geometry a real one has, and takes it away
+   * again: `documentTop` is where the document's origin sits on screen, which is
+   * the scroller's own screen top less how far it has been scrolled. jsdom
+   * reports both as zero, and zero is exactly the arrangement in which mixing
+   * scroll coordinates with screen ones happens to give the right answer -- so a
+   * test that left them at zero could not tell the two conversions apart.
+   *
+   * Removed again immediately: CodeMirror's own measure phase runs on an
+   * animation frame and must not be handed this fiction.
+   */
+  function placeScroller(view: EditorView, scrolledBy: number): () => void {
+    view.scrollDOM.scrollTop = scrolledBy;
+    view.scrollDOM.getBoundingClientRect = () => rectAt(SCROLLER_TOP);
+    Object.defineProperty(view, 'documentTop', {
+      value: SCROLLER_TOP - scrolledBy,
+      configurable: true,
+    });
+    return () => {
+      Reflect.deleteProperty(view.scrollDOM, 'getBoundingClientRect');
+      Reflect.deleteProperty(view, 'documentTop');
+    };
+  }
+
+  function scrollEditorToLine(view: EditorView, line: number): void {
+    const restore = placeScroller(view, blockTopOf(view, line));
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    restore();
+  }
+
+  function scrollPaneTo(view: EditorView, pane: HTMLElement, top: number): void {
+    const restore = placeScroller(view, PRIOR_SCROLL);
+    pane.scrollTop = top;
+    pane.dispatchEvent(new Event('scroll'));
+    restore();
+  }
+
+  function nextFrame(): Promise<void> {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+
+  function mountSynced(syncScroll = true) {
+    const mounted = mount(NESTED, null, 0.5, syncScroll);
+    mounted.handle.show();
+    giveAnchorTops(paneOf(mounted.split), TOPS);
+    return mounted;
+  }
+
+  it('scrolls the preview to where the editor’s top line rendered', () => {
+    const { split, view } = mountSynced();
+
+    scrollEditorToLine(view, 3);
+
+    expect(paneOf(split).scrollTop).toBe(600);
+  });
+
+  /**
+   * Two things at once, both of which have exactly one right answer. Line 2 has
+   * no element, so its position is interpolated between the anchors at lines 1
+   * and 3 -- 300, not the 375 a proportional mapping of 4 source lines onto
+   * 600px would give. And the anchor for line 1 is the blockquote at 0, not the
+   * paragraph nested inside it at 12: keeping both would put this at 306.
+   */
+  it('interpolates a line with no element of its own', () => {
+    const { split, view } = mountSynced();
+
+    scrollEditorToLine(view, 2);
+
+    expect(paneOf(split).scrollTop).toBeCloseTo(300);
+  });
+
+  it('scrolls the editor to the line the preview is showing', () => {
+    const { split, view } = mountSynced();
+
+    scrollPaneTo(view, paneOf(split), 300);
+
+    // Halfway down the anchored range is line 2, and the editor lands on it
+    // regardless of where it happened to be scrolled to before.
+    expect(view.scrollDOM.scrollTop).toBe(blockTopOf(view, 2));
+  });
+
+  /**
+   * The anchors describe the last render, and typing leaves that up to a
+   * debounce behind the view -- so between a deletion and the render that
+   * follows it, the anchors name lines the editor's document no longer has.
+   * `doc.line` throws for a line that isn't there, and an uncaught throw in a
+   * scroll handler takes the sync down with it.
+   */
+  it('clamps to the document when the anchors outlive the lines they name', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+    vi.useFakeTimers();
+
+    // A real edit that shortens the document, with its render still queued: the
+    // pane is still showing -- and still measuring -- the four-line version.
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'x' } });
+    scrollPaneTo(view, pane, 600);
+
+    // Line 3 of the anchors, clamped to the only line there is.
+    expect(view.scrollDOM.scrollTop).toBe(blockTopOf(view, 1));
+  });
+
+  /**
+   * A render can produce no anchors at all: markdown-it's `html_block` renderer
+   * emits the block verbatim and drops the attribute the source-line rule set on
+   * it, so a document of raw HTML has scrollable height and nothing to map
+   * against.
+   *
+   * With no mapping the sync stands aside, in **both** directions. It has to be
+   * both: `offsetForLine` and `lineForOffset` each answer 0 for an empty list, so
+   * acting on that would send the pane to the top on every editor scroll and the
+   * editor to line 1 on every preview scroll -- the two of them fighting over the
+   * top of a document neither can map. An earlier version of this test asserted
+   * that yanking-to-line-1 behaviour as if it were the requirement; the clamp it
+   * was really pinning (`Math.max(estimate, 1)`, which stops `doc.line(0)`
+   * throwing inside a scroll handler) is now covered by the mutation table
+   * instead, since this path no longer reaches it.
+   */
+  it('leaves both scrollers alone when the render produced no anchors at all', () => {
+    const mounted = mount('<div>plain</div>\n');
+    mounted.handle.show();
+    const pane = paneOf(mounted.split);
+    giveAnchorTops(pane, []);
+
+    // `PRIOR_SCROLL` is where `scrollPaneTo`'s own geometry setup leaves the
+    // editor, so finding it still there is what "the handler did not touch it"
+    // looks like. Reading a baseline before the call would read 0 and prove
+    // nothing about the handler.
+    scrollPaneTo(mounted.view, pane, 300);
+    expect(mounted.view.scrollDOM.scrollTop).toBe(PRIOR_SCROLL);
+
+    // Line 2, not 3: this fixture is a two-line document, and `blockTopOf`
+    // throws for a line it does not have before the handler is even reached.
+    scrollEditorToLine(mounted.view, 2);
+    expect(pane.scrollTop).toBe(300);
+  });
+
+  /**
+   * The three ways the pane's layout moves *without* a render, and so without
+   * anything else clearing the measurement cache. Each one leaves every measured
+   * offset describing a layout that no longer exists, and the pane then scrolls
+   * to the wrong place until the next keystroke happens to re-render.
+   *
+   * All three are asserted the same way: measure once, then change the world,
+   * then hand over *different* geometry and check the sync uses the new numbers.
+   * Re-stubbing alone proves nothing — a stale cache would keep answering 600
+   * whatever the DOM now says.
+   */
+  describe('invalidating the measurement cache', () => {
+    /**
+     * Measures the anchors, then re-stubs them 100px higher and re-syncs.
+     *
+     * The `nextFrame()` is not incidental: the first sync leaves the loop guard
+     * set until its animation frame runs, so a second sync in the same tick is
+     * suppressed as an echo and the pane would hold 600 whether the cache was
+     * cleared or not. Without the wait these tests fail against correct code.
+     */
+    async function expectRemeasured(
+      mounted: ReturnType<typeof mountSynced>,
+      disturb: () => void,
+    ): Promise<void> {
+      const pane = paneOf(mounted.split);
+      scrollEditorToLine(mounted.view, 3);
+      expect(pane.scrollTop).toBe(600);
+      await nextFrame();
+
+      disturb();
+      giveAnchorTops(pane, [0, 12, 500]);
+      scrollEditorToLine(mounted.view, 3);
+
+      expect(pane.scrollTop).toBe(500);
+    }
+
+    // Narrowing the pane rewraps its text and rescales its images. A drag never
+    // renders: the pane's subscription selects the active `Document` and a ratio
+    // write hands back the same object, so the store does not notify.
+    it('re-measures after the divider moves', async () => {
+      const mounted = mountSynced();
+      await expectRemeasured(mounted, () => {
+        dividerOf(mounted.split).dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowLeft', cancelable: true }),
+        );
+      });
+    });
+
+    it('re-measures after the window resizes', async () => {
+      const mounted = mountSynced();
+      await expectRemeasured(mounted, () => {
+        window.dispatchEvent(new Event('resize'));
+      });
+    });
+
+    /**
+     * An image reserves no height until it decodes — `rules/images.ts` emits no
+     * `width`/`height` — so everything below one shifts when it arrives. That is
+     * the headline case for this whole feature, not an edge case: a tall image is
+     * the reason the sync is line-anchored rather than proportional.
+     *
+     * `load` does not bubble from an `<img>`, so the listener is on the capture
+     * phase; dispatching a bubbling event here would pass even without it.
+     */
+    it('re-measures when an image finishes loading', async () => {
+      const mounted = mountSynced();
+      await expectRemeasured(mounted, () => {
+        const image = document.createElement('img');
+        paneOf(mounted.split).append(image);
+        image.dispatchEvent(new Event('load'));
+      });
+    });
+  });
+
+  it('leaves the preview alone when sync is off', () => {
+    const { split, view } = mountSynced(false);
+
+    scrollEditorToLine(view, 3);
+
+    expect(paneOf(split).scrollTop).toBe(0);
+  });
+
+  it('leaves the editor alone when sync is off', () => {
+    const { split, view } = mountSynced(false);
+
+    scrollPaneTo(view, paneOf(split), 300);
+
+    expect(view.scrollDOM.scrollTop).toBe(PRIOR_SCROLL);
+  });
+
+  /**
+   * The echo has to be simulated: jsdom stores a `scrollTop` assignment and
+   * fires nothing, where a browser dispatches `scroll` asynchronously afterwards.
+   * Without the guard that echo maps the editor's position straight back into the
+   * pane, which is the oscillation this exists to stop -- and it is visible here
+   * because the pane would land at 0 rather than staying where it was put.
+   */
+  it('ignores the echo of a scroll it caused itself', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    scrollPaneTo(view, pane, 300);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+
+    expect(pane.scrollTop).toBe(300);
+  });
+
+  it('is listening again on the next frame', async () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+    scrollPaneTo(view, pane, 300);
+
+    await nextFrame();
+    scrollEditorToLine(view, 3);
+
+    expect(pane.scrollTop).toBe(600);
+  });
+
+  /**
+   * The guard's flag is closure state that outlives the pane, so a `hide()` that
+   * cancelled its frame without also clearing the flag would leave the sync
+   * permanently dead from the next `show()` on -- with nothing in the DOM to say
+   * so.
+   */
+  it('survives a hide and show with the guard still set', () => {
+    const { split, view, handle } = mountSynced();
+    scrollPaneTo(view, paneOf(split), 300);
+
+    handle.hide();
+    handle.show();
+    giveAnchorTops(paneOf(split), TOPS);
+    scrollEditorToLine(view, 3);
+
+    expect(paneOf(split).scrollTop).toBe(600);
+  });
+
+  /**
+   * Re-measured after every render, not once. A render replaces the pane's
+   * contents outright, so an anchor list left over from the previous one
+   * describes elements that are no longer in the tree -- it sends the pane to a
+   * position that was right a keystroke ago, with nothing to report.
+   */
+  it('re-measures after a render', async () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+    scrollEditorToLine(view, 3);
+    expect(pane.scrollTop).toBe(600);
+
+    // A grammar arriving is the cheapest immediate re-render to reach, and the
+    // elements it produces are new objects -- the stubbed geometry with them.
+    for (const listener of languageListeners) listener();
+    giveAnchorTops(pane, [0, 12, 900]);
+
+    // The loop guard is still holding from the scroll above; a real second
+    // gesture is always at least a frame later.
+    await nextFrame();
+    scrollEditorToLine(view, 3);
+
+    expect(pane.scrollTop).toBe(900);
+  });
+
+  it('releases the editor’s scroll listener on hide', () => {
+    const { view, handle } = mountSynced();
+    const removed = vi.spyOn(view.scrollDOM, 'removeEventListener');
+
+    handle.hide();
+
+    expect(removed).toHaveBeenCalledWith('scroll', expect.any(Function));
+  });
+
+  /**
+   * Asserted on the call rather than on an effect, and deliberately: after
+   * `hide()` every handler bails on the null pane anyway, so a listener left
+   * behind is a retained closure rather than a wrong number on screen. Same hole
+   * and same reasoning as 'releases its store subscription' below.
+   */
+  it('releases the pane’s scroll listener on hide', () => {
+    const { split, handle } = mountSynced();
+    const removed = vi.spyOn(paneOf(split), 'removeEventListener');
+
+    handle.hide();
+
+    expect(removed).toHaveBeenCalledWith('scroll', expect.any(Function));
+  });
+
+  /**
+   * The only spy in this file on something that outlives its test, so it is
+   * restored through `onTestFinished` rather than at the end of the body: a
+   * failing assertion aborts before that line, and `window.cancelAnimationFrame`
+   * left spied takes down every later test that tears an editor down.
+   * Mutation-tested -- with the restore inline, breaking this reddened eleven.
+   */
+  it('cancels the guard’s pending frame on destroy', () => {
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    onTestFinished(() => cancel.mockRestore());
+    const { split, view, handle } = mountSynced();
+    scrollPaneTo(view, paneOf(split), 300);
+
+    handle.destroy();
+
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });
 

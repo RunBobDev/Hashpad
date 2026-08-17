@@ -274,6 +274,7 @@ describe('save-as records the new path on the document it saved', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
   }
 

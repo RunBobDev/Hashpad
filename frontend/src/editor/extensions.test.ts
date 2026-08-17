@@ -25,6 +25,7 @@ function resetStore(): void {
     activeFormats: '',
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
+    syncScroll: true,
   }));
 }
 

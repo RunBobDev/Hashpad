@@ -221,3 +221,40 @@ Automation covers the traversal rejections; these are the ones it cannot reach.
       sandbox` and `X-Content-Type-Options: nosniff` for exactly this — an SVG
       is a document, and `index.html`'s CSP is a `<meta>` tag that does not
       apply to a page the webview navigates to.
+
+## Checkpoint F — scroll sync (Task 7)
+
+Everything here is geometry, and jsdom has no layout engine: every rect it
+reports is zero and `documentTop` is zero at any scroll position. The automated
+tests state a geometry and check the arithmetic and the wiring on top of it
+(`preview/scrollsync.test.ts` for the mapping, the `scroll sync` block of
+`preview/pane.test.ts` for the two directions). **That the numbers a real
+browser reports are the ones those tests assume is unverified, and only these
+checks can settle it.** Use a document with a tall image and a long fenced block
+so the rendered height diverges from the source height — a proportional mapping
+looks right without one.
+
+- [ ] **Scrolled by content, not by fraction.** Put the caret on a known heading
+      near the tall image, scroll the editor so that heading is at the top, and
+      confirm the *same* heading is at the top of the preview. Then the reverse.
+      A sync that is a constant fraction off is what a wrong coordinate
+      conversion looks like, and the pane's own two conversions
+      (`preview/pane.ts`'s `syncFromEditor`/`syncFromPreview`) both go through
+      the scroller's screen rect, which jsdom reports as zero.
+- [ ] **No oscillation at either extreme.** Scroll each pane hard to the top and
+      to the bottom and let go. Any judder or creep is the loop guard failing:
+      the browser fires `scroll` asynchronously after `scrollTop` is assigned,
+      and the flag that suppresses that echo is cleared on the next animation
+      frame.
+- [ ] **A fenced code block lands right.** Its `data-source-line` sits on the
+      inline `<code>`, not the `<pre>`, so its measured top is the top of the
+      first line box — a padding below the block. Confirm the drift is not
+      visible; if it is, `anchorOffsets` should resolve to the nearest block
+      ancestor instead.
+- [ ] **`preview.syncScroll: false` in settings.json really stops it**, in both
+      directions, with the panes then scrolling independently. There is no UI for
+      this until Checkpoint H, so hand-editing the file is the only way in.
+- [ ] **Minimise with the preview open, restore, and scroll again.** The loop
+      guard is cleared on an animation frame, and Chromium defers frame callbacks
+      for a window that is not painting rather than dropping them — that is the
+      reasoning, not a measurement against WebView2.

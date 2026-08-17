@@ -38,6 +38,9 @@ vi.mock('../wailsjs/go/app/App', () => ({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
     window: { previewSplitRatio: 0.5 },
+    // Also read by bootstrap. Go always sends the block, so a mock without it
+    // would make bootstrap throw where the real app never can.
+    preview: { syncScroll: true },
     // Neither of these is in DEFAULT_PINNED (bold, italic, strikethrough,
     // inlineCode, heading, bulletList, numberedList, taskList, link, table).
     toolbar: { visible: true, pinned: ['blockquote', 'footnote'] },

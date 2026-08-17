@@ -35,6 +35,9 @@ vi.mock('../wailsjs/go/app/App', () => ({
     // Not 0.5: the compiled-in default is 0.5, so a bootstrap that never read
     // settings at all would pass a 0.5 assertion.
     window: { previewSplitRatio: 0.3 },
+    // False for the same reason, the compiled-in default being true (Go's
+    // `DefaultSettings`, and state/appcontext.ts's placeholder).
+    preview: { syncScroll: false },
   }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
@@ -110,6 +113,15 @@ afterEach(async () => {
 describe('bootstrap', () => {
   it('seeds the split ratio from settings rather than the compiled-in default', () => {
     expect(store.getState().previewSplitRatio).toBeCloseTo(0.3);
+  });
+
+  /**
+   * Same reasoning as the ratio above, and the same reason the mock says
+   * `false`: the store's placeholder and Go's default are both `true`, so this
+   * only passes if bootstrap really read the file.
+   */
+  it('seeds the scroll-sync setting from settings too', () => {
+    expect(store.getState().syncScroll).toBe(false);
   });
 
   // #app is a flex column, so the editor and the preview need a row of their

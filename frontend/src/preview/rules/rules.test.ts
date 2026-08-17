@@ -4,11 +4,26 @@ import { renderMarkdown } from '../render';
 import { ASSET_ROUTE } from './images';
 
 function render(markdown: string, documentDir: string | null = 'C:\\docs') {
-  const result = renderMarkdown(markdown, { documentDir });
-  return {
-    ...result,
-    doc: new DOMParser().parseFromString(result.html, 'text/html'),
-  };
+  const html = renderMarkdown(markdown, { documentDir });
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // The source lines actually present in the *sanitised* output. `renderMarkdown`
+  // used to hand this back, computed by its own `anchorsIn` pass; nothing in the
+  // app read it, so it went. Derived here from the document this helper already
+  // parses, which costs nothing extra.
+  //
+  // Read back out of the finished HTML rather than from what the source-line
+  // rule stamped, because those are not the same list: a comment is removed
+  // entirely (SPEC §6.8's annotation mechanism, so routine rather than an edge
+  // case), markdown-it's `html_block` renderer emits `token.content` verbatim
+  // and drops the attribute, and DOMPurify strips `<style>`/`<script>` outright.
+  const anchors = [
+    ...new Set(
+      [...doc.querySelectorAll('[data-source-line]')]
+        .map((element) => Number(element.getAttribute('data-source-line')))
+        .filter((line) => Number.isInteger(line) && line > 0),
+    ),
+  ].sort((a, b) => a - b);
+  return { html, doc, anchors };
 }
 
 /** The query half of an asset URL, parsed the way Go's `r.URL.Query()` parses it. */

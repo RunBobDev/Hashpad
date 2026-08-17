@@ -74,6 +74,19 @@ export interface AppState {
    * can hold the value without importing the lazily loaded preview module.
    */
   previewSplitRatio: number;
+  /**
+   * SPEC §6.13's `preview.syncScroll`, seeded by main.ts's bootstrap the same
+   * way `previewSplitRatio` above is. It lives in the store rather than being
+   * read from settings at the moment it is needed because both scroll handlers
+   * in preview/pane.ts consult it on every scroll event, and neither can await
+   * an IPC round trip; keeping it here also means a future settings dialog
+   * takes effect immediately (SPEC §6.13) with no re-mount.
+   *
+   * Nothing writes it back yet -- there is no UI for the toggle until
+   * Checkpoint H's settings dialog, so hand-editing settings.json is the only
+   * way to turn it off today.
+   */
+  syncScroll: boolean;
 }
 
 /**

@@ -132,6 +132,9 @@ async function bootstrap(): Promise<void> {
   let toolbarVisible = true;
   let pinnedCommands: string[] = [...DEFAULT_PINNED];
   let splitRatio = DEFAULT_SPLIT_RATIO;
+  // True is Go's default too (internal/app/settings.go's `DefaultSettings`), so
+  // a settings load that fails leaves the same behaviour a fresh install has.
+  let syncScroll = true;
 
   try {
     const settings = await LoadSettings();
@@ -168,6 +171,13 @@ async function bootstrap(): Promise<void> {
     // Read last in this block deliberately -- anything that threw here would
     // cost the theme and the toolbar their settings too.
     splitRatio = clampSplitRatio(settings.window.previewSplitRatio);
+    // Taken as-is rather than validated the way the ratio above is, for the
+    // same reason `toolbar.visible` is: Go unmarshals this field into a `bool`,
+    // and `LoadSettingsFrom` replaces a file that fails to unmarshal with
+    // defaults (internal/app/settings.go), so a hand-edited non-boolean never
+    // reaches this side. Read last for the same reason the ratio is read late
+    // -- a throw here must not cost the theme, the toolbar and the ratio theirs.
+    syncScroll = settings.preview.syncScroll;
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -176,6 +186,7 @@ async function bootstrap(): Promise<void> {
       ...prev,
       pinnedToolbarCommands: pinnedCommands,
       previewSplitRatio: splitRatio,
+      syncScroll,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog, and MenuItem has no checkmark
@@ -354,7 +365,7 @@ async function togglePreview(): Promise<void> {
   // Imported before the state write, so the subscription has a handle to call
   // `show()` on when it fires.
   if (!previewHandle) {
-    previewHandle = (await import('./preview/pane')).mountPreview(editorSplit);
+    previewHandle = (await import('./preview/pane')).mountPreview(editorSplit, view);
   }
   store.setState((prev) => setViewMode(prev, active.id, 'split', mode));
 }

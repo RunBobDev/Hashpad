@@ -72,6 +72,7 @@ beforeEach(() => {
     activeFormats: '',
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
+    syncScroll: true,
   }));
   vi.clearAllMocks();
 });
@@ -141,6 +142,7 @@ describe('switchToDocument', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -160,6 +162,7 @@ describe('switchToDocument', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -179,6 +182,7 @@ describe('switchToDocument', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -201,6 +205,7 @@ describe('switchToDocument', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -226,6 +231,7 @@ describe('switchToDocument', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
@@ -252,6 +258,7 @@ describe('openDocumentInNewTab', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -287,6 +294,7 @@ describe('openDocumentInNewTab', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -309,6 +317,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(b.editorState);
 
@@ -329,6 +338,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -348,6 +358,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
@@ -370,6 +381,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
@@ -391,6 +403,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -417,6 +430,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -447,6 +461,7 @@ describe('closeDocumentWithPrompt', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -474,6 +489,7 @@ describe('reopenLastClosed', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
 
@@ -493,6 +509,7 @@ describe('reopenLastClosed', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -520,6 +537,7 @@ describe('reopenLastClosed', () => {
       activeFormats: '',
       pinnedToolbarCommands: [],
       previewSplitRatio: 0.5,
+      syncScroll: true,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));

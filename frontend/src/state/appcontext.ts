@@ -33,6 +33,9 @@ export const store: Store<AppState> = createStore<AppState>({
   // Placeholder, like `pinnedToolbarCommands` above: main.ts's bootstrap
   // replaces it with the validated `window.previewSplitRatio` from settings.
   previewSplitRatio: DEFAULT_SPLIT_RATIO,
+  // True to match Go's `DefaultSettings()` (internal/app/settings.go), which is
+  // what a settings file that has never been edited carries.
+  syncScroll: true,
 });
 
 let editorView: EditorView | undefined;

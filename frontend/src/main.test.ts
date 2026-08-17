@@ -64,6 +64,9 @@ vi.mock('../wailsjs/go/app/App', () => ({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
     window: { previewSplitRatio: 0.5 },
+    // Also read by bootstrap. Go always sends the block, so a mock without it
+    // would make bootstrap throw where the real app never can.
+    preview: { syncScroll: true },
     toolbar: {
       visible: true,
       pinned: [
@@ -113,6 +116,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     activeFormats: '',
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
+    syncScroll: true,
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);

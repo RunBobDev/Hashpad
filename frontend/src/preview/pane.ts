@@ -5,10 +5,17 @@
  * out of the entry bundle (design §2.4). Nothing in the startup path may
  * import it, directly or transitively.
  *
- * `mountPreview` takes the split container and nothing else. The plan's
- * interface also took the `EditorView`, for an `EditorView.updateListener` on
- * `docChanged` -- but there is no way to attach one to the already-constructed
- * view that survives a tab switch. Measured: an extension added with
+ * `mountPreview` takes the split container and the `EditorView`. The view is
+ * here for scroll sync, which needs the editor's geometry (`scrollDOM`,
+ * `lineBlockAt`, `documentTop`) -- and for nothing else. It is passed as a
+ * plain argument rather than fetched from `state/appcontext.ts`'s
+ * `getEditorView()`, which throws when no view has been set, so this module
+ * stays testable without that ambient state.
+ *
+ * It is deliberately *not* used for the trigger the plan wanted it for: an
+ * `EditorView.updateListener` on `docChanged`. There is no way to attach one to
+ * the already-constructed view that survives a tab switch. Measured: an
+ * extension added with
  * `StateEffect.appendConfig` stops firing the moment
  * `files/documentops.ts`'s `switchToDocument` calls `view.setState(...)`,
  * because configuration comes from the state being installed, so a listener
@@ -24,6 +31,7 @@
  * `view.setState`, so a render driven off `view.state` at that instant would
  * paint the outgoing document.
  */
+import type { EditorView } from '@codemirror/view';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import { documentDirOf } from '../files/documentops';
 import { store } from '../state/appcontext';
@@ -31,6 +39,7 @@ import { clampSplitRatio, MAX_SPLIT_RATIO, MIN_SPLIT_RATIO } from '../state/docu
 import { activeDocument } from '../state/documents';
 import { onLanguageLoaded } from './codehighlight';
 import { renderMarkdown } from './render';
+import { lineForOffset, normalizeAnchors, offsetForLine, type AnchorOffset } from './scrollsync';
 
 export interface PreviewHandle {
   show(): void;
@@ -53,7 +62,7 @@ const SAVE_DEBOUNCE_MS = 300;
 /** How far Left/Right move the divider per press. */
 const KEYBOARD_STEP = 0.05;
 
-export function mountPreview(split: HTMLElement): PreviewHandle {
+export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandle {
   let pane: HTMLElement | null = null;
   let divider: HTMLElement | null = null;
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,6 +70,18 @@ export function mountPreview(split: HTMLElement): PreviewHandle {
   /** Set for the duration of a mouse drag; removes the window-level listeners. */
   let endDrag: (() => void) | null = null;
   let lastActiveId = activeDocument(store.getState())?.id ?? null;
+  /**
+   * Where each source line ended up, or `null` when the last render invalidated
+   * the measurement. Measured on the first scroll after a render rather than at
+   * the end of the render itself: reading `getBoundingClientRect` forces a
+   * synchronous layout, and the render path runs on every debounced keystroke
+   * whether or not anyone ever scrolls. Re-measuring after *every* render is
+   * not optional -- every render moves everything.
+   */
+  let anchors: AnchorOffset[] | null = null;
+  /** Set while this module is the one moving a scroller; see `withGuard`. */
+  let applying = false;
+  let guardFrame: number | null = null;
 
   function clearRenderTimer(): void {
     if (renderTimer === null) return;
@@ -75,6 +96,10 @@ export function mountPreview(split: HTMLElement): PreviewHandle {
    */
   function render(): void {
     clearRenderTimer();
+    // Unconditional, and before the early returns: every render moves every
+    // element, and a render that bails still leaves the cache describing
+    // content that may no longer be on screen.
+    anchors = null;
     if (pane === null) return;
 
     const doc = activeDocument(store.getState());
@@ -88,7 +113,7 @@ export function mountPreview(split: HTMLElement): PreviewHandle {
       // two is what stops every local image in a saved document from showing
       // that placeholder forever.
       const dir = documentDirOf(doc.filePath);
-      const { html } = renderMarkdown(doc.editorState.doc.toString(), {
+      const html = renderMarkdown(doc.editorState.doc.toString(), {
         documentDir: dir === '' ? null : dir,
       });
       // Sanitised by renderMarkdown -- see render.ts, where `html: true` and
@@ -159,11 +184,207 @@ export function mountPreview(split: HTMLElement): PreviewHandle {
    */
   const unsubscribeLanguage = onLanguageLoaded(render);
 
+  /**
+   * Where each `[data-source-line]` element sits, in the pane's own scroll
+   * coordinates -- measured once per render, on the first scroll that needs it.
+   *
+   * Not `offsetTop`, for two reasons. It is relative to the nearest positioned
+   * `offsetParent`, so any positioned ancestor silently shifts it away from the
+   * pane's frame; and a fenced block anchors on the inline `<code>`, whose box is
+   * not comparable to the block elements around it. Subtracting the pane's own
+   * rect keeps every anchor in one frame regardless of either.
+   *
+   * A fenced block's measured top therefore sits one `<pre>` padding below the
+   * block's own top. Close enough to scroll to; not measured against a real
+   * browser, and `docs/testing.md` carries it as a manual check.
+   *
+   * `Number(...)` is handed straight over rather than validated here:
+   * `normalizeAnchors` drops a line that is not a positive integer, next to the
+   * sort that depends on it.
+   */
+  function anchorOffsets(target: HTMLElement): AnchorOffset[] {
+    if (anchors !== null) return anchors;
+    const contentTop = target.getBoundingClientRect().top - target.scrollTop;
+    anchors = normalizeAnchors(
+      [...target.querySelectorAll<HTMLElement>('[data-source-line]')].map((element) => ({
+        line: Number(element.dataset.sourceLine),
+        offset: element.getBoundingClientRect().top - contentTop,
+      })),
+    );
+    return anchors;
+  }
+
+  /**
+   * Scrolling one pane scrolls the other, whose own scroll event would scroll
+   * the first one back. The flag is cleared on the next frame rather than
+   * synchronously because the browser fires `scroll` asynchronously, well after
+   * the assignment to `scrollTop` has returned -- clearing it inline would let
+   * the echo straight through.
+   *
+   * A frame, specifically, and not a `setTimeout`: HTML's "update the rendering"
+   * steps run the scroll steps (which fire the echo) *before* the animation
+   * frame callbacks, so a flag cleared in a frame callback is still set when the
+   * echo arrives and is clear again by the time the user's next gesture can
+   * reach us. A timeout task could be scheduled either side of that.
+   *
+   * The frame is booked before `apply()` runs so that a throw inside it cannot
+   * leave the flag set with nothing scheduled to clear it.
+   *
+   * A frame that never came would wedge the flag on and silently kill the sync.
+   * Chromium -- WebView2 is Chromium -- defers pending frame callbacks for a
+   * hidden or occluded window rather than dropping them, so that state clears on
+   * the next paint. Not verified against WebView2 itself, and not reachable in
+   * any case: both entry points are `scroll` events on scrollers the user cannot
+   * reach without the window on screen, and the pane only exists after a
+   * Ctrl+Shift+P.
+   *
+   * **This whole argument depends on the scroll being instantaneous, and that is
+   * a property of the CSS, not of this file.** Verified in real Chromium: with
+   * the default `scroll-behavior: auto` the guard is airtight, including across
+   * a 3000 px animated scroll that fired on 64 consecutive frames -- every echo
+   * suppressed. With `scroll-behavior: smooth` on the *target* scroller the
+   * assignment animates over ~60 frames, only the first frame's echo is inside
+   * the guard, and the remaining 63 run with the flag clear and drag the source
+   * scroller back to 0. Nothing in `src/` or in `@codemirror/view` sets
+   * `scroll-behavior` today (grepped both). If anyone ever adds it to `app.css`,
+   * this sync breaks in exactly that way and no test here will notice.
+   */
+  function withGuard(apply: () => void): void {
+    if (applying) return;
+    applying = true;
+    guardFrame = requestAnimationFrame(() => {
+      guardFrame = null;
+      applying = false;
+    });
+    apply();
+  }
+
+  /**
+   * A pending frame would clear the flag against a pane that no longer exists,
+   * and a flag left set would wedge the sync for the next `show()` -- both
+   * invisible from the DOM.
+   */
+  function releaseGuard(): void {
+    if (guardFrame !== null) {
+      cancelAnimationFrame(guardFrame);
+      guardFrame = null;
+    }
+    applying = false;
+  }
+
+  /**
+   * Editor -> preview. `lineBlockAtHeight` measures in the document's own
+   * coordinate space, whose origin sits at `documentTop` on screen; the top edge
+   * of what the user can see is the scroller's own screen top. The difference
+   * between those two is the whole conversion.
+   *
+   * Not `scrollDOM.scrollTop - documentTop`, which the brief had: that mixes the
+   * scroller's scroll coordinates with screen ones, and the two agree only when
+   * the scroller sits at y = 0. In the real window it sits below the menu bar,
+   * the tab strip and the toolbar.
+   *
+   * The half pixel is not padding. Scrolling to a line's top lands exactly on a
+   * block boundary, and `lineBlockAtHeight` resolves that to the block *above* --
+   * so without the nudge every such position reports the line that has just
+   * scrolled out of sight. Measured: at line 3's top of a four-line document it
+   * answers line 2. Where the sync is interesting that is not a one-line
+   * rounding error: when the block above is a tall image, the anchor it picks is
+   * an image's height too high.
+   *
+   * "Resolves to the block above" is true of the path this hits and is **not** an
+   * API-wide rule -- an earlier version of this comment claimed it was. In
+   * `@codemirror/view`, `ViewState.lineBlockAtHeight` matches the viewport with
+   * `find(l => l.top <= height && l.bottom >= height)`, and adjacent blocks share
+   * `bottom === top`, so `find` returns the earlier one. The fallback for a
+   * height outside the viewport goes through `HeightMapBranch.lineAt`, which at
+   * equality descends *right* -- the block below. The nudge makes both paths
+   * agree, which is the reason it is a nudge on the input rather than a
+   * correction on the output.
+   *
+   * Half a pixel, and the only constraint that matters is that it stay well
+   * under one line height -- it has to cross a boundary without skipping a line.
+   * CodeMirror's own `scrollAnchorAt` uses 8 px for the same job, so there is
+   * headroom. Unverified against a real line height: jsdom's height oracle
+   * estimates 14 px per line, so the suite pins the sign and nothing else.
+   */
+  function syncFromEditor(): void {
+    const target = pane;
+    if (target === null || !store.getState().syncScroll) return;
+    const list = anchorOffsets(target);
+    // Nothing to map against, so stand aside rather than guess. Both mapping
+    // functions answer 0 for an empty list, and acting on that would pin the
+    // pane to the top on every editor scroll -- with `syncFromPreview` then
+    // yanking the editor back to line 1, so the two would fight over the top of
+    // the document. Reachable: `html_block` drops the source-line attribute, so
+    // a document that is one block of raw HTML scrolls and has no anchors.
+    if (list.length === 0) return;
+    withGuard(() => {
+      const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop + 0.5;
+      const line = view.state.doc.lineAt(view.lineBlockAtHeight(height).from).number;
+      target.scrollTop = offsetForLine(list, line);
+    });
+  }
+
+  /**
+   * Preview -> editor, the inverse. `BlockInfo.top` is in that same document
+   * coordinate space, so `documentTop + top` is where the line is on screen, and
+   * the distance from there to the scroller's own top is how much further it has
+   * to scroll. `+=`, not `=`: `scrollTop` is not in that space, so only the
+   * delta translates between the two.
+   *
+   * Both ends of the clamp are load-bearing, and `doc.line` throws -- inside a
+   * scroll handler, where a throw takes the sync down with it -- for anything
+   * outside them. Above: `anchors` describes the last render, which typing leaves
+   * up to a debounce behind, so deleting the tail of a document briefly leaves
+   * anchors naming lines it no longer has. Below: `lineForOffset` can answer 0
+   * for an offset above the first anchor.
+   */
+  function syncFromPreview(): void {
+    const target = pane;
+    if (target === null || !store.getState().syncScroll) return;
+    const list = anchorOffsets(target);
+    // See `syncFromEditor`: an empty list means "no mapping", not "line 1".
+    if (list.length === 0) return;
+    withGuard(() => {
+      const doc = view.state.doc;
+      const estimate = Math.round(lineForOffset(list, target.scrollTop));
+      const line = Math.min(Math.max(estimate, 1), doc.lines);
+      const scroller = view.scrollDOM;
+      scroller.scrollTop +=
+        view.documentTop +
+        view.lineBlockAt(doc.line(line).from).top -
+        scroller.getBoundingClientRect().top;
+    });
+  }
+
   function applyRatio(ratio: number): void {
+    // Narrowing the pane rewraps its text and rescales its images, so every
+    // measured offset is stale -- and a drag never renders, so nothing else
+    // clears the cache. The pane's subscription selects the active `Document`,
+    // and a ratio write hands back the same object, so store.ts's `isEqual`
+    // does not notify (see the subscription's own comment). Without this line a
+    // drag-then-scroll replays the pre-drag offsets until the next keystroke.
+    anchors = null;
     // `flex-basis`, not `width`: the pane is a flex item in `.editor-split`,
     // and app.css gives it `flex: 0 0 auto` so this is the size that sticks.
     if (pane !== null) pane.style.flexBasis = `${(ratio * 100).toFixed(2)}%`;
     divider?.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+  }
+
+  /**
+   * The other two ways the offsets go stale without a render.
+   *
+   * A window resize rewraps the pane exactly as a divider drag does. And an
+   * image reserves no height until it decodes -- `rules/images.ts` emits no
+   * `width`/`height` -- so everything below one shifts when it arrives. That is
+   * not an edge case here: a tall image is the whole reason this sync is
+   * line-anchored rather than proportional, so measuring before it loads gets
+   * the headline case wrong.
+   *
+   * `load` does not bubble from an `<img>`, hence the capture phase.
+   */
+  function invalidateAnchors(): void {
+    anchors = null;
   }
 
   function setRatio(next: number): void {
@@ -255,6 +476,15 @@ export function mountPreview(split: HTMLElement): PreviewHandle {
 
     pane = document.createElement('div');
     pane.className = 'preview-pane';
+    pane.addEventListener('scroll', syncFromPreview);
+    pane.addEventListener('load', invalidateAnchors, true);
+    // The editor's scroller outlives the pane, so unlike the pane's own listener
+    // this one is a real leak if `hide()` forgets it -- and it would keep
+    // measuring against a pane that is no longer there.
+    view.scrollDOM.addEventListener('scroll', syncFromEditor);
+    // Same reasoning as the `load` listener above, for the other thing that
+    // rewraps the pane without rendering it.
+    window.addEventListener('resize', invalidateAnchors);
 
     // Appended, so they land after `.editor-area`: `.editor-split` is a plain
     // flex row with no `order`, so DOM order is left-to-right order.
@@ -266,6 +496,13 @@ export function mountPreview(split: HTMLElement): PreviewHandle {
   function hide(): void {
     clearRenderTimer();
     endDrag?.();
+    pane?.removeEventListener('scroll', syncFromPreview);
+    pane?.removeEventListener('load', invalidateAnchors, true);
+    view.scrollDOM.removeEventListener('scroll', syncFromEditor);
+    // `window` outlives everything here, so this is the one of the four that
+    // leaks for the life of the process if it is forgotten.
+    window.removeEventListener('resize', invalidateAnchors);
+    releaseGuard();
     // Removing the focused element drops focus to `<body>`, and the next Tab
     // then restarts from the top of the window rather than from where the user
     // was. The divider is the only focus stop this module adds, so returning
