@@ -322,9 +322,38 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     if (list.length === 0) return;
     if (isEcho(view.scrollDOM)) return;
 
-    const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop + 0.5;
-    const line = view.state.doc.lineAt(view.lineBlockAtHeight(height).from).number;
-    writeTo(target, offsetForLine(list, line));
+    const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
+    writeTo(target, offsetForLine(list, sourcePosition(height)));
+  }
+
+  /**
+   * The viewport top as a **fractional** source line, e.g. 12.4 for "40% of the
+   * way down line 12".
+   *
+   * Whole line numbers were the second half of the choppiness. `lineBlockAtHeight`
+   * answers a block, so scrolling within a line changed nothing at all and
+   * crossing a line boundary moved the preview by that line's entire rendered
+   * height in one step. Where a source line is a heading, an image or a fence,
+   * that step is enormous -- which is the "jumps all the way down and won't
+   * budge until I scroll back" report: the same line resolved for a whole range
+   * of scroll positions, so the write was identical each time and nothing moved.
+   *
+   * A block can span several source lines (a wrapped paragraph is one block), so
+   * the fraction is spread across the lines the block actually covers rather
+   * than assumed to be one.
+   *
+   * This also retires the old `+ 0.5` nudge. That existed because
+   * `lineBlockAtHeight` resolves an exact boundary to the block *above*; with a
+   * fraction that is self-correcting, since the block above at its own bottom
+   * gives progress 1, which is the first line of the block below.
+   */
+  function sourcePosition(height: number): number {
+    const block = view.lineBlockAtHeight(height);
+    const doc = view.state.doc;
+    const first = doc.lineAt(block.from).number;
+    const spanned = doc.lineAt(block.to).number - first + 1;
+    const progress = block.height > 0 ? (height - block.top) / block.height : 0;
+    return first + progress * spanned;
   }
 
   /**
@@ -349,14 +378,24 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     if (list.length === 0) return;
     if (isEcho(target)) return;
 
+    // The inverse, and fractional for the same reason: rounding to a line and
+    // scrolling to its top made the editor lurch a line at a time and sit still
+    // in between.
     const doc = view.state.doc;
-    const estimate = Math.round(lineForOffset(list, target.scrollTop));
-    const line = Math.min(Math.max(estimate, 1), doc.lines);
+    const exact = lineForOffset(list, target.scrollTop);
+    // `doc.line` throws for anything outside the document, inside a scroll
+    // handler where a throw takes the sync down with it. Above: `anchors`
+    // describes the last render, which typing leaves a debounce behind, so
+    // deleting the tail briefly leaves anchors naming lines that are gone.
+    // Below: `lineForOffset` answers 0 for an offset above the first anchor.
+    const line = Math.min(Math.max(Math.floor(exact), 1), doc.lines);
+    const block = view.lineBlockAt(doc.line(line).from);
+    const first = doc.lineAt(block.from).number;
+    const spanned = doc.lineAt(block.to).number - first + 1;
+    const progress = Math.min(Math.max((exact - first) / spanned, 0), 1);
     const scroller = view.scrollDOM;
     const delta =
-      view.documentTop +
-      view.lineBlockAt(doc.line(line).from).top -
-      scroller.getBoundingClientRect().top;
+      view.documentTop + block.top + progress * block.height - scroller.getBoundingClientRect().top;
     writeTo(scroller, scroller.scrollTop + delta);
   }
 

@@ -605,8 +605,21 @@ describe('scroll sync', () => {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'x' } });
     scrollPaneTo(view, pane, 600);
 
-    // Line 3 of the anchors, clamped to the only line there is.
-    expect(view.scrollDOM.scrollTop).toBe(blockTopOf(view, 1));
+    // The anchors say "line 3" and the document has one line, so the honest
+    // answer is the *end* of what remains, not the top of it. The fractional
+    // mapping lands at the bottom of line 1; the earlier whole-line version
+    // snapped to `blockTopOf(view, 1)`, i.e. it threw the editor back to the top
+    // of the document whenever the preview was scrolled past stale content --
+    // a visible jump in the wrong direction.
+    //
+    // What actually has to hold is that it stays inside the document and does
+    // not throw: `doc.line()` raises for anything outside it, and this runs in a
+    // scroll handler where a throw takes the sync down with it.
+    const lastLine = view.state.doc.lines;
+    const bottom = view.lineBlockAt(view.state.doc.line(lastLine).from);
+    expect(view.scrollDOM.scrollTop).toBeGreaterThanOrEqual(blockTopOf(view, 1));
+    expect(view.scrollDOM.scrollTop).toBeLessThanOrEqual(bottom.top + bottom.height);
+    expect(view.scrollDOM.scrollTop).toBe(bottom.top + bottom.height);
   });
 
   /**
@@ -754,6 +767,42 @@ describe('scroll sync', () => {
 
     scrollPaneTo(view, pane, 0);
     expect(view.scrollDOM.scrollTop).not.toBe(atLine3);
+  });
+
+  /**
+   * The other half of the owner's report: "when I scroll to about a third of the
+   * way and then scroll one more pixel, the preview jumps all the way down and
+   * won't budge until I scroll back".
+   *
+   * `lineBlockAtHeight` answers a *block*, so mapping through a whole line
+   * number made every scroll position inside one line produce the identical
+   * answer -- no movement at all -- and crossing the boundary move the preview by
+   * that line's entire rendered height in one step. Both symptoms, one cause.
+   *
+   * Scrolling by a fraction of a line here must move the preview by the
+   * corresponding fraction, not by nothing and not by everything.
+   */
+  it('moves the preview for a scroll of less than one line', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    const top = blockTopOf(view, 1);
+    const lineHeight = blockTopOf(view, 3) - top;
+    expect(lineHeight, 'fixture must span more than one block').toBeGreaterThan(0);
+
+    const restoreA = placeScroller(view, top);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    restoreA();
+    const before = pane.scrollTop;
+
+    // A quarter of the way into the first block -- well short of a line.
+    const restoreB = placeScroller(view, top + lineHeight / 4);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    restoreB();
+
+    expect(pane.scrollTop).toBeGreaterThan(before);
+    // And it is a *fraction* of the way, not a jump to the next anchor.
+    expect(pane.scrollTop).toBeLessThan(600);
   });
 
   it('leaves the preview alone when sync is off', () => {
