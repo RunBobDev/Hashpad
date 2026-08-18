@@ -54,13 +54,39 @@ export function normalizeAnchors(anchors: readonly AnchorOffset[]): AnchorOffset
     if (!byLine.has(line)) byLine.set(line, offset);
   }
 
-  let ceiling = -Infinity;
-  return [...byLine.entries()]
+  const sorted = [...byLine.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([line, offset]) => {
-      ceiling = Math.max(ceiling, offset);
-      return { line, offset: ceiling };
-    });
+    .map(([line, offset]) => ({ line, offset }));
+
+  // Discard anchors whose offset runs ahead of anything later, keeping the
+  // ascending subsequence. Sorting by line does not make the offsets ascend,
+  // because the renderer is free to move a block somewhere else entirely --
+  // markdown-it-footnote relocates every footnote *definition* to the bottom of
+  // the output while it keeps its original source line. A document with a
+  // footnote defined at line 47 therefore has an anchor claiming line 47 sits
+  // at the very end of the pane.
+  //
+  // The previous version raised each offset to the running maximum instead, and
+  // that turned one displaced anchor into a broken document: every line after
+  // 47 was clamped to the footnote's offset, so a third of the way down the
+  // preview jumped to the bottom and stayed there however far the editor
+  // scrolled. Measured in the running app before this changed -- `to` hit the
+  // last anchor's 4636 at line 49.5 of 158 and never moved again.
+  //
+  // Dropping the outlier rather than the lines after it is what the reverse pass
+  // buys: a displaced anchor is compared against everything to its right, so it
+  // is the one that loses. The lines it used to flatten keep their own
+  // positions, and the footnote block simply has no anchor -- which is correct,
+  // since there is no scroll position that puts it where its source line is.
+  const kept: AnchorOffset[] = [];
+  let floor = Infinity;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const anchor = sorted[i]!;
+    if (anchor.offset >= floor) continue;
+    kept.push(anchor);
+    floor = anchor.offset;
+  }
+  return kept.reverse();
 }
 
 /**

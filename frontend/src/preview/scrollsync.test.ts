@@ -124,21 +124,63 @@ describe('normalizeAnchors', () => {
    * then answers from the wrong side of the document -- a confident jump to the
    * wrong place rather than an imprecise one.
    */
-  it('clamps an offset that goes backwards up to the one before it', () => {
+  /**
+   * The shape that was actually breaking documents, rather than a synthetic one.
+   *
+   * markdown-it-footnote moves every footnote *definition* to the bottom of the
+   * rendered output and keeps its original source line, so a footnote defined a
+   * third of the way down produces an anchor claiming that line sits at the very
+   * end of the pane. Confirmed against the real renderer: in the project's own
+   * fixture exactly one anchor is out of DOM order, line 47, and it is the one
+   * inside `.footnotes`.
+   *
+   * With the old clamp every line after 47 inherited that offset, so the preview
+   * jumped to the bottom a third of the way down and stayed there however far
+   * the editor scrolled -- traced in the running app as `to` reaching the last
+   * anchor's 4636 at line 49.5 of 158 and never changing again.
+   */
+  it('survives a footnote definition rendered at the bottom', () => {
+    const paneEnd = 4636;
+    const normalized = normalizeAnchors([
+      { line: 1, offset: 0 },
+      { line: 20, offset: 800 },
+      // The footnote definition: an early line, rendered last.
+      { line: 47, offset: paneEnd },
+      { line: 60, offset: 1500 },
+      { line: 158, offset: 4300 },
+    ]);
+
+    expect(normalized.map((a) => a.line)).toEqual([1, 20, 60, 158]);
+    // The lines after the footnote keep their own positions instead of being
+    // flattened onto its offset, so the mapping still moves out here.
+    expect(offsetForLine(normalized, 60)).toBe(1500);
+    expect(offsetForLine(normalized, 100)).toBeGreaterThan(1500);
+    expect(offsetForLine(normalized, 100)).toBeLessThan(4300);
+  });
+
+  it('drops an anchor whose offset runs ahead of a later one', () => {
     const normalized = normalizeAnchors([
       { line: 1, offset: 0 },
       { line: 2, offset: 500 },
       { line: 3, offset: 100 },
       { line: 4, offset: 900 },
     ]);
+    // Line 2 is the outlier -- its offset runs past line 3's -- so line 2 is
+    // what goes, and lines 3 and 4 keep the positions they actually have.
+    //
+    // The earlier version raised line 3 to 500 instead, which is the behaviour
+    // that broke real documents: markdown-it-footnote relocates a footnote
+    // *definition* to the bottom of the output while keeping its source line, so
+    // one displaced anchor a third of the way down dragged every line after it
+    // to the bottom of the pane. Clamping up propagates the outlier; dropping it
+    // contains it.
     expect(normalized).toEqual([
       { line: 1, offset: 0 },
-      { line: 2, offset: 500 },
-      { line: 3, offset: 500 },
+      { line: 3, offset: 100 },
       { line: 4, offset: 900 },
     ]);
-    // The search now terminates in order: 300 is between anchors 1 and 2.
-    expect(lineForOffset(normalized, 300)).toBeCloseTo(1.6, 5);
+    // Offsets ascend, so the search still terminates in order.
+    expect(lineForOffset(normalized, 500)).toBeCloseTo(3.5, 5);
   });
 
   it('answers an empty list with an empty list', () => {

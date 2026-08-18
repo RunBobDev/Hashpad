@@ -225,7 +225,13 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
         offset: element.getBoundingClientRect().top - contentTop,
       }),
     );
-    anchors = normalizeAnchors([...measured, ...endpoints(target, measured)]);
+    // Anchors past the editor's last reachable scroll position are dropped, not
+    // merged: no scroll position can put those lines at the top of the editor,
+    // and keeping them would make the endpoint below the out-of-order one and
+    // cost it the reverse pass in `normalizeAnchors`.
+    const bounds = endpoints(target, measured);
+    const endLine = bounds.length > 1 ? bounds[1]!.line : Infinity;
+    anchors = normalizeAnchors([...measured.filter((a) => a.line < endLine), ...bounds]);
     return anchors;
   }
 
