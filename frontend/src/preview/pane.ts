@@ -83,6 +83,20 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
   let echoFrom: HTMLElement | null = null;
   let guardFrame: number | null = null;
 
+  /**
+   * Off unless someone turns it on from the console with
+   * `__hashpadSyncDebug = true`. Scroll sync is the one part of this checkpoint
+   * whose inputs are all real geometry, which jsdom cannot supply -- three
+   * rounds of fixes were reasoned from the code rather than measured, and the
+   * first two were real bugs that were not the one being reported. This is the
+   * cheapest way to stop guessing: it prints what the mapping actually saw.
+   */
+  function trace(record: Record<string, unknown>): void {
+    if ((window as unknown as { __hashpadSyncDebug?: boolean }).__hashpadSyncDebug) {
+      console.log('sync', JSON.stringify(record));
+    }
+  }
+
   function clearRenderTimer(): void {
     if (renderTimer === null) return;
     clearTimeout(renderTimer);
@@ -375,7 +389,19 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     if (isEcho(view.scrollDOM)) return;
 
     const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
-    writeTo(target, offsetForLine(list, sourcePosition(height)));
+    const at = sourcePosition(height);
+    const to = offsetForLine(list, at);
+    trace({
+      dir: 'editor->preview',
+      height: Math.round(height),
+      line: Number(at.toFixed(2)),
+      to: Math.round(to),
+      paneWas: Math.round(target.scrollTop),
+      paneMax: target.scrollHeight - target.clientHeight,
+      anchors: list.length,
+      lastAnchor: list[list.length - 1],
+    });
+    writeTo(target, to);
   }
 
   /**
@@ -464,6 +490,14 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     const scroller = view.scrollDOM;
     const delta =
       view.documentTop + block.top + progress * block.height - scroller.getBoundingClientRect().top;
+    trace({
+      dir: 'preview->editor',
+      paneTop: Math.round(target.scrollTop),
+      line: Number(exact.toFixed(2)),
+      delta: Math.round(delta),
+      editorWas: Math.round(scroller.scrollTop),
+      anchors: list.length,
+    });
     writeTo(scroller, scroller.scrollTop + delta);
   }
 
