@@ -860,6 +860,48 @@ describe('scroll sync', () => {
     expect(c).toBe(2400 - PANE_VIEWPORT);
   });
 
+  /**
+   * A height that lands outside the block CodeMirror hands back must still map
+   * to a position *inside* that block.
+   *
+   * This is reachable in the real editor two ways: past the end of the document,
+   * and -- the one that matters -- inside an estimated **gap block**. CodeMirror
+   * measures only the rendered viewport; beyond it the height map answers with a
+   * single block standing in for dozens of lines. `height` then sits outside the
+   * block that comes back, the ratio stops being a fraction (measured at 40.9 on
+   * a three-line document), and the mapped line is one the document never had.
+   * Worse, it moves discontinuously, because the estimate being divided by is
+   * replaced with real geometry as the viewport renders. That is the jump.
+   *
+   * `lineBlockAtHeight` is stubbed because jsdom's height map has no gap blocks
+   * to produce naturally -- and a first version of this test scrolled to an
+   * absurd height instead, which proved nothing: `offsetForLine` clamps at the
+   * last anchor, so a nonsense line and a merely large one give the same answer.
+   * That version passed with the clamp removed.
+   */
+  it('keeps the mapped position inside the block, even for an estimated one', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    // A block covering line 1 only, ten pixels tall -- the shape of a measured
+    // line -- but queried at a height far outside it, the shape of a gap.
+    const line1 = view.state.doc.line(1);
+    view.lineBlockAtHeight = () =>
+      ({ from: line1.from, to: line1.to, top: 0, height: 10, bottom: 10 }) as ReturnType<
+        typeof view.lineBlockAtHeight
+      >;
+
+    const restore = placeScroller(view, 1000);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    restore();
+
+    // Clamped, the position is the end of line 1's block, which is early in the
+    // pane. Unclamped it is line 101, which `offsetForLine` pins to the last
+    // anchor at 600 -- the far end of the document, from a scroll that never
+    // left the first line.
+    expect(pane.scrollTop).toBeLessThan(600);
+  });
+
   it('leaves the preview alone when sync is off', () => {
     const { split, view } = mountSynced(false);
 

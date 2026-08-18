@@ -404,7 +404,23 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     const doc = view.state.doc;
     const first = doc.lineAt(block.from).number;
     const spanned = doc.lineAt(block.to).number - first + 1;
-    const progress = block.height > 0 ? (height - block.top) / block.height : 0;
+    // Clamped, and this is the bug behind the jumping rather than a tidy-up.
+    // CodeMirror measures only the rendered viewport; outside it the height map
+    // answers with an *estimated gap block* that can span dozens of lines, and
+    // `lineBlockAtHeight` also returns the nearest block for a height past the
+    // document rather than refusing. In both cases `height` sits outside the
+    // block that comes back, so the ratio is not a fraction: measured at 40.9
+    // on a three-line document, which `first + 40.9 * spanned` turns into a line
+    // number the document does not have and the pane into a scroll position
+    // nowhere near the text. Unclamped it also moved discontinuously, because
+    // the estimate is replaced by real geometry as the viewport renders.
+    //
+    // This is what the owner meant by "look at the topmost line, not the text
+    // block": a block outside the viewport is a guess about many lines, while
+    // the line at the top of the viewport is always real. Clamping is what keeps
+    // the answer inside the block the line is actually in.
+    const raw = block.height > 0 ? (height - block.top) / block.height : 0;
+    const progress = Math.min(Math.max(raw, 0), 1);
     return first + progress * spanned;
   }
 
