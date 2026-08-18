@@ -81,6 +81,32 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * not optional -- every render moves everything.
    */
   let anchors: AnchorOffset[] | null = null;
+  /**
+   * `view.contentHeight` when `anchors` was measured, and the reason the cache
+   * cannot be keyed on renders alone.
+   *
+   * The list is not purely a description of the preview. `endpoints` reads the
+   * editor's total height to work out the last source line that can sit at the
+   * top of its viewport, and `anchorOffsets` then uses that line as a *filter*
+   * -- every measured anchor past it is discarded. So a change to the editor's
+   * geometry invalidates the list just as surely as a re-render does, and none
+   * of the four things that clear it (a render, a resize, a divider drag, an
+   * image arriving) is one.
+   *
+   * Three ways that happens, all of them live. Word wrap toggles the editor
+   * between one visual line per source line and many. Zoom rescales both panes.
+   * And the one with no user action behind it at all: `contentHeight` outside
+   * the rendered viewport is an *estimate*, `lineHeight * lines`, which
+   * CodeMirror replaces with real geometry as more of the document renders --
+   * while `endpoints` asks about the far end of the document by construction, so
+   * the first measurement of a long document is always taken against a guess.
+   * Cached, that guess was the mapping for the rest of the session.
+   *
+   * Comparing the height rather than subscribing to anything is what keeps this
+   * to one line at the one place the cache is read. It is a plain field read, no
+   * layout flush, and it re-measures only when the number actually moves.
+   */
+  let anchoredHeight = -1;
   /** The scroller this module just wrote to; its next scroll event is the echo. */
   let echoFrom: HTMLElement | null = null;
   let guardFrame: number | null = null;
@@ -219,7 +245,8 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * sort that depends on it.
    */
   function anchorOffsets(target: HTMLElement): AnchorOffset[] {
-    if (anchors !== null) return anchors;
+    if (anchors !== null && view.contentHeight === anchoredHeight) return anchors;
+    anchoredHeight = view.contentHeight;
     const contentTop = target.getBoundingClientRect().top - target.scrollTop;
     const measured = [...target.querySelectorAll<HTMLElement>('[data-source-line]')].map(
       (element) => ({
@@ -407,7 +434,14 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
       paneWas: Math.round(target.scrollTop),
       paneMax: target.scrollHeight - target.clientHeight,
       anchors: list.length,
+      // The endpoint anchor and what it was derived from. `endpoints` asks
+      // `sourcePosition` about the far end of the document, which is outside the
+      // rendered viewport by construction, so its line is an estimate off
+      // `contentHeight` -- and every measured anchor past it is discarded. If the
+      // mapping is ever wrong again, these three next to `lines` are what say so.
       lastAnchor: list[list.length - 1],
+      contentHeight: Math.round(view.contentHeight),
+      lines: view.state.doc.lines,
     });
     writeTo(target, to);
   }
@@ -505,6 +539,9 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
       delta: Math.round(delta),
       editorWas: Math.round(scroller.scrollTop),
       anchors: list.length,
+      lastAnchor: list[list.length - 1],
+      contentHeight: Math.round(view.contentHeight),
+      lines: doc.lines,
     });
     writeTo(scroller, scroller.scrollTop + delta);
   }

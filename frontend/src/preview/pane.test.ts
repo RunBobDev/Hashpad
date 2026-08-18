@@ -672,10 +672,10 @@ describe('scroll sync', () => {
   });
 
   /**
-   * The three ways the pane's layout moves *without* a render, and so without
-   * anything else clearing the measurement cache. Each one leaves every measured
-   * offset describing a layout that no longer exists, and the pane then scrolls
-   * to the wrong place until the next keystroke happens to re-render.
+   * The ways the mapping goes stale *without* a render, and so without anything
+   * else clearing the measurement cache. Each one leaves the anchor list
+   * describing a layout that no longer exists, and the pane then scrolls to the
+   * wrong place until the next keystroke happens to re-render.
    *
    * All three are asserted the same way: measure once, then change the world,
    * then hand over *different* geometry and check the sync uses the new numbers.
@@ -741,6 +741,40 @@ describe('scroll sync', () => {
         const image = document.createElement('img');
         paneOf(mounted.split).append(image);
         image.dispatchEvent(new Event('load'));
+      });
+    });
+
+    /**
+     * The fourth way, and the only one where the *editor* is what moved.
+     *
+     * The anchor list is not purely a description of the preview: `endpoints`
+     * reads `view.contentHeight` to work out the last source line that can sit at
+     * the top of the editor's viewport, and every measured anchor past that line
+     * is then discarded. So an editor reflow invalidates the list, and none of
+     * the three above notices one.
+     *
+     * Word wrap toggling is the reason this test exists -- it switches the editor
+     * between one visual line per source line and many, which is the largest
+     * `contentHeight` change the app can produce -- but zoom does it too, and so
+     * does CodeMirror simply replacing its own estimate for the unrendered tail
+     * with real geometry, which needs no user action at all.
+     *
+     * Asserted through the shared helper rather than through `endpoints`: jsdom
+     * reports every scroll dimension as 0, so `endpoints` returns nothing here
+     * and only the cache contract is observable. What the helper pins is exactly
+     * the fix -- that a changed editor height re-reads the DOM.
+     */
+    it('re-measures after the editor reflows', async () => {
+      const mounted = mountSynced();
+      onTestFinished(() => {
+        Reflect.deleteProperty(mounted.view, 'contentHeight');
+      });
+
+      await expectRemeasured(mounted, () => {
+        Object.defineProperty(mounted.view, 'contentHeight', {
+          value: mounted.view.contentHeight + 500,
+          configurable: true,
+        });
       });
     });
   });
