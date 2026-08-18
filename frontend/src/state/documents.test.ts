@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createUntitledDocument, type AppState, type Document } from './document';
 import {
   activateDocument,
+  dropScratchDocuments,
   activeDocument,
   addDocument,
   closeDocument,
@@ -283,5 +284,65 @@ describe('activeDocument', () => {
 
   it('is null when nothing is active', () => {
     expect(activeDocument(stateWith([], null))).toBeNull();
+  });
+});
+
+/**
+ * Opening a file into a fresh window used to leave the blank tab the app starts
+ * with sitting beside it forever. Reported by the owner: "even if I don't touch
+ * this document and I open another document, the empty default document is
+ * still opened in another tab".
+ */
+describe('dropScratchDocuments', () => {
+  it('drops an untouched blank tab when a real document arrives', () => {
+    const state = stateWith([doc('blank'), doc('opened', 'C:/notes/post.md', '# Post')], 'opened');
+
+    expect(dropScratchDocuments(state, 'opened').documents.map((d) => d.id)).toEqual(['opened']);
+  });
+
+  it('keeps a blank tab that has been typed into', () => {
+    const state = stateWith([doc('typed', null, 'draft'), doc('opened', 'C:/a.md', 'x')], 'opened');
+
+    expect(dropScratchDocuments(state, 'opened').documents.map((d) => d.id)).toEqual([
+      'typed',
+      'opened',
+    ]);
+  });
+
+  // An empty file on disk is not scratch: it has somewhere to be saved back to,
+  // and closing it would lose the user's place rather than tidy up after them.
+  it('keeps a saved document even when it is empty', () => {
+    const state = stateWith([doc('empty', 'C:/empty.md'), doc('opened', 'C:/a.md', 'x')], 'opened');
+
+    expect(dropScratchDocuments(state, 'opened').documents.map((d) => d.id)).toEqual([
+      'empty',
+      'opened',
+    ]);
+  });
+
+  /**
+   * The incoming document is untitled and empty for as long as it takes
+   * `addDocument` to run, and opening a genuinely empty file leaves it that way.
+   * Without the exemption it would delete itself on open.
+   */
+  it('never drops the document it was told to keep', () => {
+    const state = stateWith([doc('blank'), doc('alsoBlank')], 'alsoBlank');
+
+    expect(dropScratchDocuments(state, 'alsoBlank').documents.map((d) => d.id)).toEqual([
+      'alsoBlank',
+    ]);
+  });
+
+  it('repoints the active id when it named a tab that has gone', () => {
+    const state = stateWith([doc('blank'), doc('opened', 'C:/a.md', 'x')], 'blank');
+
+    expect(dropScratchDocuments(state, 'opened').activeDocumentId).toBe('opened');
+  });
+
+  it('leaves a state with nothing to drop alone', () => {
+    const state = stateWith([doc('a', 'C:/a.md', 'x'), doc('b', 'C:/b.md', 'y')], 'a');
+
+    expect(dropScratchDocuments(state, 'a').documents).toEqual(state.documents);
+    expect(dropScratchDocuments(state, 'a').activeDocumentId).toBe('a');
   });
 });

@@ -16,7 +16,13 @@ import { ReadFile } from '../../wailsjs/go/app/App';
 import { buildExtensions, publishActiveFormats } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
-import { activateDocument, addDocument, closeDocument, takeReopenPath } from '../state/documents';
+import {
+  activateDocument,
+  addDocument,
+  closeDocument,
+  dropScratchDocuments,
+  takeReopenPath,
+} from '../state/documents';
 import { getEditorView, store } from '../state/appcontext';
 import { displayName, saveDocument } from './fileops';
 
@@ -161,6 +167,11 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
   };
 
   store.setState((prev) => addDocument(prev, doc));
+  // The blank tab the app starts with has served its purpose the moment a real
+  // document arrives, and leaving it behind is what the owner reported. Run
+  // after `addDocument` so there is always something left to activate, and
+  // before `switchToDocument` so the view swaps once rather than twice.
+  store.setState((prev) => dropScratchDocuments(prev, doc.id));
   switchToDocument(doc.id);
 }
 

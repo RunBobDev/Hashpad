@@ -8,7 +8,7 @@
  * bar, keyboard shortcuts) call into this module and trust its semantics
  * rather than re-deriving them.
  */
-import type { AppState, Document } from './document';
+import { isDirty, type AppState, type Document } from './document';
 
 /**
  * Cap on `closedPaths` (Ctrl+Shift+T's reopen stack). Unbounded growth would
@@ -74,6 +74,50 @@ export function closeDocument(state: AppState, id: string, makeUntitled: () => D
 }
 
 /** Switches the active tab to `id`. An unknown `id` is a no-op, not a blank. */
+/**
+ * An untouched blank tab: never saved, no text, nothing unsaved in it. The one
+ * the app opens with is the usual example, but a `Ctrl+N` the user never typed
+ * into is the same thing and is equally safe to discard.
+ *
+ * `isDirty` as well as the length check, rather than either alone. Length alone
+ * would discard a document whose file is genuinely empty -- it has a path, so
+ * the path check already covers that, but the pair says what is meant. And a
+ * buffer typed into and then emptied again is clean against its empty
+ * `savedDoc`, so it is scratch by both measures, which is the right answer:
+ * there is nothing in it to lose.
+ */
+function isScratch(doc: Document): boolean {
+  return doc.filePath === null && doc.editorState.doc.length === 0 && !isDirty(doc);
+}
+
+/**
+ * Drops the untouched blank tabs, keeping `keepId` whatever it looks like.
+ *
+ * Opening a file into a fresh window otherwise leaves the blank tab the app
+ * started with sitting beside it forever, which is what every other editor
+ * quietly cleans up. Deliberately *not* limited to the startup document: a
+ * `Ctrl+N` the user never typed into is indistinguishable from it, and leaving
+ * one but not the other would be a rule nobody could predict.
+ *
+ * `keepId` is exempt so this is safe to call immediately after opening -- the
+ * incoming document is untitled for as long as it takes `addDocument` to run,
+ * and an empty file would otherwise delete itself on open.
+ *
+ * `activeDocumentId` is repointed only if it named something that has gone.
+ * Callers run this straight after `addDocument`, which has already made the new
+ * document active, so that is normally a no-op -- but a caller that has not is
+ * owed a consistent state rather than an id pointing at a closed tab.
+ */
+export function dropScratchDocuments(state: AppState, keepId: string): AppState {
+  const documents = state.documents.filter((doc) => doc.id === keepId || !isScratch(doc));
+  if (documents.length === state.documents.length) return { ...state };
+
+  const active = documents.some((doc) => doc.id === state.activeDocumentId)
+    ? state.activeDocumentId
+    : keepId;
+  return { ...state, documents, activeDocumentId: active };
+}
+
 export function activateDocument(state: AppState, id: string): AppState {
   if (!state.documents.some((d) => d.id === id)) return { ...state };
   return { ...state, activeDocumentId: id };

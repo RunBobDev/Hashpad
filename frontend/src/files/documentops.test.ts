@@ -305,6 +305,61 @@ describe('openDocumentInNewTab', () => {
   });
 });
 
+/**
+ * The startup tab, replaced rather than left behind. Reported by the owner:
+ * "even if I don't touch this document and I open another document, the empty
+ * default document is still opened in another tab".
+ *
+ * Here rather than only in `documents.test.ts` because the pure function knows
+ * nothing about being called -- deleting the `dropScratchDocuments` line from
+ * `openDocumentInNewTab` leaves every one of those unit tests green.
+ */
+describe('opening a document over the startup tab', () => {
+  function seed(documents: Document[], activeId: string): void {
+    store.setState(() => ({
+      documents,
+      activeDocumentId: activeId,
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+      pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
+      syncScroll: true,
+    }));
+    view.setState(documents.find((d) => d.id === activeId)!.editorState);
+  }
+
+  const opened = {
+    path: 'C:' + String.fromCharCode(92) + 'notes' + String.fromCharCode(92) + 'b.md',
+    content: 'doc B',
+    encoding: 'utf-8',
+    lineEnding: 'lf',
+  };
+
+  it('closes the untouched blank tab and leaves only the opened file', () => {
+    const blank = makeUntitledDocument();
+    seed([blank], blank.id);
+
+    openDocumentInNewTab(opened);
+
+    const state = store.getState();
+    expect(state.documents).toHaveLength(1);
+    expect(state.documents[0]!.filePath).toBe(opened.path);
+    expect(state.activeDocumentId).toBe(state.documents[0]!.id);
+  });
+
+  it('leaves a blank tab alone once it has been typed into', () => {
+    const typed = cleanDoc('typed', 'a draft');
+    typed.filePath = null;
+    seed([typed], 'typed');
+
+    openDocumentInNewTab(opened);
+
+    expect(store.getState().documents.map((d) => d.id)).toContain('typed');
+    expect(store.getState().documents).toHaveLength(2);
+  });
+});
+
 describe('closeDocumentWithPrompt', () => {
   it('closes a clean document without prompting', async () => {
     const a = cleanDoc('a', 'doc A');
