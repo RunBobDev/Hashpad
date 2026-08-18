@@ -805,6 +805,61 @@ describe('scroll sync', () => {
     expect(pane.scrollTop).toBeLessThan(600);
   });
 
+  /**
+   * The dead zones at the two ends, which is what "it jumps all the way down and
+   * won't budge until I scroll back" actually was.
+   *
+   * Measured anchors are element *tops*, so the last one is the last block's
+   * top, while the editor stops scrolling a screenful before its own last line.
+   * Each side therefore had a range at the end where its scroll position kept
+   * moving and the mapped value did not. Scroll into one and the follower pins;
+   * back out and it releases.
+   *
+   * This needs a document long enough for the editor to genuinely scroll --
+   * `lineBlockAtHeight` clamps to the document, so a three-line fixture reports
+   * the same block for every height past its end and would pass vacuously.
+   * jsdom estimates 14px a line, so 40 paragraphs is roughly 1100px of content
+   * against a 200px viewport.
+   */
+  it('keeps moving the preview through the tail of a long document', () => {
+    const NL = String.fromCharCode(10);
+    const paragraphs = Array.from({ length: 40 }, (_, i) => 'para ' + i).join(NL + NL);
+    const mounted = mount(paragraphs + NL);
+    mounted.handle.show();
+    const pane = paneOf(mounted.split);
+    const view = mounted.view;
+
+    // One anchor per paragraph, 50px apart in the rendered pane.
+    const tops = Array.from({ length: 40 }, (_, i) => i * 50);
+    giveAnchorTops(pane, tops);
+
+    const PANE_VIEWPORT = 400;
+    Object.defineProperty(pane, 'scrollHeight', { value: 2400, configurable: true });
+    Object.defineProperty(pane, 'clientHeight', { value: PANE_VIEWPORT, configurable: true });
+    Object.defineProperty(view.scrollDOM, 'clientHeight', { value: 200, configurable: true });
+
+    const editorMax = view.contentHeight - 200;
+    expect(editorMax, 'fixture must give the editor room to scroll').toBeGreaterThan(200);
+
+    const scrollEditorTo = (y: number): number => {
+      const restore = placeScroller(view, y);
+      view.scrollDOM.dispatchEvent(new Event('scroll'));
+      restore();
+      return pane.scrollTop;
+    };
+
+    // Three positions across the last third, where the last measured anchor
+    // (1950) is already behind us and the old mapping had nothing left to say.
+    const a = scrollEditorTo(editorMax * 0.7);
+    const b = scrollEditorTo(editorMax * 0.85);
+    const c = scrollEditorTo(editorMax);
+
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
+    // And the end of the editor is the end of the pane, not a screenful short.
+    expect(c).toBe(2400 - PANE_VIEWPORT);
+  });
+
   it('leaves the preview alone when sync is off', () => {
     const { split, view } = mountSynced(false);
 

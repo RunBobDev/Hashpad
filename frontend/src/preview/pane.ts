@@ -205,13 +205,65 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
   function anchorOffsets(target: HTMLElement): AnchorOffset[] {
     if (anchors !== null) return anchors;
     const contentTop = target.getBoundingClientRect().top - target.scrollTop;
-    anchors = normalizeAnchors(
-      [...target.querySelectorAll<HTMLElement>('[data-source-line]')].map((element) => ({
+    const measured = [...target.querySelectorAll<HTMLElement>('[data-source-line]')].map(
+      (element) => ({
         line: Number(element.dataset.sourceLine),
         offset: element.getBoundingClientRect().top - contentTop,
-      })),
+      }),
     );
+    anchors = normalizeAnchors([...measured, ...endpoints(target, measured)]);
     return anchors;
+  }
+
+  /**
+   * The two synthetic anchors that make the mapping cover the whole of both
+   * scrollable ranges, and the fix for the jump the owner kept hitting.
+   *
+   * Measured anchors are element tops, so the last one sits wherever the last
+   * block *begins* -- typically a screenful short of the pane's maximum scroll.
+   * The editor saturates somewhere else again: at its own maximum, the line at
+   * the top of the viewport is roughly `last line - a screenful`, not the last
+   * line. So each side had a dead zone at the end where its own scroll position
+   * kept changing while the mapped value did not. Scroll into one and the
+   * follower pins; back out and it releases. That is exactly "it jumps all the
+   * way down and won't budge until I scroll back to the same position", and it
+   * is a property of the anchor list rather than of the interpolation, which is
+   * why making the mapping fractional improved the middle and left the ends
+   * alone.
+   *
+   * Pinning the two saturation points to each other removes both dead zones:
+   * the position that scrolls the editor to its bottom is the position that
+   * scrolls the pane to its bottom, and everything between interpolates as
+   * before. Line 1 to offset 0 does the same at the top.
+   *
+   * `normalizeAnchors` sorts, dedupes and enforces non-decreasing offsets, so
+   * these are simply added to the list rather than spliced in at the right
+   * place -- and a real anchor for line 1 keeps whichever offset comes first.
+   *
+   * Both guards matter: jsdom reports every scroll dimension as 0, so without
+   * them every test in this file would get two extra anchors describing a
+   * viewport that does not exist.
+   */
+  function endpoints(target: HTMLElement, measured: readonly AnchorOffset[]): AnchorOffset[] {
+    const paneMax = target.scrollHeight - target.clientHeight;
+    const editorMax = view.contentHeight - view.scrollDOM.clientHeight;
+    if (measured.length === 0 || paneMax <= 0 || editorMax <= 0) return [];
+
+    // The last line that can ever sit at the top of the editor's viewport: past
+    // this the editor cannot scroll further, so every later line is unreachable
+    // as a scroll position and the pane must already be at its end.
+    //
+    // Deliberately *not* conditional on this line falling past the last measured
+    // anchor -- it usually does not, and that is exactly the problem it solves. A
+    // long document's last anchor is its final block, but the editor stops
+    // scrolling a screenful earlier, so the two saturation points genuinely
+    // disagree. Adding this one and letting `normalizeAnchors` raise every later
+    // offset to match is what makes them agree: the scroll position that ends
+    // the editor is the one that ends the pane.
+    return [
+      { line: 1, offset: 0 },
+      { line: sourcePosition(editorMax), offset: paneMax },
+    ];
   }
 
   /**

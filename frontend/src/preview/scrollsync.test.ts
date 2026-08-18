@@ -151,18 +151,40 @@ describe('normalizeAnchors', () => {
    * A `NaN` line would make the comparator return `NaN` for every comparison it
    * takes part in, leaving the order of the whole list up to the engine.
    */
-  it('drops a line that is not a positive integer', () => {
+  it('drops a line that is not a positive number', () => {
     expect(
       normalizeAnchors([
         { line: 1, offset: 0 },
         { line: Number.NaN, offset: 30 },
         { line: 0, offset: 40 },
         { line: -3, offset: 50 },
+        { line: 4, offset: 90 },
+      ]),
+    ).toEqual([
+      { line: 1, offset: 0 },
+      { line: 4, offset: 90 },
+    ]);
+  });
+
+  /**
+   * A fractional line is **kept**, and that is deliberate rather than an
+   * oversight in the filter above. `pane.ts` adds an endpoint anchor at the last
+   * source position the editor can actually scroll to, which lands part-way
+   * through a line; rounding it to a whole number left the preview stopping
+   * short of its own bottom by whatever that fraction was worth. Nothing in a
+   * `data-source-line` attribute is fractional, so this costs the real anchors
+   * nothing.
+   */
+  it('keeps a fractional line, which the endpoint anchors rely on', () => {
+    expect(
+      normalizeAnchors([
+        { line: 1, offset: 0 },
         { line: 2.5, offset: 60 },
         { line: 4, offset: 90 },
       ]),
     ).toEqual([
       { line: 1, offset: 0 },
+      { line: 2.5, offset: 60 },
       { line: 4, offset: 90 },
     ]);
   });

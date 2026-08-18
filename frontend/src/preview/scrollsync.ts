@@ -43,7 +43,14 @@ export interface AnchorOffset {
 export function normalizeAnchors(anchors: readonly AnchorOffset[]): AnchorOffset[] {
   const byLine = new Map<number, number>();
   for (const { line, offset } of anchors) {
-    if (!Number.isInteger(line) || line < 1) continue;
+    // Finite and at least 1, not necessarily whole. The job here is rejecting
+    // the `NaN` that `Number(element.dataset.sourceLine)` yields for a missing
+    // or malformed attribute, and lines below the first -- not enforcing
+    // integers. `pane.ts`'s endpoint anchors are deliberately fractional: the
+    // editor's last reachable scroll position lands part-way through a line, and
+    // rounding it to a whole one left the preview stopping short of its own
+    // bottom by whatever that fraction was worth.
+    if (!Number.isFinite(line) || line < 1) continue;
     if (!byLine.has(line)) byLine.set(line, offset);
   }
 
