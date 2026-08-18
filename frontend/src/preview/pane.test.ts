@@ -718,6 +718,44 @@ describe('scroll sync', () => {
     });
   });
 
+  /**
+   * The bug the owner reported: "the side in focus is smooth, the other one is
+   * really choppy and jumps a lot, and not to the same text".
+   *
+   * A wheel or a drag fires several scroll events per frame. The first guard was
+   * a single boolean that blocked *any* sync until the next animation frame, so
+   * it let one event through and dropped the rest -- the follower moved at best
+   * once a frame, from whichever source position happened to land after a frame
+   * boundary, which is precisely a lurch to the wrong place rather than a track.
+   *
+   * No `nextFrame()` between these two on purpose: that is the whole point.
+   */
+  it('follows every scroll in a burst, not just the first of each frame', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    scrollEditorToLine(view, 3);
+    expect(pane.scrollTop).toBe(600);
+
+    scrollEditorToLine(view, 1);
+    expect(pane.scrollTop).toBe(0);
+
+    scrollEditorToLine(view, 3);
+    expect(pane.scrollTop).toBe(600);
+  });
+
+  /** The same, in the other direction -- the symptom was symmetric. */
+  it('follows a burst of preview scrolls too', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    scrollPaneTo(view, pane, 600);
+    const atLine3 = view.scrollDOM.scrollTop;
+
+    scrollPaneTo(view, pane, 0);
+    expect(view.scrollDOM.scrollTop).not.toBe(atLine3);
+  });
+
   it('leaves the preview alone when sync is off', () => {
     const { split, view } = mountSynced(false);
 

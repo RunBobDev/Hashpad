@@ -79,8 +79,8 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * not optional -- every render moves everything.
    */
   let anchors: AnchorOffset[] | null = null;
-  /** Set while this module is the one moving a scroller; see `withGuard`. */
-  let applying = false;
+  /** The scroller this module just wrote to; its next scroll event is the echo. */
+  let echoFrom: HTMLElement | null = null;
   let guardFrame: number | null = null;
 
   function clearRenderTimer(): void {
@@ -216,47 +216,49 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
 
   /**
    * Scrolling one pane scrolls the other, whose own scroll event would scroll
-   * the first one back. The flag is cleared on the next frame rather than
-   * synchronously because the browser fires `scroll` asynchronously, well after
-   * the assignment to `scrollTop` has returned -- clearing it inline would let
-   * the echo straight through.
+   * the first one back. What suppresses that echo is a token naming **the
+   * scroller we just wrote to**, consumed by the first event that arrives on it.
    *
-   * A frame, specifically, and not a `setTimeout`: HTML's "update the rendering"
-   * steps run the scroll steps (which fire the echo) *before* the animation
-   * frame callbacks, so a flag cleared in a frame callback is still set when the
-   * echo arrives and is clear again by the time the user's next gesture can
-   * reach us. A timeout task could be scheduled either side of that.
+   * This replaced a single `applying` boolean that blocked *any* sync for a
+   * whole animation frame, and that was the bug behind "the pane I am scrolling
+   * is smooth, the other one is choppy and jumps". Scroll events fire several
+   * times per frame during a wheel or a drag; the flag let the first one
+   * through and dropped every one after it until the frame ran. The follower
+   * therefore updated at best once a frame, from whichever source position
+   * happened to land after a frame boundary, so it lurched between distant
+   * positions instead of tracking. A token that names one scroller only ever
+   * suppresses the echo, never the user.
    *
-   * The frame is booked before `apply()` runs so that a throw inside it cannot
-   * leave the flag set with nothing scheduled to clear it.
+   * The frame is still here, as the release valve for a write that produces no
+   * scroll event at all -- the browser clamping at the top or bottom, say.
+   * Without it the token would sit armed and eat the user's next real scroll on
+   * that side.
    *
-   * A frame that never came would wedge the flag on and silently kill the sync.
-   * Chromium -- WebView2 is Chromium -- defers pending frame callbacks for a
-   * hidden or occluded window rather than dropping them, so that state clears on
-   * the next paint. Not verified against WebView2 itself, and not reachable in
-   * any case: both entry points are `scroll` events on scrollers the user cannot
-   * reach without the window on screen, and the pane only exists after a
-   * Ctrl+Shift+P.
-   *
-   * **This whole argument depends on the scroll being instantaneous, and that is
-   * a property of the CSS, not of this file.** Verified in real Chromium: with
-   * the default `scroll-behavior: auto` the guard is airtight, including across
-   * a 3000 px animated scroll that fired on 64 consecutive frames -- every echo
-   * suppressed. With `scroll-behavior: smooth` on the *target* scroller the
-   * assignment animates over ~60 frames, only the first frame's echo is inside
-   * the guard, and the remaining 63 run with the flag clear and drag the source
-   * scroller back to 0. Nothing in `src/` or in `@codemirror/view` sets
-   * `scroll-behavior` today (grepped both). If anyone ever adds it to `app.css`,
-   * this sync breaks in exactly that way and no test here will notice.
+   * Untested here and worth knowing: this reasoning assumes the write scrolls
+   * instantly. Under `scroll-behavior: smooth` the assignment animates over
+   * dozens of frames and only the first echo would be inside the token --
+   * measured in real Chromium, where the remaining echoes dragged the source
+   * scroller back to 0. Nothing in `src/` or `@codemirror/view` sets it today.
    */
-  function withGuard(apply: () => void): void {
-    if (applying) return;
-    applying = true;
+  function isEcho(scroller: HTMLElement): boolean {
+    if (echoFrom !== scroller) return false;
+    // Consume it: the token is good for exactly one event.
+    releaseGuard();
+    return true;
+  }
+
+  function writeTo(scroller: HTMLElement, top: number): void {
+    // An assignment that changes nothing fires no scroll event, so arming the
+    // token would leave it waiting for an echo that never comes -- and eating
+    // the user's next real scroll on that side instead.
+    if (scroller.scrollTop === top) return;
+    releaseGuard();
+    echoFrom = scroller;
     guardFrame = requestAnimationFrame(() => {
       guardFrame = null;
-      applying = false;
+      echoFrom = null;
     });
-    apply();
+    scroller.scrollTop = top;
   }
 
   /**
@@ -269,7 +271,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
       cancelAnimationFrame(guardFrame);
       guardFrame = null;
     }
-    applying = false;
+    echoFrom = null;
   }
 
   /**
@@ -318,11 +320,11 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // the document. Reachable: `html_block` drops the source-line attribute, so
     // a document that is one block of raw HTML scrolls and has no anchors.
     if (list.length === 0) return;
-    withGuard(() => {
-      const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop + 0.5;
-      const line = view.state.doc.lineAt(view.lineBlockAtHeight(height).from).number;
-      target.scrollTop = offsetForLine(list, line);
-    });
+    if (isEcho(view.scrollDOM)) return;
+
+    const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop + 0.5;
+    const line = view.state.doc.lineAt(view.lineBlockAtHeight(height).from).number;
+    writeTo(target, offsetForLine(list, line));
   }
 
   /**
@@ -345,16 +347,17 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     const list = anchorOffsets(target);
     // See `syncFromEditor`: an empty list means "no mapping", not "line 1".
     if (list.length === 0) return;
-    withGuard(() => {
-      const doc = view.state.doc;
-      const estimate = Math.round(lineForOffset(list, target.scrollTop));
-      const line = Math.min(Math.max(estimate, 1), doc.lines);
-      const scroller = view.scrollDOM;
-      scroller.scrollTop +=
-        view.documentTop +
-        view.lineBlockAt(doc.line(line).from).top -
-        scroller.getBoundingClientRect().top;
-    });
+    if (isEcho(target)) return;
+
+    const doc = view.state.doc;
+    const estimate = Math.round(lineForOffset(list, target.scrollTop));
+    const line = Math.min(Math.max(estimate, 1), doc.lines);
+    const scroller = view.scrollDOM;
+    const delta =
+      view.documentTop +
+      view.lineBlockAt(doc.line(line).from).top -
+      scroller.getBoundingClientRect().top;
+    writeTo(scroller, scroller.scrollTop + delta);
   }
 
   function applyRatio(ratio: number): void {
