@@ -3,10 +3,8 @@
  * is what lets its tests run without either. It does need a `window` for
  * DOMPurify, so its test file opts into jsdom.
  *
- * Returns anchors alongside the HTML rather than a bare string: scroll sync
- * (design §2.1) needs a source-line index, and building it during rendering is
- * the only place the mapping is known. Checkpoint G's outline wants the same
- * list.
+ * Returns the sanitised HTML and nothing else. It used to hand back a
+ * source-line index too -- see the note above `RenderContext` for why that went.
  */
 import MarkdownIt from 'markdown-it';
 import type { Env } from 'markdown-it';
@@ -46,9 +44,15 @@ export interface RenderContext {
  * through DOMPurify below; the two settings are a pair and must not be
  * separated.
  *
- * `linkify` stays **off**. It would turn a bare `example.com` in prose into an
- * anchor the author did not write, and this editor shows the source beside the
- * render, so the discrepancy would be visible and confusing.
+ * `linkify` is **on**, which SPEC §6.8 asks for and which GitHub does. It was
+ * off through Checkpoint F on the argument that a bare `example.com` becoming an
+ * anchor the author did not write would read as a discrepancy against the source
+ * pane. Owner's call, 2026-08-17: that is true of every markdown feature, and a
+ * pasted URL not being a link is the more surprising outcome.
+ *
+ * Sequenced deliberately after `preview/pane.ts` grew a click handler. Until it
+ * did, clicking any link navigated the webview off the app -- and linkify's whole
+ * job is to create more links.
  */
 // No `: MarkdownIt` annotation: @types/markdown-it's default export is typed
 // as the *constructor* (`MarkdownItConstructor`), so the bare name isn't a
@@ -56,7 +60,7 @@ export interface RenderContext {
 // from `new MarkdownIt(...)` gets the instance type without fighting that.
 const md = new MarkdownIt({
   html: true,
-  linkify: false,
+  linkify: true,
   typographer: false,
   /**
    * Returning `''` tells markdown-it to escape and wrap the code itself,

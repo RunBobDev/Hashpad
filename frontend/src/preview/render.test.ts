@@ -104,6 +104,31 @@ describe('fenced code blocks', () => {
   });
 });
 
+/**
+ * SPEC §6.8 lists autolinks in the GFM baseline. Off through Checkpoint F, turned
+ * on by the owner once `preview/pane.ts` had a click handler -- until then every
+ * link was a trap that navigated the webview off the app, and linkify's whole job
+ * is to make more of them.
+ */
+describe('autolinks', () => {
+  const NL = String.fromCharCode(10);
+  it('linkifies a bare URL in prose', () => {
+    const doc = render('see https://example.com/docs for more' + NL);
+    const anchor = doc.querySelector('a');
+    expect(anchor?.getAttribute('href')).toBe('https://example.com/docs');
+    expect(anchor?.textContent).toBe('https://example.com/docs');
+  });
+
+  it('still renders a CommonMark autolink', () => {
+    expect(render('<https://example.com/>' + NL).querySelector('a')).not.toBeNull();
+  });
+
+  // The thing linkify must not do: a filename with a dot in it is not a host.
+  it('leaves an ordinary filename alone', () => {
+    expect(render('open notes.md and read it' + NL).querySelector('a')).toBeNull();
+  });
+});
+
 describe('sanitisation', () => {
   /**
    * Raw HTML is permitted (SPEC §6.7) but must never execute. Each row is a

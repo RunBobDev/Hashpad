@@ -16,6 +16,8 @@ import { store } from '../state/appcontext';
 import { createUntitledDocument, type Document } from '../state/document';
 import { activateDocument } from '../state/documents';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { confirmOpenLink } from '../ui/confirmdialog';
 import { mountPreview, type PreviewHandle } from './pane';
 
 /**
@@ -72,6 +74,17 @@ vi.mock('./codehighlight', async (importOriginal) => {
     },
   };
 });
+
+vi.mock('../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
+
+/**
+ * The real prompt calls `showModal`, which jsdom does not implement, so the
+ * dialog itself is tested in `ui/confirmdialog.test.ts` and stubbed here. What
+ * this file is for is the wiring: that a click is intercepted at all, that the
+ * answer is respected, and that the href handed to the browser is the one in
+ * the document.
+ */
+vi.mock('../ui/confirmdialog', () => ({ confirmOpenLink: vi.fn() }));
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
@@ -900,6 +913,97 @@ describe('scroll sync', () => {
     // anchor at 600 -- the far end of the document, from a scroll that never
     // left the first line.
     expect(pane.scrollTop).toBeLessThan(600);
+  });
+
+  /**
+   * Clicking a link used to navigate the webview off the app entirely. The chrome
+   * is HTML, so the window became a browser showing someone else's page with no
+   * menu bar and no way back -- and it was a network request besides, which SPEC
+   * §2.1 says this app does not make.
+   *
+   * `preventDefault` is asserted separately from what happens next, because it
+   * is what has to be true for *every* anchor. Whether the link then opens is a
+   * decision; not navigating is not.
+   */
+  describe('links', () => {
+    function clickLink(pane: HTMLElement, href: string): MouseEvent {
+      pane.innerHTML = `<p><a href="${href}">go</a></p>`;
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      pane.querySelector('a')!.dispatchEvent(event);
+      return event;
+    }
+
+    it('opens an external link in the OS browser once confirmed', async () => {
+      vi.mocked(confirmOpenLink).mockResolvedValue(true);
+      const { split, handle } = mount();
+      handle.show();
+
+      const event = clickLink(paneOf(split), 'https://example.com/a?b=1');
+      await vi.waitFor(() => expect(BrowserOpenURL).toHaveBeenCalled());
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(confirmOpenLink).toHaveBeenCalledWith('https://example.com/a?b=1');
+      expect(BrowserOpenURL).toHaveBeenCalledWith('https://example.com/a?b=1');
+    });
+
+    it('opens nothing when the prompt is declined', async () => {
+      vi.mocked(confirmOpenLink).mockResolvedValue(false);
+      const { split, handle } = mount();
+      handle.show();
+
+      clickLink(paneOf(split), 'https://example.com/');
+      await vi.waitFor(() => expect(confirmOpenLink).toHaveBeenCalled());
+
+      expect(BrowserOpenURL).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A footnote reference is exactly this shape, so preventing the default
+     * without handling it would break a shipped feature.
+     */
+    it('scrolls to an in-document fragment instead of leaving', () => {
+      const { split, handle } = mount();
+      handle.show();
+      const pane = paneOf(split);
+      pane.innerHTML = '<p><a href="#fn1">1</a></p><section id="fn1">note</section>';
+      const target = pane.querySelector<HTMLElement>('#fn1')!;
+      const scrolled = vi.fn();
+      target.scrollIntoView = scrolled;
+
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      pane.querySelector('a')!.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(scrolled).toHaveBeenCalled();
+      expect(confirmOpenLink).not.toHaveBeenCalled();
+    });
+
+    // A relative href has nowhere sensible to go, and navigating is the one
+    // outcome that must not happen -- so it is swallowed rather than followed.
+    it('swallows a link it cannot open, rather than navigating', () => {
+      const { split, handle } = mount();
+      handle.show();
+
+      const event = clickLink(paneOf(split), 'notes/other.md');
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(confirmOpenLink).not.toHaveBeenCalled();
+      expect(BrowserOpenURL).not.toHaveBeenCalled();
+    });
+
+    it('catches a click on an element inside the link', () => {
+      vi.mocked(confirmOpenLink).mockResolvedValue(false);
+      const { split, handle } = mount();
+      handle.show();
+      const pane = paneOf(split);
+      pane.innerHTML = '<p><a href="https://example.com/"><em>go</em></a></p>';
+
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      pane.querySelector('em')!.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(confirmOpenLink).toHaveBeenCalledWith('https://example.com/');
+    });
   });
 
   it('leaves the preview alone when sync is off', () => {

@@ -34,9 +34,23 @@ const BUTTONS: ChoiceButton[] = [
  * removed — are all exercisable with plain EventTarget dispatch, which jsdom
  * does implement.
  */
-export function buildConfirmDialog(
-  filename: string,
-  onChoice: (choice: SaveChoice) => void,
+/**
+ * The plumbing both dialogs need: settle exactly once, always tear the element
+ * down, and treat Escape as the safe answer.
+ *
+ * Generic over the choice type because the two prompts do not share one -- the
+ * save prompt has three answers and the link prompt has two -- but they do share
+ * every hard part, and those are the parts worth having one copy of.
+ *
+ * `escapeWith` is a parameter rather than a convention: "the answer that loses
+ * nothing" is Cancel for the save prompt and "don't open it" for the link
+ * prompt, and neither should be inferred from button order.
+ */
+function buildDialog<T>(
+  text: string,
+  buttons: readonly { choice: T; label: string; primary?: boolean }[],
+  escapeWith: T,
+  onChoice: (choice: T) => void,
 ): HTMLDialogElement {
   const dialog = document.createElement('dialog');
   dialog.className = 'confirm-dialog';
@@ -45,7 +59,7 @@ export function buildConfirmDialog(
   const message = document.createElement('p');
   message.id = 'confirm-dialog-message';
   message.className = 'confirm-dialog__message';
-  message.textContent = `Do you want to save changes to ${filename}?`;
+  message.textContent = text;
 
   const actions = document.createElement('div');
   actions.className = 'confirm-dialog__actions';
@@ -53,7 +67,7 @@ export function buildConfirmDialog(
   // Settle exactly once and always tear the dialog down, so a caller awaiting
   // this can never be left hanging on a dialog the user already dismissed.
   let settled = false;
-  const finish = (choice: SaveChoice): void => {
+  const finish = (choice: T): void => {
     if (settled) return;
     settled = true;
     // Guarded because jsdom implements <dialog> as a bare HTMLElement with no
@@ -64,7 +78,7 @@ export function buildConfirmDialog(
     onChoice(choice);
   };
 
-  for (const button of BUTTONS) {
+  for (const button of buttons) {
     const el = document.createElement('button');
     el.type = 'button';
     el.textContent = button.label;
@@ -73,19 +87,58 @@ export function buildConfirmDialog(
     actions.append(el);
   }
 
-  // Escape means "I didn't decide", which is Cancel — the safe answer, since it
-  // is the only one that loses nothing. A backdrop click is deliberately NOT
-  // wired to the same thing: verified against real Chromium that clicking
-  // outside the dialog box neither fires 'cancel' nor closes it, and that
-  // inertness matches native Windows modal prompts, which do not light-dismiss
-  // on an outside click either.
+  // Escape means "I didn't decide", which is the answer that loses nothing. A
+  // backdrop click is deliberately NOT wired to the same thing: verified against
+  // real Chromium that clicking outside the dialog box neither fires 'cancel'
+  // nor closes it, and that inertness matches native Windows modal prompts,
+  // which do not light-dismiss on an outside click either.
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
-    finish('cancel');
+    finish(escapeWith);
   });
 
   dialog.append(message, actions);
   return dialog;
+}
+
+export function buildConfirmDialog(
+  filename: string,
+  onChoice: (choice: SaveChoice) => void,
+): HTMLDialogElement {
+  return buildDialog(`Do you want to save changes to ${filename}?`, BUTTONS, 'cancel', onChoice);
+}
+
+/**
+ * The prompt before a preview link leaves for the OS browser.
+ *
+ * It shows the **href**, not the link text, and that is the whole reason it
+ * exists rather than opening straight away: a document is untrusted content, and
+ * markdown lets the visible text say one thing while the destination says
+ * another. Seeing the real URL is the only way to notice.
+ *
+ * Escape declines, per `buildDialog`'s contract -- not opening is what loses
+ * nothing.
+ */
+export function buildLinkDialog(url: string, onChoice: (open: boolean) => void): HTMLDialogElement {
+  return buildDialog(
+    `Open this link in your browser?
+
+${url}`,
+    [
+      { choice: true, label: 'Open', primary: true },
+      { choice: false, label: 'Cancel' },
+    ],
+    false,
+    onChoice,
+  );
+}
+
+export function confirmOpenLink(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialog = buildLinkDialog(url, resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+  });
 }
 
 export function confirmSave(filename: string): Promise<SaveChoice> {

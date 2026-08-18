@@ -33,7 +33,9 @@
  */
 import type { EditorView } from '@codemirror/view';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { documentDirOf } from '../files/documentops';
+import { confirmOpenLink } from '../ui/confirmdialog';
 import { store } from '../state/appcontext';
 import { clampSplitRatio, MAX_SPLIT_RATIO, MIN_SPLIT_RATIO } from '../state/document';
 import { activeDocument } from '../state/documents';
@@ -533,6 +535,59 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    *
    * `load` does not bubble from an `<img>`, hence the capture phase.
    */
+  /**
+   * Schemes worth handing to the OS browser. `mailto:` is included because a mail
+   * client is the same kind of external handler as a browser.
+   *
+   * Everything markdown-it's own `validateLink` rejects -- `javascript:`,
+   * `data:text/html` -- never reaches an href in the first place, and DOMPurify
+   * is a second pass over the same ground. This list is a third gate rather than
+   * the only one: whatever slips both still has to be named here to be opened.
+   */
+  const EXTERNAL_SCHEME = /^(?:https?|mailto):/i;
+
+  /**
+   * Every click on a link in the preview, intercepted.
+   *
+   * `preventDefault` runs for **all** anchors, before any decision about what to
+   * do next, and that ordering is the point. Without it the webview simply
+   * navigates: the app is replaced by the page, and because the whole chrome is
+   * HTML there is no menu bar and no way back -- the window is just a browser
+   * showing someone else's site. It is also a network request, which SPEC §2.1
+   * says this app does not make.
+   *
+   * Handing the URL to the OS keeps that true. Hashpad still fetches nothing;
+   * the browser does, in its own process, because the user asked. "Grep the
+   * bundle for a network call" -- the property §2.1 is really asserting --
+   * stays clean.
+   *
+   * An in-document `#fragment` is handled here rather than left to the browser
+   * because preventing the default breaks it otherwise, and footnote references
+   * are exactly that shape. Anything else -- a relative path, the asset route --
+   * is swallowed: there is nothing sensible to do with it, and doing nothing is
+   * better than navigating.
+   */
+  function onPreviewClick(event: MouseEvent): void {
+    const anchor = (event.target as Element | null)?.closest?.('a');
+    if (anchor === null || anchor === undefined) return;
+    event.preventDefault();
+
+    const href = anchor.getAttribute('href') ?? '';
+    if (href.startsWith('#')) {
+      // `CSS.escape` because a footnote id is author-influenced: markdown-it
+      // builds it from the label, so `[^my note]` yields an id a bare selector
+      // would choke on.
+      const id = href.slice(1);
+      if (id !== '') pane?.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView();
+      return;
+    }
+
+    if (!EXTERNAL_SCHEME.test(href)) return;
+    void confirmOpenLink(href).then((open) => {
+      if (open) BrowserOpenURL(href);
+    });
+  }
+
   function invalidateAnchors(): void {
     anchors = null;
   }
@@ -628,6 +683,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     pane.className = 'preview-pane';
     pane.addEventListener('scroll', syncFromPreview);
     pane.addEventListener('load', invalidateAnchors, true);
+    pane.addEventListener('click', onPreviewClick);
     // The editor's scroller outlives the pane, so unlike the pane's own listener
     // this one is a real leak if `hide()` forgets it -- and it would keep
     // measuring against a pane that is no longer there.
@@ -648,6 +704,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     endDrag?.();
     pane?.removeEventListener('scroll', syncFromPreview);
     pane?.removeEventListener('load', invalidateAnchors, true);
+    pane?.removeEventListener('click', onPreviewClick);
     view.scrollDOM.removeEventListener('scroll', syncFromEditor);
     // `window` outlives everything here, so this is the one of the four that
     // leaks for the life of the process if it is forgotten.
