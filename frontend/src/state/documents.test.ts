@@ -34,6 +34,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
     syncScroll: true,
+    wordWrap: true,
   };
 }
 

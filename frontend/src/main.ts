@@ -11,7 +11,7 @@ import {
 } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import { COMMANDS, toEditorCommand, type CommandId } from './editor/commands';
-import { publishActiveFormats } from './editor/extensions';
+import { publishActiveFormats, setWordWrap } from './editor/extensions';
 import {
   openFiles,
   resolveDocumentsBeforeQuit,
@@ -30,6 +30,7 @@ import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
+import { mountZoom, zoomIn, zoomOut, zoomReset } from './ui/zoom';
 import {
   activeDocument,
   addDocument,
@@ -135,6 +136,9 @@ async function bootstrap(): Promise<void> {
   // True is Go's default too (internal/app/settings.go's `DefaultSettings`), so
   // a settings load that fails leaves the same behaviour a fresh install has.
   let syncScroll = true;
+  // SPEC §6.6's default, and Go's (`DefaultSettings`), so a failed settings load
+  // leaves the same behaviour a fresh install has.
+  let wordWrap = true;
 
   try {
     const settings = await LoadSettings();
@@ -178,6 +182,7 @@ async function bootstrap(): Promise<void> {
     // reaches this side. Read last for the same reason the ratio is read late
     // -- a throw here must not cost the theme, the toolbar and the ratio theirs.
     syncScroll = settings.preview.syncScroll;
+    wordWrap = settings.editor.wordWrap;
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -187,6 +192,7 @@ async function bootstrap(): Promise<void> {
       pinnedToolbarCommands: pinnedCommands,
       previewSplitRatio: splitRatio,
       syncScroll,
+      wordWrap,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog, and MenuItem has no checkmark
@@ -212,11 +218,19 @@ async function bootstrap(): Promise<void> {
     // run for it -- `activeFormats` would sit at its initial `''` until the
     // user first typed. A file opened from the command line with the caret
     // already inside `**bold**` would advertise no formatting at all.
+    // The editor was constructed before LoadSettings resolved, so it is holding
+    // the compiled-in default until here -- same reason the theme is applied in
+    // this block rather than at construction.
+    setWordWrap(view, wordWrap);
     publishActiveFormats(view.state);
     ShowWindow();
   }
 }
 void bootstrap();
+
+// Window-level, not an editor command: zoom has to work with the caret in the
+// editor, the focus in the preview, or nothing focused at all.
+mountZoom();
 
 /**
  * Routes a View > Theme menu choice. `themeMode` is updated first and
@@ -370,6 +384,28 @@ async function togglePreview(): Promise<void> {
   store.setState((prev) => setViewMode(prev, active.id, 'split', mode));
 }
 
+/**
+ * Word wrap: applied to the view first, then persisted -- SPEC §6.13's "every
+ * setting takes effect immediately", and the same ordering and error handling
+ * `setThemeMode` and `setToolbarPinned` use. A failed disk write means the
+ * choice will not survive a restart, not that it silently did not apply.
+ *
+ * The store is written as well as the view because a *new* document builds its
+ * extensions from it -- without that, wrapping would revert on the next tab.
+ */
+async function setWordWrapSetting(wordWrap: boolean): Promise<void> {
+  store.setState((prev) => ({ ...prev, wordWrap }));
+  setWordWrap(getEditorView(), wordWrap);
+
+  try {
+    const settings = await LoadSettings();
+    settings.editor.wordWrap = wordWrap;
+    await SaveSettings(settings);
+  } catch (err) {
+    console.error('hashpad: failed to persist the word-wrap setting', err);
+  }
+}
+
 // There is no OS-level watcher (see internal/app/theme.go), so this is how a
 // theme changed mid-session gets picked up -- a registry read on focus costs
 // microseconds, so polling it here is free.
@@ -521,6 +557,18 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     }
     case 'view.preview':
       void togglePreview();
+      break;
+    case 'view.wordWrap':
+      void setWordWrapSetting(!store.getState().wordWrap);
+      break;
+    case 'view.zoomIn':
+      zoomIn();
+      break;
+    case 'view.zoomOut':
+      zoomOut();
+      break;
+    case 'view.zoomReset':
+      zoomReset();
       break;
     case 'theme.system':
       void setThemeMode('system');

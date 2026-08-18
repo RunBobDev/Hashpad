@@ -116,6 +116,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
     syncScroll: true,
+    wordWrap: true,
   };
 }
 

@@ -67,7 +67,10 @@ export function documentDirOf(filePath: string | null): string {
 /** Mints an untitled document with a real `EditorState`, ready to become a new tab. */
 export function makeUntitledDocument(): Document {
   return createUntitledDocument(
-    EditorState.create({ doc: '', extensions: buildExtensions(store.getState().isDark) }),
+    EditorState.create({
+      doc: '',
+      extensions: buildExtensions(store.getState().isDark, store.getState().wordWrap),
+    }),
   );
 }
 
@@ -147,7 +150,7 @@ export function switchToDocument(id: string): void {
 export function openDocumentInNewTab(contents: FileContentsLike): void {
   const editorState = EditorState.create({
     doc: contents.content,
-    extensions: buildExtensions(store.getState().isDark),
+    extensions: buildExtensions(store.getState().isDark, store.getState().wordWrap),
   });
 
   const doc: Document = {

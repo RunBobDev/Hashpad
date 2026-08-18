@@ -8,6 +8,7 @@ import {
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
+import { Compartment } from '@codemirror/state';
 import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
@@ -130,7 +131,7 @@ export function publishActiveFormats(state: EditorState): void {
  * moment they're created; `setEditorDark` remains the way to flip the theme
  * on a state that already exists. Both are needed — one seeds, one updates.
  */
-export function buildExtensions(isDark: boolean): Extension[] {
+export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
   return [
     history(),
     drawSelection(),
@@ -152,8 +153,11 @@ export function buildExtensions(isDark: boolean): Extension[] {
     // one out.
     EditorView.clickAddsSelectionRange.of((event) => event.altKey),
     highlightActiveLine(),
-    // Word wrap is on by default (SPEC §6.6). Checkpoint G makes it a toggle.
-    EditorView.lineWrapping,
+    // On by default (SPEC §6.6), and a toggle since G.1. In a compartment for
+    // the same reason the theme is: reconfiguring is the only way to change it
+    // on the live view without rebuilding the state, which would throw away the
+    // undo history and the selection.
+    wordWrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
     // High precedence so these file-command shortcuts always win, regardless
     // of what defaultKeymap does or gains in a future CodeMirror version.
     Prec.high(
@@ -261,4 +265,22 @@ export function buildExtensions(isDark: boolean): Extension[] {
     EditorView.updateListener.of(syncActiveDocument),
     EditorView.updateListener.of(syncActiveFormats),
   ];
+}
+
+/**
+ * Word wrap, reconfigurable on the live view.
+ *
+ * `wordWrap` defaults to on rather than being required at every call site, and
+ * that default is SPEC §6.6's rather than an arbitrary one. It works the same
+ * way the theme does: a new document is built with whatever the store currently
+ * says, and `bootstrap()` corrects the *first* one once settings have loaded --
+ * the editor is constructed before `LoadSettings` resolves, so there is a moment
+ * where the compiled-in default is all there is.
+ */
+export const wordWrapCompartment = new Compartment();
+
+export function setWordWrap(view: EditorView, wordWrap: boolean): void {
+  view.dispatch({
+    effects: wordWrapCompartment.reconfigure(wordWrap ? EditorView.lineWrapping : []),
+  });
 }

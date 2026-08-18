@@ -87,6 +87,16 @@ export interface AppState {
    * way to turn it off today.
    */
   syncScroll: boolean;
+  /**
+   * SPEC §6.6's word wrap: on by default, toggled from the View menu, and
+   * persisted to `settings.editor.wordWrap`. Seed-then-persist, the same shape
+   * as `previewSplitRatio` -- `bootstrap()` reads it, the toggle writes it back.
+   *
+   * Zoom is deliberately *not* here beside it. SPEC makes zoom per session
+   * rather than persisted, nothing outside `ui/zoom.ts` reacts to it, and a
+   * store field nobody reads is a field that goes stale.
+   */
+  wordWrap: boolean;
 }
 
 /**

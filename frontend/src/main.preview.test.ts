@@ -15,7 +15,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getEditorView, store } from './state/appcontext';
 import { activeDocument } from './state/documents';
 import { COMMAND_EVENT } from './ui/menubar';
-import { ShowWindow } from '../wailsjs/go/app/App';
+import { SaveSettings, ShowWindow } from '../wailsjs/go/app/App';
 
 vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
@@ -38,6 +38,9 @@ vi.mock('../wailsjs/go/app/App', () => ({
     // False for the same reason, the compiled-in default being true (Go's
     // `DefaultSettings`, and state/appcontext.ts's placeholder).
     preview: { syncScroll: false },
+    // Likewise false against a compiled-in true, so a bootstrap that never read
+    // settings cannot pass by coincidence.
+    editor: { wordWrap: false },
   }),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
@@ -115,6 +118,13 @@ describe('bootstrap', () => {
     expect(store.getState().previewSplitRatio).toBeCloseTo(0.3);
   });
 
+  it('seeds word wrap from settings, and applies it to the live view', () => {
+    expect(store.getState().wordWrap).toBe(false);
+    // The store alone would be a half-wired setting: the editor is constructed
+    // before LoadSettings resolves, so bootstrap has to reconfigure the view too.
+    expect(getEditorView().contentDOM.className).not.toContain('cm-lineWrapping');
+  });
+
   /**
    * Same reasoning as the ratio above, and the same reason the mock says
    * `false`: the store's placeholder and Go's default are both `true`, so this
@@ -137,6 +147,32 @@ describe('bootstrap', () => {
     expect([...app.querySelector('.editor-split')!.children].map((c) => c.className)).toEqual([
       'editor-area',
     ]);
+  });
+});
+
+describe('view.wordWrap', () => {
+  /**
+   * Toggled back at the end rather than left flipped: `main.ts` is a module
+   * singleton, so this is shared state and the bootstrap assertions above read
+   * it. Under `--sequence.shuffle.tests` "above" means nothing.
+   */
+  afterEach(() => {
+    if (store.getState().wordWrap) emit('view.wordWrap');
+  });
+
+  it('toggles the store, the live view, and the settings file together', async () => {
+    expect(store.getState().wordWrap).toBe(false);
+
+    emit('view.wordWrap');
+
+    expect(store.getState().wordWrap).toBe(true);
+    // The store on its own would leave the editor unchanged until the next
+    // document; the view is what the user is looking at.
+    expect(getEditorView().contentDOM.className).toContain('cm-lineWrapping');
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    expect(vi.mocked(SaveSettings).mock.calls.at(-1)![0]).toMatchObject({
+      editor: { wordWrap: true },
+    });
   });
 });
 

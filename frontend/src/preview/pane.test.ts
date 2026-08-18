@@ -108,6 +108,7 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
     pinnedToolbarCommands: [],
     previewSplitRatio: ratio,
     syncScroll,
+    wordWrap: true,
   }));
 }
 

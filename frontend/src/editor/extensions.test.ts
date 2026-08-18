@@ -6,7 +6,7 @@ import { store, setEditorView } from '../state/appcontext';
 import { createUntitledDocument, isDirty } from '../state/document';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { COMMANDS, toEditorCommand } from './commands';
-import { buildExtensions } from './extensions';
+import { buildExtensions, setWordWrap } from './extensions';
 
 /**
  * The baseline `AppState` every describe block below resets to in its
@@ -26,6 +26,7 @@ function resetStore(): void {
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
     syncScroll: true,
+    wordWrap: true,
   }));
 }
 
@@ -502,5 +503,49 @@ describe('formatting command keymap', () => {
 
     view.destroy();
     view2.destroy();
+  });
+});
+
+/**
+ * SPEC §6.6: on by default, toggleable, and it must survive the toggle without
+ * costing the document its undo history -- which is why it is a Compartment and
+ * not a rebuild of the state.
+ *
+ * `EditorView.lineWrapping` is a theme extension, so the observable is the class
+ * CodeMirror puts on the content element rather than a facet value.
+ */
+describe('word wrap', () => {
+  function viewWith(wordWrap: boolean): EditorView {
+    return new EditorView({
+      state: EditorState.create({ doc: 'x', extensions: buildExtensions(false, wordWrap) }),
+    });
+  }
+
+  it('wraps by default', () => {
+    const view = viewWith(true);
+    expect(view.contentDOM.className).toContain('cm-lineWrapping');
+    view.destroy();
+  });
+
+  it('does not wrap when built with it off', () => {
+    const view = viewWith(false);
+    expect(view.contentDOM.className).not.toContain('cm-lineWrapping');
+    view.destroy();
+  });
+
+  it('turns off and back on without rebuilding the state', () => {
+    const view = viewWith(true);
+    const before = view.state;
+
+    setWordWrap(view, false);
+    expect(view.contentDOM.className).not.toContain('cm-lineWrapping');
+
+    setWordWrap(view, true);
+    expect(view.contentDOM.className).toContain('cm-lineWrapping');
+
+    // Same document, reconfigured -- not a new EditorState, which would have
+    // thrown away the undo history and the selection.
+    expect(view.state.doc).toBe(before.doc);
+    view.destroy();
   });
 });

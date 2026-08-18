@@ -117,6 +117,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     pinnedToolbarCommands: [],
     previewSplitRatio: 0.5,
     syncScroll: true,
+    wordWrap: true,
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);

@@ -36,6 +36,7 @@ export const store: Store<AppState> = createStore<AppState>({
   // True to match Go's `DefaultSettings()` (internal/app/settings.go), which is
   // what a settings file that has never been edited carries.
   syncScroll: true,
+  wordWrap: true,
 });
 
 let editorView: EditorView | undefined;

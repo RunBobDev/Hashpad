@@ -40,9 +40,19 @@
      one pattern rather than two. */
   --font-preview: var(--font-ui);
 
+  /* Zoom (SPEC §6.6). Ctrl+scroll and Ctrl+Plus/Minus scale this one number, and
+     only the two *content* sizes below multiply by it -- "zooms editor and
+     preview content only, never the UI chrome" is then a property of which
+     tokens reference it rather than a rule someone has to remember. --size-ui
+     is deliberately absent from that list.
+
+     Per session, not persisted and not per document, so nothing writes it to
+     settings.json; `ui/zoom.ts` owns it for the life of the window. */
+  --zoom: 1;
+
   --size-ui: 14px;
-  --size-editor: 14px;
-  --size-preview: 15px;
+  --size-editor: calc(14px * var(--zoom));
+  --size-preview: calc(15px * var(--zoom));
   --line-editor: 1.6;
 
   /* Editor padding — SPEC §6.1 asks for roughly 24px horizontal. */
