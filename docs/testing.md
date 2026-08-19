@@ -513,6 +513,16 @@ disk, which is the whole point of the feature.
       Then reopen it and confirm the segment still says UTF-8 BOM -- that is the
       detector and the writer agreeing, which no frontend test can check.
 - [ ] **UTF-16 LE round trip**, the same way. Non-ASCII text is worth using here.
+
+`docs/fixtures/encoding-*.md` are the same document saved four ways, produced by
+the owner running exactly these checks against the G.2b build and kept because
+they are the inputs the *next* round needs. `preview-checks.md` is the UTF-8 / LF
+original; the other four are UTF-8 CRLF, UTF-8 BOM CRLF, UTF-16 LE LF and
+UTF-16 LE CRLF. Opening each should show its own encoding and line ending in the
+status bar with no conversion prompt and no dirty dot -- which is the detector
+and the writer agreeing, end to end, on files this project actually produced.
+Note the sizes differ (5,205 / 5,365 / 5,208 / 10,380 / 10,700 bytes); that
+spread is itself the evidence the encodings are real rather than nominal.
 - [ ] **Change a setting and close the tab without saving.** The Save / Don't
       Save prompt must appear -- if it does not, `isDirty` is not seeing
       metadata and the choice is being silently discarded.
