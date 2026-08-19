@@ -177,6 +177,39 @@ describe('view.wordWrap', () => {
   });
 });
 
+/**
+ * The owner's report: "when I open Hashpad and press Ctrl+Shift+P, nothing
+ * happens -- the only time I can use macros is when I press inside the editor".
+ *
+ * `ui/shortcuts.test.ts` covers the router in isolation; this is the wiring, and
+ * it is here because this is the file already equipped to open and close the
+ * pane (its `afterEach` puts it back). The key is dispatched at `document.body`,
+ * which is where focus sits before anything has been clicked -- the exact
+ * situation reported. `keyCode` as well as `key` because CodeMirror resolves a
+ * shifted binding through it; see the note in `ui/shortcuts.test.ts`.
+ */
+describe('shortcuts with focus outside the editor', () => {
+  it('opens the preview on a real Ctrl+Shift+P pressed on the body', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'P',
+        keyCode: 80,
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      } as KeyboardEventInit),
+    );
+    await waitForPane(true);
+
+    expect(document.querySelector('.editor-split > .preview-pane')).not.toBeNull();
+    expect(activeDocument(store.getState())!.viewMode).toBe('split');
+  });
+});
+
 describe('view.preview', () => {
   it('opens the pane inside the split row and puts the document in split mode', async () => {
     const active = activeDocument(store.getState())!;

@@ -74,6 +74,18 @@ describe('bootstrap seeding the toolbar from settings', () => {
     await vi.waitFor(() => expect(ShowWindow).toHaveBeenCalled());
   });
 
+  /**
+   * An editor nobody has clicked in takes no typing at all -- focus sits on
+   * `<body>` -- so bootstrap focuses it before the window is shown, the way
+   * Notepad opens with a caret in the document. Asserted in this file rather
+   * than in `main.test.ts` because nothing here moves focus, and
+   * `--sequence.shuffle` makes "which test ran before this one" unanswerable
+   * anywhere that does.
+   */
+  it('leaves the caret in the editor, ready to type', () => {
+    expect(document.activeElement?.classList.contains('cm-content')).toBe(true);
+  });
+
   it('renders the pinned commands settings.json named, not the compiled-in default', () => {
     expect(document.querySelector('[data-command="blockquote"]')).not.toBeNull();
     expect(document.querySelector('[data-command="footnote"]')).not.toBeNull();

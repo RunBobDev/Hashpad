@@ -467,3 +467,33 @@ contrast and whether it clips gracefully are only checkable here.
 - [ ] **Ctrl+scroll does not scale it.** The status bar is chrome, and SPEC §6.6
       says zoom never touches chrome — the same check as G.1's, now with one
       more row to watch.
+
+## Checkpoint G.2 — shortcuts without editor focus
+
+Reported by the owner: "when I open Hashpad and press Ctrl+Shift+P nothing
+happens -- the only time I can use macros is when I press inside the editor".
+Every shortcut except zoom is declared in the editor's keymap, which CodeMirror
+installs on `view.contentDOM`, so a key pressed anywhere else never reached it.
+`ui/shortcuts.ts` forwards those through CodeMirror's own `runScopeHandlers`;
+bootstrap now also focuses the editor so the first keystroke lands.
+
+jsdom can dispatch keys but has no real focus model and no browser defaults, so
+what it cannot check is whether WebView2 agrees.
+
+- [ ] **Type immediately after launch, without clicking.** The caret should
+      already be in the document.
+- [ ] **Ctrl+Shift+P straight after launch**, again without clicking anywhere.
+- [ ] **Click the preview pane, then use shortcuts.** Ctrl+S, Ctrl+B, Ctrl+Tab.
+      Then the same with focus on the divider and on a tab.
+- [ ] **Ctrl+O does not open Chromium's file picker as well as ours.** The
+      forwarder calls `preventDefault` itself, because outside the editor there
+      is nothing else doing it; if both dialogs appear, that call is missing.
+- [ ] **Enter on a focused menu-bar button does not also insert a newline**, and
+      Left/Right on the preview divider moves only the divider. Unmodified keys
+      are deliberately not forwarded, and this is what that protects.
+- [ ] **Shift+Enter with focus outside the editor inserts nothing.** Shift alone
+      is not treated as a chord; `defaultKeymap` binds Shift+Enter, so if it were
+      this would put a newline in the document from anywhere in the app.
+- [ ] **Ctrl+S while the Save / Don't Save prompt is open does nothing.** The
+      forwarder stands aside for an open `<dialog>`, or a save would start behind
+      the prompt that is asking about it.

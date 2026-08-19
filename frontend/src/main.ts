@@ -28,6 +28,7 @@ import {
 } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
+import { mountShortcuts } from './ui/shortcuts';
 import { mountStatusBar } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
@@ -249,6 +250,11 @@ async function bootstrap(): Promise<void> {
     // the compiled-in default until here -- same reason the theme is applied in
     // this block rather than at construction.
     setWordWrap(view, wordWrap);
+    // The window is about to be shown, and an editor nobody has clicked in yet
+    // takes no typing at all -- focus sits on `<body>`. Notepad opens with a
+    // caret in the document and so should this. `ui/shortcuts.ts` covers the
+    // shortcuts once focus moves elsewhere; this covers the first keystroke.
+    view.focus();
     publishActiveFormats(view.state);
     // Defensive symmetry with the line above rather than an observable fix: the
     // startup document is always empty, and `statusOf` of an empty document is
@@ -267,6 +273,11 @@ void bootstrap();
 // Window-level, not an editor command: zoom has to work with the caret in the
 // editor, the focus in the preview, or nothing focused at all.
 mountZoom();
+
+// The same problem for every *other* shortcut, which unlike zoom are declared in
+// the editor's keymap and so only fire while the editor has focus. This forwards
+// them when it does not; see ui/shortcuts.ts.
+mountShortcuts(view);
 
 /**
  * Routes a View > Theme menu choice. `themeMode` is updated first and
