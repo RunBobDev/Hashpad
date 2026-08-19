@@ -147,6 +147,29 @@ const SAVE_DEBOUNCE_MS = 300;
 /** How far Left/Right move the resizer per press. */
 const KEYBOARD_STEP = 16;
 
+/**
+ * Half a pixel, added before asking which block the viewport top is in.
+ *
+ * `ViewState.lineBlockAtHeight` matches with
+ * `find(l => l.top <= height && l.bottom >= height)`, and adjacent blocks share
+ * `bottom === top` -- so a height landing exactly on a boundary matches the
+ * block *above*. Scrolling a line to the top of the viewport lands exactly on
+ * its boundary every time, which is precisely what clicking an outline item
+ * does: the editor jumped to the right heading and the sidebar then highlighted
+ * the one before it. Reported by the owner.
+ *
+ * Ordinary scrolling almost never lands on a boundary, and when it does the
+ * off-by-one is invisible because a body line one early is still in the same
+ * section. That is why this only ever showed on a click.
+ *
+ * `preview/pane.ts` hit the same thing and documents it at length; it since
+ * retired its own nudge in favour of a fractional mapping, which this does not
+ * need -- an integer line is all a section lookup takes. Any value well under
+ * one line height works; CodeMirror's own `scrollAnchorAt` uses 8px for the same
+ * job, so there is room.
+ */
+const BOUNDARY_NUDGE = 0.5;
+
 /** The list, as a pure function so what the sidebar shows is testable alone. */
 export function buildOutline(
   headings: readonly Heading[],
@@ -318,10 +341,13 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
    * one three-line conversion, with different requirements, is not an
    * abstraction worth the coupling -- especially as that module is lazily
    * loaded and this one must not pull it in.
+   *
+   * The nudge is the one piece of that reasoning worth borrowing wholesale; see
+   * `BOUNDARY_NUDGE`.
    */
   function topSourceLine(): number {
     const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
-    const block = view.lineBlockAtHeight(height);
+    const block = view.lineBlockAtHeight(height + BOUNDARY_NUDGE);
     return view.state.doc.lineAt(block.from).number;
   }
 

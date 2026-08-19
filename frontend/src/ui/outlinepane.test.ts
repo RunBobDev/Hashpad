@@ -330,6 +330,29 @@ describe('mountOutline', () => {
     const LINE_HEIGHT = 10;
 
     /**
+     * What CodeMirror's `lineBlockAtHeight` answers, **including at a boundary**.
+     *
+     * `ViewState.lineBlockAtHeight` matches the viewport with
+     * `find(l => l.top <= height && l.bottom >= height)`, and adjacent blocks
+     * share `bottom === top` -- so a height landing exactly on a boundary
+     * matches the *earlier* block. That is not a detail: scrolling to a line's
+     * top lands exactly there every time, which is what an outline click does.
+     *
+     * The first version of this stub was `Math.round(height / LINE_HEIGHT) + 1`,
+     * which silently rounded the boundary the friendly way. Every test passed
+     * while the running app marked the section above the one clicked -- reported
+     * by the owner. Modelling the real rule is what makes these tests able to
+     * see it.
+     */
+    function blockLineAt(height: number, lines: number): number {
+      const raw =
+        height > 0 && height % LINE_HEIGHT === 0
+          ? height / LINE_HEIGHT
+          : Math.floor(height / LINE_HEIGHT) + 1;
+      return Math.min(Math.max(raw, 1), lines);
+    }
+
+    /**
      * Scrolls the editor so `line` is at the top of its viewport.
      *
      * The geometry is stated rather than stubbed away, and that matters: the
@@ -352,11 +375,8 @@ describe('mountOutline', () => {
         value: SCROLLER_TOP - scrolled,
         configurable: true,
       });
-      // Answers from the height it is handed, so a conversion that computes the
-      // wrong height names the wrong line.
       view.lineBlockAtHeight = (height: number) => {
-        const at = Math.min(Math.max(Math.round(height / LINE_HEIGHT) + 1, 1), view.state.doc.lines);
-        const target = view.state.doc.line(at);
+        const target = view.state.doc.line(blockLineAt(height, view.state.doc.lines));
         return { from: target.from, to: target.to, top: 0, height: 10, bottom: 10 } as ReturnType<
           typeof view.lineBlockAtHeight
         >;
@@ -382,6 +402,31 @@ describe('mountOutline', () => {
 
       scrollTopLineTo(view, 6);
       expect(currentLabel(workspace)).toBe('Three');
+    });
+
+    /**
+     * The owner's report: "when I press on anything in the outline it jumps to
+     * the correct part of the editor, but the wrong item is highlighted -- always
+     * the one above".
+     *
+     * Clicking scrolls the heading's own line to the *top* of the viewport, so
+     * the viewport top lands exactly on that block's boundary -- and at a
+     * boundary CodeMirror answers with the block above. Every other way of
+     * scrolling lands somewhere in the middle of a line and hides this
+     * completely, which is why the cases above pass either way: they scroll to
+     * body lines, and a body line resolving one early still sits in the same
+     * section.
+     */
+    it.each([
+      [1, 'One'],
+      [3, 'Two'],
+      [5, 'Three'],
+    ])('marks the section when line %i is scrolled exactly to the top', (line, label) => {
+      const { workspace, view } = mount(DOC);
+
+      scrollTopLineTo(view, line);
+
+      expect(currentLabel(workspace)).toBe(label);
     });
 
     /** Exactly one at a time, or the sidebar claims the reader is in two places. */

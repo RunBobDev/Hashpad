@@ -592,9 +592,12 @@ assume is only checkable here.
       front matter). Nothing should be marked: there is no section there.
 - [ ] **A long outline scrolls itself to follow**, but only when the current item
       would otherwise be off-screen -- it must not yank while you are reading.
-- [ ] **Click a heading, then check the mark moved to it.** The click scrolls the
-      editor, and the highlight follows from that scroll rather than from the
-      click, so this is really a check that the two agree.
+- [ ] **Click a heading, then check the mark moved to *that* heading.** This is
+      the case that was wrong: a click scrolls the heading's line exactly to the
+      top of the viewport, which lands on a block boundary, and CodeMirror
+      resolves a boundary to the block above -- so the sidebar marked the section
+      before the one clicked. Ordinary scrolling almost never lands on a boundary,
+      so only a click shows it. Try several headings, including the first.
 - [ ] **Type above a heading with the outline open.** Lines shift down; the mark
       must stay on the section you are in rather than jumping or vanishing.
 - [ ] **The mark is legible in both themes**, and distinguishable from hover
