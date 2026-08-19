@@ -180,6 +180,17 @@ export interface AppState {
    * SPEC §5.1 exists to prevent.
    */
   status: EditorStatus;
+  /**
+   * The outline sidebar's width in CSS pixels (SPEC §6.9), seeded from
+   * `settings.window.outlineWidth` and written back by the resizer -- the same
+   * seed-then-persist arrangement as `previewSplitRatio`.
+   *
+   * A width rather than a ratio, unlike the preview's split. The sidebar holds
+   * text at a fixed size, so what the user is choosing is how many characters of
+   * a heading they can read; a share of the window would change that every time
+   * the window resized.
+   */
+  outlineWidth: number;
 }
 
 /**
@@ -187,6 +198,10 @@ export interface AppState {
  * pane whose divider the user then has to hunt for, and an editor squeezed to
  * zero is worse.
  */
+export const MIN_OUTLINE_WIDTH = 140;
+export const MAX_OUTLINE_WIDTH = 600;
+export const DEFAULT_OUTLINE_WIDTH = 240;
+
 export const MIN_SPLIT_RATIO = 0.15;
 export const MAX_SPLIT_RATIO = 0.85;
 export const DEFAULT_SPLIT_RATIO = 0.5;
@@ -204,6 +219,21 @@ export const DEFAULT_SPLIT_RATIO = 0.5;
 export function clampSplitRatio(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_SPLIT_RATIO;
   return Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, value));
+}
+
+/**
+ * Same guard as `clampSplitRatio`, for the same reason: settings.json is
+ * hand-editable, so this can arrive as a string or a NaN. A non-number falls
+ * back to the default; a finite number out of range is clamped, because someone
+ * who typed 5000 plainly meant "as wide as it goes".
+ *
+ * The floor is not zero. A sidebar dragged to nothing is a sidebar the user then
+ * has to find the edge of again, and the resizer would sit under the editor's
+ * own left edge.
+ */
+export function clampOutlineWidth(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_OUTLINE_WIDTH;
+  return Math.min(MAX_OUTLINE_WIDTH, Math.max(MIN_OUTLINE_WIDTH, value));
 }
 
 /**

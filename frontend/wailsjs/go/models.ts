@@ -117,6 +117,7 @@ export namespace app {
 	    height: number;
 	    maximized: boolean;
 	    outlineVisible: boolean;
+	    outlineWidth: number;
 	    statusBarVisible: boolean;
 	    previewSplitRatio: number;
 	
@@ -130,6 +131,7 @@ export namespace app {
 	        this.height = source["height"];
 	        this.maximized = source["maximized"];
 	        this.outlineVisible = source["outlineVisible"];
+	        this.outlineWidth = source["outlineWidth"];
 	        this.statusBarVisible = source["statusBarVisible"];
 	        this.previewSplitRatio = source["previewSplitRatio"];
 	    }

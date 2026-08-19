@@ -1,6 +1,11 @@
 import type { EditorView } from '@codemirror/view';
 import { createStore, type Store } from './store';
-import { DEFAULT_SPLIT_RATIO, EMPTY_STATUS, type AppState } from './document';
+import {
+  DEFAULT_OUTLINE_WIDTH,
+  DEFAULT_SPLIT_RATIO,
+  EMPTY_STATUS,
+  type AppState,
+} from './document';
 
 /**
  * The single central store (SPEC §5.1) and the one shared `EditorView` live
@@ -41,6 +46,9 @@ export const store: Store<AppState> = createStore<AppState>({
   // is empty and `statusOf` of an empty document is exactly this. It stops
   // being a placeholder the first time the user types or a file is opened.
   status: EMPTY_STATUS,
+  // Placeholder, like `previewSplitRatio` above: bootstrap replaces it with the
+  // validated `window.outlineWidth` from settings.
+  outlineWidth: DEFAULT_OUTLINE_WIDTH,
 });
 
 let editorView: EditorView | undefined;

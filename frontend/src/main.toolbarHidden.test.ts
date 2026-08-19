@@ -30,7 +30,12 @@ vi.mock('../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
-    window: { previewSplitRatio: 0.5, statusBarVisible: false },
+    window: {
+      previewSplitRatio: 0.5,
+      statusBarVisible: false,
+      outlineVisible: false,
+      outlineWidth: 240,
+    },
     // Also read by bootstrap. Go always sends the block, so a mock without it
     // would make bootstrap throw where the real app never can.
     // Both blocks are read by bootstrap and Go always sends them, so a mock

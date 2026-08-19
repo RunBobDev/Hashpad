@@ -22,7 +22,7 @@ import { confirmSave } from '../ui/confirmdialog';
 import { ReadFile, WriteFile } from '../../wailsjs/go/app/App';
 import { buildExtensions } from '../editor/extensions';
 import { getEditorView, setEditorView, store } from '../state/appcontext';
-import { EMPTY_STATUS, createUntitledDocument, isDirty, type Document } from '../state/document';
+import { DEFAULT_OUTLINE_WIDTH, EMPTY_STATUS, createUntitledDocument, isDirty, type Document } from '../state/document';
 import { activeDocument } from '../state/documents';
 import {
   closeDocumentWithPrompt,
@@ -76,6 +76,7 @@ beforeEach(() => {
     syncScroll: true,
     wordWrap: true,
     status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
   vi.clearAllMocks();
 });
@@ -178,6 +179,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -200,6 +202,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -222,6 +225,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -247,6 +251,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -275,6 +280,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
@@ -353,6 +359,7 @@ describe('openDocumentInNewTab', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -391,6 +398,7 @@ describe('openDocumentInNewTab', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -423,6 +431,7 @@ describe('opening a document over the startup tab', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(documents.find((d) => d.id === activeId)!.editorState);
   }
@@ -473,6 +482,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(b.editorState);
 
@@ -496,6 +506,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -518,6 +529,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
@@ -543,6 +555,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
@@ -567,6 +580,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -596,6 +610,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -629,6 +644,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -659,6 +675,7 @@ describe('reopenLastClosed', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
 
@@ -681,6 +698,7 @@ describe('reopenLastClosed', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -711,6 +729,7 @@ describe('reopenLastClosed', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));

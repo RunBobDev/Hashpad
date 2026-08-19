@@ -13,7 +13,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { buildExtensions } from '../editor/extensions';
 import { store } from '../state/appcontext';
-import { EMPTY_STATUS, createUntitledDocument, type Document } from '../state/document';
+import { DEFAULT_OUTLINE_WIDTH, EMPTY_STATUS, createUntitledDocument, type Document } from '../state/document';
 import { activateDocument } from '../state/documents';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
@@ -110,6 +110,7 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
     syncScroll,
     wordWrap: true,
     status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
 }
 

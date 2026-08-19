@@ -29,6 +29,7 @@ import {
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { mountShortcuts } from './ui/shortcuts';
+import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
@@ -42,8 +43,10 @@ import {
   setViewMode,
 } from './state/documents';
 import {
+  clampOutlineWidth,
   clampSplitRatio,
   createUntitledDocument,
+  DEFAULT_OUTLINE_WIDTH,
   DEFAULT_SPLIT_RATIO,
   isDirty,
   type Document,
@@ -77,13 +80,23 @@ mountTabBar(root);
 // Since Checkpoint F that node is the split row below, not the editor area
 // inside it -- see the mountToolbar call for what goes wrong otherwise.
 
+// The horizontal band between the toolbar and the status bar. Two nested rows,
+// not one, and the nesting is what keeps the preview's split ratio meaningful:
+// `.workspace` holds the outline sidebar beside everything else, and
+// `.editor-split` holds the editor beside the preview. Flattening them would
+// make `previewSplitRatio` a share of a row that includes the sidebar, so
+// opening the outline would silently shrink the preview.
+const workspace = document.createElement('div');
+workspace.className = 'workspace';
+root.append(workspace);
+
 // #app is a flex *column*, so the editor and the preview need a flex row of
 // their own to sit side by side. Built at startup whether or not the preview
 // is on: toggling it then only adds and removes two children of this row,
 // rather than restructuring the tree around a live EditorView.
 const editorSplit = document.createElement('div');
 editorSplit.className = 'editor-split';
-root.append(editorSplit);
+workspace.append(editorSplit);
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
@@ -133,6 +146,13 @@ let themeMode: ThemeMode = 'system';
  */
 let statusBarTeardown: (() => void) | null = null;
 
+/**
+ * The mounted outline, or `null` when the sidebar is off -- the same
+ * handle-doubles-as-flag arrangement as `statusBarTeardown` above, and declared
+ * above `void bootstrap()` for the same temporal-dead-zone reason.
+ */
+let outlineHandle: OutlineHandle | null = null;
+
 function isThemeMode(value: string): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark';
 }
@@ -165,6 +185,9 @@ async function bootstrap(): Promise<void> {
   let wordWrap = true;
   // Same again for SPEC §6.11's row.
   let statusBarVisible = true;
+  // SPEC §6.9's sidebar is hidden by default, which is Go's default too.
+  let outlineVisible = false;
+  let outlineWidth = DEFAULT_OUTLINE_WIDTH;
 
   try {
     const settings = await LoadSettings();
@@ -211,6 +234,10 @@ async function bootstrap(): Promise<void> {
     wordWrap = settings.editor.wordWrap;
     // Taken as-is for the same reason `toolbar.visible` is -- see that comment.
     statusBarVisible = settings.window.statusBarVisible;
+    outlineVisible = settings.window.outlineVisible;
+    // Validated rather than trusted, the same as the split ratio: this is a
+    // hand-editable file and the value goes straight into a CSS length.
+    outlineWidth = clampOutlineWidth(settings.window.outlineWidth);
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -221,6 +248,7 @@ async function bootstrap(): Promise<void> {
       previewSplitRatio: splitRatio,
       syncScroll,
       wordWrap,
+      outlineWidth,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog, and MenuItem has no checkmark
@@ -232,11 +260,11 @@ async function bootstrap(): Promise<void> {
     // `insertBefore` throws NotFoundError if handed a node that is not a
     // child of `root`, so this one call is worth its own guard.
     try {
-      // Inserted before `editorSplit`, not `editorArea`: the editor area is a
-      // child of the split row now, and `insertBefore` throws NotFoundError
-      // for a node that is not a child of `root` -- which is precisely the
-      // throw the guard around this call was written for.
-      if (toolbarVisible) mountToolbar(root!, pinnedCommands, editorSplit);
+      // Inserted before `workspace`, the outermost of the three: `editorArea`
+      // and `editorSplit` are both nested inside it now, and `insertBefore`
+      // throws NotFoundError for a node that is not a child of `root` -- which
+      // is precisely the throw the guard around this call was written for.
+      if (toolbarVisible) mountToolbar(root!, pinnedCommands, workspace);
     } catch (err) {
       console.error('hashpad: failed to mount the toolbar; continuing without it', err);
     }
@@ -265,6 +293,7 @@ async function bootstrap(): Promise<void> {
     // tests it, because there is no behaviour to assert.
     publishStatus(view.state);
     setStatusBar(statusBarVisible);
+    setOutline(outlineVisible);
     ShowWindow();
   }
 }
@@ -450,6 +479,39 @@ async function setWordWrapSetting(wordWrap: boolean): Promise<void> {
     await SaveSettings(settings);
   } catch (err) {
     console.error('hashpad: failed to persist the word-wrap setting', err);
+  }
+}
+
+/**
+ * Mounts or tears down the outline sidebar (SPEC §6.9). Idempotent, like
+ * `setStatusBar` below, and unmounting rather than hiding for the same reason
+ * plus one more: the sidebar subscribes to the active document and rescans it
+ * for headings on every edit, so a hidden one would keep paying for a list
+ * nobody can see.
+ */
+function setOutline(visible: boolean): void {
+  if (visible) {
+    outlineHandle ??= mountOutline(workspace, view);
+    return;
+  }
+  outlineHandle?.destroy();
+  outlineHandle = null;
+}
+
+/**
+ * View > Outline, Ctrl+Shift+O. Applied first, persisted after, a failed disk
+ * write logged rather than thrown -- the same ordering and error handling as
+ * `setWordWrapSetting` and `setStatusBarSetting`.
+ */
+async function setOutlineSetting(visible: boolean): Promise<void> {
+  setOutline(visible);
+
+  try {
+    const settings = await LoadSettings();
+    settings.window.outlineVisible = visible;
+    await SaveSettings(settings);
+  } catch (err) {
+    console.error('hashpad: failed to persist the outline setting', err);
   }
 }
 
@@ -681,6 +743,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'view.statusBar':
       void setStatusBarSetting(statusBarTeardown === null);
+      break;
+    case 'view.outline':
+      void setOutlineSetting(outlineHandle === null);
       break;
     case 'view.zoomIn':
       zoomIn();

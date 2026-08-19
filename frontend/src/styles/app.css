@@ -34,6 +34,91 @@ body {
 }
 
 /*
+ * The horizontal band between the toolbar and the status bar: the outline
+ * sidebar beside the editor/preview row. Two nested rows rather than one, so
+ * that `previewSplitRatio` stays a share of the editor and preview alone --
+ * see main.ts, where the pair is built.
+ */
+.workspace {
+  display: flex;
+  flex: 1 1 auto;
+  /* Both rows need this or a long document stretches the flex item instead of
+     scrolling inside it, and the status bar walks off the bottom. */
+  min-height: 0;
+}
+
+/* The outline sidebar (SPEC §6.9). `flex: 0 0 auto` so the inline flex-basis
+   the resizer writes is the width that sticks, exactly as the preview pane. */
+.outline-column {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  background: var(--bg-app);
+  border-right: 1px solid var(--border);
+}
+
+.outline {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.outline__empty {
+  margin: 0;
+  padding: 4px 12px;
+  color: var(--fg-muted);
+  font-size: var(--size-ui);
+}
+
+.outline__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Real buttons, so they need their chrome stripped to read as a list. The
+   left padding is set inline from the heading's level, so it is deliberately
+   not set here -- only the right. */
+.outline__item {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--size-ui);
+  text-align: left;
+  padding-right: 8px;
+  /* One line per heading: a long title is clipped rather than wrapped, so the
+     list stays scannable and its rows stay a predictable height. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.outline__item:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* The drag handle. Same shape as the preview divider: a thin strip that is
+   wider than it looks, because a 1px target is unhittable. */
+.outline-resizer {
+  flex: 0 0 4px;
+  margin-right: -2px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 1;
+}
+
+.outline-resizer:hover,
+.outline-resizer:focus-visible {
+  background: var(--accent);
+}
+
+/*
  * The status bar (SPEC §6.1's bottom row). A sibling of `.editor-split`, not a
  * child: it spans the full window width, under the outline column Checkpoint
  * G.3 will add beside the editor as well as under the editor itself.

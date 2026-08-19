@@ -28,7 +28,13 @@
 import { EditorState } from '@codemirror/state';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildExtensions } from './editor/extensions';
-import { createUntitledDocument, EMPTY_STATUS, isDirty, type Document } from './state/document';
+import {
+  DEFAULT_OUTLINE_WIDTH,
+  createUntitledDocument,
+  EMPTY_STATUS,
+  isDirty,
+  type Document,
+} from './state/document';
 import { getEditorView, store } from './state/appcontext';
 import { COMMAND_EVENT } from './ui/menubar';
 import { DEFAULT_PINNED } from './ui/toolbar';
@@ -69,7 +75,12 @@ vi.mock('../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
-    window: { previewSplitRatio: 0.5, statusBarVisible: true },
+    window: {
+      previewSplitRatio: 0.5,
+      statusBarVisible: true,
+      outlineVisible: false,
+      outlineWidth: 240,
+    },
     // Also read by bootstrap. Go always sends the block, so a mock without it
     // would make bootstrap throw where the real app never can.
     // Both blocks are read by bootstrap and Go always sends them, so a mock
@@ -132,6 +143,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     syncScroll: true,
     wordWrap: true,
     status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);
@@ -605,6 +617,59 @@ describe('the encoding and line-ending commands', () => {
 
     expect(store.getState().documents[0]!.encoding).toBe(doc.encoding);
     expect(isDirty(store.getState().documents[0]!)).toBe(false);
+  });
+});
+
+/**
+ * View > Outline, Ctrl+Shift+O (SPEC 6.9). The sidebar itself is
+ * `ui/outlinepane.test.ts`'s subject; this is main.ts's half.
+ */
+describe('the outline toggle', () => {
+  beforeEach(() => {
+    vi.mocked(SaveSettings).mockClear();
+  });
+
+  /**
+   * Hidden by default (SPEC 6.9), and the mocked settings say so -- so a sidebar
+   * present before anything is clicked would mean bootstrap ignored the setting.
+   */
+  it('starts hidden, then mounts and unmounts on the command', async () => {
+    expect(document.querySelector('.outline-column')).toBeNull();
+
+    emit('view.outline');
+    expect(document.querySelector('.outline-column')).not.toBeNull();
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    expect(vi.mocked(SaveSettings).mock.calls[0]![0].window.outlineVisible).toBe(true);
+
+    emit('view.outline');
+    expect(document.querySelector('.outline-column')).toBeNull();
+  });
+
+  /**
+   * Inside the workspace row, not beside it in `#app`. If it landed in `#app`
+   * the sidebar would sit *above* the editor rather than left of it, because
+   * `#app` is a flex column -- the same mistake the toolbar once made.
+   */
+  it('mounts inside the workspace row, to the left of the editor', () => {
+    emit('view.outline');
+
+    const workspace = document.querySelector('.workspace')!;
+    expect([...workspace.children].map((child) => child.className)).toEqual([
+      'outline-column',
+      'editor-split',
+    ]);
+    emit('view.outline');
+  });
+
+  it('lists the active document’s headings', () => {
+    const doc = cleanDoc('outlined', ['# Title', '', '## Section'].join(String.fromCharCode(10)));
+    setupDocs([doc], doc.id);
+
+    emit('view.outline');
+
+    const labels = [...document.querySelectorAll('.outline__item')].map((b) => b.textContent);
+    expect(labels).toEqual(['Title', 'Section']);
+    emit('view.outline');
   });
 });
 

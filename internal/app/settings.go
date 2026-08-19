@@ -50,10 +50,15 @@ type FilesSettings struct {
 }
 
 type WindowSettings struct {
-	Width             int     `json:"width"`
-	Height            int     `json:"height"`
-	Maximized         bool    `json:"maximized"`
-	OutlineVisible    bool    `json:"outlineVisible"`
+	Width          int  `json:"width"`
+	Height         int  `json:"height"`
+	Maximized      bool `json:"maximized"`
+	OutlineVisible bool `json:"outlineVisible"`
+	// OutlineWidth is in CSS pixels. SPEC §6.9 asks for the outline's width to
+	// be persisted; it is a width rather than a ratio because the sidebar holds
+	// text at a fixed size, so what the user is choosing is how many characters
+	// of a heading they can read — not a share of the window.
+	OutlineWidth      float64 `json:"outlineWidth"`
 	StatusBarVisible  bool    `json:"statusBarVisible"`
 	PreviewSplitRatio float64 `json:"previewSplitRatio"`
 }
@@ -100,6 +105,7 @@ func DefaultSettings() Settings {
 		Window: WindowSettings{
 			Width: 1000, Height: 700, Maximized: false,
 			OutlineVisible: false, StatusBarVisible: true, PreviewSplitRatio: 0.5,
+			OutlineWidth: 240,
 		},
 		Toolbar: ToolbarSettings{
 			Visible: true,

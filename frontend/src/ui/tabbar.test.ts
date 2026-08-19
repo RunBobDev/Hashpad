@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { EditorState } from '@codemirror/state';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
+import { DEFAULT_OUTLINE_WIDTH,
   EMPTY_STATUS,
   createUntitledDocument,
   type AppState,
@@ -123,6 +123,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     syncScroll: true,
     wordWrap: true,
     status: EMPTY_STATUS,
+    outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };
 }
 

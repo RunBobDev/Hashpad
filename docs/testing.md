@@ -530,3 +530,40 @@ disk, which is the whole point of the feature.
       reopening it.
 - [ ] **An untitled document lets you pick both**, and Save As then writes what
       was picked.
+
+## Checkpoint G.3a — the outline sidebar
+
+SPEC §6.9, minus the "current section highlighted as you scroll" half, which is
+G.3b. The layout changed to make room: `.workspace` is a new row holding the
+sidebar beside `.editor-split`, so the preview's split ratio stays a share of
+the editor and preview alone.
+
+jsdom has no layout engine, so nothing below about width, wrapping or scrolling
+is covered by a test.
+
+- [ ] **Ctrl+Shift+O, and View > Outline.** Hidden on first launch; the choice
+      survives a restart.
+- [ ] **The sidebar is on the left of the editor, not above it**, and the status
+      bar still spans the full window *under* it. That is the nesting the new
+      `.workspace` row exists for.
+- [ ] **Open the preview with the outline already open.** The preview must keep
+      the width it had -- if it shrinks when the sidebar opens, the two rows have
+      been flattened and `previewSplitRatio` is being measured against the wrong
+      thing.
+- [ ] **Drag the resizer.** The width should follow the pointer exactly, clamp
+      at both ends, and survive a restart. Then the same with Left/Right after
+      tabbing to it.
+- [ ] **Click a heading near the bottom of a long document.** It should land at
+      the *top* of the viewport, not merely be scrolled barely into view, and the
+      caret should be on it so typing continues there.
+- [ ] **A document with no headings** shows "No headings" rather than a blank
+      column.
+- [ ] **A long heading is clipped with an ellipsis**, not wrapped -- and narrow
+      the sidebar to check.
+- [ ] **Type in a paragraph with the outline open.** The list must not flicker;
+      it is only rebuilt when the headings actually change.
+- [ ] **Headings inside a fenced code block do not appear.** Paste a shell
+      script with `# comments` in a fence -- this is the case the line scan
+      exists for.
+- [ ] **Colours read in both themes**, including the hover state and the focus
+      ring on the resizer.
