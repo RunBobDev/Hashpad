@@ -26,6 +26,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
+  WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),
   WindowToggleMaximise: vi.fn(),
@@ -87,6 +88,19 @@ describe('bootstrap seeding the toolbar from settings', () => {
    * `--sequence.shuffle` makes "which test ran before this one" unanswerable
    * anywhere that does.
    */
+  /**
+   * The chrome rows of `#app`, in order. `.window-edge` children are filtered
+   * out: they are the frameless window's resize border (ui/windowedges.ts), fixed
+   * to the viewport rather than laid out in the column, so they are not rows and
+   * their position among the children means nothing.
+   */
+  function chromeRows(): string[] {
+    const app = document.querySelector('#app')!;
+    return [...app.children]
+      .map((child) => child.className)
+      .filter((name) => !name.startsWith('window-edge'));
+  }
+
   it('leaves the caret in the editor, ready to type', () => {
     expect(document.activeElement?.classList.contains('cm-content')).toBe(true);
   });
@@ -113,8 +127,7 @@ describe('bootstrap seeding the toolbar from settings', () => {
   // every child in order is what keeps the next row someone adds from landing
   // between them by accident.
   it('sits between the tab strip and the editor area', () => {
-    const app = document.querySelector('#app')!;
-    expect([...app.children].map((child) => child.className)).toEqual([
+    expect(chromeRows()).toEqual([
       'menubar',
       'tabbar',
       'toolbar',
@@ -134,8 +147,7 @@ describe('bootstrap seeding the toolbar from settings', () => {
   it('stays there after a rebuild', () => {
     store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
 
-    const app = document.querySelector('#app')!;
-    expect([...app.children].map((child) => child.className)).toEqual([
+    expect(chromeRows()).toEqual([
       'menubar',
       'tabbar',
       'toolbar',

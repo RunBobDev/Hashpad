@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { EditorState } from '@codemirror/state';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_OUTLINE_WIDTH,
+import {
+  DEFAULT_OUTLINE_WIDTH,
   EMPTY_STATUS,
   createUntitledDocument,
   type AppState,

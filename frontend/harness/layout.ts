@@ -18,6 +18,7 @@
  * the user cannot reach.
  */
 import '../src/styles/app.css';
+import { mountWindowEdges } from '../src/ui/windowedges';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -83,11 +84,9 @@ pane.innerHTML = [
 ].join('');
 editorSplit.append(pane);
 
-// Mirrors main.ts: the strip that makes the window's right edge resizable
-// despite the pane's scrollbar sitting in Wails' resize band.
-const gutter = document.createElement('div');
-gutter.className = 'resize-gutter';
-workspace.append(gutter);
+// Mirrors main.ts: the frameless window's resize border, which has to sit above
+// everything including the pane's scrollbar and the chrome buttons.
+mountWindowEdges(root, null);
 
 root.append(chrome('statusbar', 'var(--h-statusbar)', 'Ln 1, Col 1'));
 
@@ -140,14 +139,37 @@ function measure(selector: string): Report {
  */
 function rightEdge(): { y: number; at: string }[] {
   const w = window.innerWidth;
-  return [40, 80, Math.round(window.innerHeight / 2), window.innerHeight - 12].map((y) => {
+  return [3, 14, 40, 80, Math.round(window.innerHeight / 2), window.innerHeight - 3].map((y) => {
     const el = document.elementFromPoint(w - 3, y);
     return { y, at: el === null ? 'nothing' : el.className || el.tagName };
   });
 }
 
-(window as unknown as { layout: { overflow(): Report[]; rightEdge: typeof rightEdge } }).layout = {
+/** The same question along the top and bottom, where the chrome buttons are. */
+function otherEdges(): Record<string, string> {
+  const at = (x: number, y: number): string => {
+    const el = document.elementFromPoint(x, y);
+    return el === null ? 'nothing' : el.className || el.tagName;
+  };
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  return {
+    topLeftOverMenuButton: at(30, 3),
+    topRightOverWindowControls: at(w - 30, 3),
+    bottomOverStatusBar: at(Math.round(w / 2), h - 3),
+    leftMiddle: at(3, Math.round(h / 2)),
+    cornerSE: at(w - 3, h - 3),
+    cornerNW: at(3, 3),
+  };
+}
+
+(
+  window as unknown as {
+    layout: { overflow(): Report[]; rightEdge: typeof rightEdge; otherEdges: typeof otherEdges };
+  }
+).layout = {
   rightEdge,
+  otherEdges,
   overflow: () =>
     [
       'html',

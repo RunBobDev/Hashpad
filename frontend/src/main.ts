@@ -29,6 +29,7 @@ import {
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { mountShortcuts } from './ui/shortcuts';
+import { mountWindowEdges } from './ui/windowedges';
 import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
@@ -97,17 +98,6 @@ root.append(workspace);
 const editorSplit = document.createElement('div');
 editorSplit.className = 'editor-split';
 workspace.append(editorSplit);
-
-// A transparent strip over the window's right edge, so the window can be
-// resized there at all -- see `.resize-gutter` in app.css for the whole story.
-// Appended last for readability only: it is absolutely positioned, so it is out
-// of the flex flow and paints above the pane's scrollbar wherever it sits among
-// its siblings.
-const resizeGutter = document.createElement('div');
-resizeGutter.className = 'resize-gutter';
-// Decoration, not content: it exists for the pointer and has nothing to say.
-resizeGutter.setAttribute('aria-hidden', 'true');
-workspace.append(resizeGutter);
 
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
@@ -318,6 +308,12 @@ mountZoom();
 // the editor's keymap and so only fire while the editor has focus. This forwards
 // them when it does not; see ui/shortcuts.ts.
 mountShortcuts(view);
+
+// The window is frameless, so it has no OS resize border -- these eight strips
+// are it. Mounted on `#app` rather than the workspace row because they are
+// fixed to the viewport and belong to the window, not to any row; see
+// ui/windowedges.ts for the three separate ways the edge failed without them.
+mountWindowEdges(root);
 
 /**
  * Routes a View > Theme menu choice. `themeMode` is updated first and

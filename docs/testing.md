@@ -611,6 +611,28 @@ Windows then resizes. Only these checks can.
 - [ ] **Left, top and bottom edges still resize.** They have no scrollbar
       against them and so were never affected.
 
-Known gap, not covered: with the status bar hidden (View > Status Bar), the
-window's bottom edge is the workspace row, and a horizontal scrollbar there has
-exactly the same problem. There is no bottom gutter.
+**Superseded.** The single right-edge gutter above was replaced by a full set of
+eight strips (`ui/windowedges.ts`) after the owner found three more places the
+edge did not work. The checks below replace the ones above, and the
+status-bar-hidden gap is closed by the `s` strip being fixed to the viewport
+rather than living in a row.
+
+- [ ] **Every edge and every corner resizes**: all four sides, all four corners.
+- [ ] **Over the chrome buttons.** The top edge above File / Edit / View / Help
+      and above minimise / maximise / close; the bottom edge over the status
+      bar's encoding and line-ending buttons. These were the reported failures.
+- [ ] **The buttons still work below the strip.** Clicking the middle of File
+      opens the menu; clicking close still closes. Only the outer 6px resizes --
+      which is what a real Windows title bar does too.
+- [ ] **The corners are comfortable**, not pixel-perfect. They are 14px.
+- [ ] **No white flash while dragging an edge in dark mode.** `applyTheme` now
+      hands the theme's `--bg-app` to `WindowSetBackgroundColour`, so the strip
+      Windows paints before WebView2 catches up is the right colour. Check the
+      right and bottom edges especially -- that is where the owner saw it.
+- [ ] **Switch theme with the window open**, then resize again: the flash must
+      not come back in the theme you switched *to*.
+- [ ] **A menu taller than the window scrolls.** Un-maximise until the window is
+      shorter than the View menu, open it, and confirm it is bounded and
+      scrollable rather than clipped. Same for the toolbar's `···` overflow menu.
+- [ ] **Maximise and restore.** The strips are fixed to the viewport, so they
+      should follow without leaving a dead band.

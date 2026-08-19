@@ -5,6 +5,7 @@
  * "applying a theme" here is exactly one attribute plus one Compartment
  * reconfigure -- never a re-render of anything.
  */
+import { WindowSetBackgroundColour } from '../../wailsjs/runtime/runtime';
 import { getEditorView, store } from '../state/appcontext';
 import { setEditorDark } from '../editor/theme';
 
@@ -35,6 +36,52 @@ export function applyTheme(isDark: boolean): void {
   document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
   store.setState((prev) => ({ ...prev, isDark }));
   setEditorDark(getEditorView(), isDark);
+  syncWindowBackground();
+}
+
+/**
+ * Tells Wails what colour the *window* is, as opposed to the page.
+ *
+ * `main.go` sets an opaque white `BackgroundColour` so the window does not flash
+ * a dark frame before CSS applies. That is right at startup and wrong
+ * afterwards: while a window is being resized, Windows fills the newly exposed
+ * strip with the window's own background before WebView2 has painted anything
+ * there. In the dark theme that strip is white, which is the flashing the owner
+ * reported down the edge being dragged.
+ *
+ * Read back out of `--bg-app` rather than hard-coded here, so this stays
+ * governed by variables.css (SPEC §5.3) and cannot drift from the theme it is
+ * meant to match. Called after the `data-theme` flip above, because that is what
+ * decides which value `--bg-app` now resolves to.
+ */
+function syncWindowBackground(): void {
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--bg-app').trim();
+  const rgb = parseHex(value);
+  if (rgb === null) return;
+  WindowSetBackgroundColour(rgb.r, rgb.g, rgb.b, 255);
+}
+
+/**
+ * `#RGB` or `#RRGGBB` to channels, or `null` for anything else.
+ *
+ * Null rather than a fallback colour: the only caller is asking "what should the
+ * window match?", and the honest answer to an unparseable value is "leave it
+ * alone" -- guessing white would reintroduce the exact flash this is fixing.
+ * variables.css only ever uses hex for `--bg-app`, so this is a guard rather
+ * than a conversion library.
+ */
+function parseHex(value: string): { r: number; g: number; b: number } | null {
+  if (!HEX_COLOR.test(value)) return null;
+  const hex =
+    value.length === 4
+      ? value
+          .slice(1)
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : value.slice(1);
+  const n = Number.parseInt(hex, 16);
+  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
 }
 
 /**

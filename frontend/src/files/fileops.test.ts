@@ -2,7 +2,13 @@ import { EditorState } from '@codemirror/state';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setEditorView, store } from '../state/appcontext';
 import type { EditorView } from '@codemirror/view';
-import { DEFAULT_OUTLINE_WIDTH, EMPTY_STATUS, createUntitledDocument, isDirty, type Document } from '../state/document';
+import {
+  DEFAULT_OUTLINE_WIDTH,
+  EMPTY_STATUS,
+  createUntitledDocument,
+  isDirty,
+  type Document,
+} from '../state/document';
 import type { SaveChoice } from '../ui/confirmdialog';
 import {
   displayName,
@@ -330,7 +336,7 @@ describe('save-as records the new path on the document it saved', () => {
       syncScroll: true,
       wordWrap: true,
       status: EMPTY_STATUS,
-    outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
   }
 

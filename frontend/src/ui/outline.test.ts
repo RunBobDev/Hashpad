@@ -20,9 +20,12 @@ function shape(lines: string[]): string[] {
 
 describe('outlineHeadings', () => {
   it('finds every ATX level, in source order', () => {
-    expect(
-      shape(['# One', '', '### Three', '', '###### Six', '', '## Two']),
-    ).toEqual(['1:1:One', '3:3:Three', '6:5:Six', '2:7:Two']);
+    expect(shape(['# One', '', '### Three', '', '###### Six', '', '## Two'])).toEqual([
+      '1:1:One',
+      '3:3:Three',
+      '6:5:Six',
+      '2:7:Two',
+    ]);
   });
 
   it('has nothing to say about an empty document', () => {
@@ -94,7 +97,10 @@ describe('outlineHeadings', () => {
   });
 
   it('finds setext headings and reports the line of the text, not the underline', () => {
-    expect(shape(['Title', '=====', '', 'Section', '-------'])).toEqual(['1:1:Title', '2:4:Section']);
+    expect(shape(['Title', '=====', '', 'Section', '-------'])).toEqual([
+      '1:1:Title',
+      '2:4:Section',
+    ]);
   });
 
   /**

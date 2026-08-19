@@ -148,17 +148,14 @@ describe('mountShortcuts', () => {
    * menu-bar button -- and Left/Right would move the caret while the user was
    * dragging the preview divider with the keyboard.
    */
-  it.each([['Enter'], ['ArrowLeft'], ['Escape']])(
-    'ignores %s, which is not a chord',
-    (key) => {
-      const before = view.state.doc.toString();
-      const event = press(key);
+  it.each([['Enter'], ['ArrowLeft'], ['Escape']])('ignores %s, which is not a chord', (key) => {
+    const before = view.state.doc.toString();
+    const event = press(key);
 
-      expect(commands).toEqual([]);
-      expect(event.defaultPrevented).toBe(false);
-      expect(view.state.doc.toString()).toBe(before);
-    },
-  );
+    expect(commands).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+    expect(view.state.doc.toString()).toBe(before);
+  });
 
   /**
    * Shift alone is not a chord -- it is how a capital letter is typed -- and

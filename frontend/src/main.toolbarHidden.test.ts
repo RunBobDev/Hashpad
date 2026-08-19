@@ -19,6 +19,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
+  WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),
   WindowToggleMaximise: vi.fn(),

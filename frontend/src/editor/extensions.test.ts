@@ -3,7 +3,12 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it } from 'vitest';
 import { store, setEditorView } from '../state/appcontext';
-import { DEFAULT_OUTLINE_WIDTH, EMPTY_STATUS, createUntitledDocument, isDirty } from '../state/document';
+import {
+  DEFAULT_OUTLINE_WIDTH,
+  EMPTY_STATUS,
+  createUntitledDocument,
+  isDirty,
+} from '../state/document';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { COMMANDS, toEditorCommand } from './commands';
 import { buildExtensions, setWordWrap } from './extensions';

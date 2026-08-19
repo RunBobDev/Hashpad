@@ -29,6 +29,10 @@
      a real element in it. If Wails ever changes its constant, this follows. */
   --resize-gutter: 6px;
 
+  /* Corners are bigger than edges: a corner is the only place both axes are
+     available, and a 6px square is not a target anyone can hit. */
+  --resize-corner: 14px;
+
   /* PLATFORM: the one piece of per-OS styling in shared CSS. Segoe UI Variable
      on Win11, Segoe UI on Win10, system sans on Linux (SPEC §6.1). */
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;

@@ -31,6 +31,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
+  WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),
   WindowToggleMaximise: vi.fn(),
@@ -77,7 +78,12 @@ describe('bootstrap when LoadSettings throws synchronously', () => {
   });
 
   it('leaves the status bar as the last row', () => {
-    const app = document.querySelector('#app')!;
-    expect([...app.children].pop()!.className).toBe('statusbar');
+    // Excluding the resize border, which is fixed to the viewport rather than
+    // laid out in the column (ui/windowedges.ts).
+    const rows = [...document.querySelector('#app')!.children]
+      .map((child) => child.className)
+      .filter((name) => !name.startsWith('window-edge'));
+
+    expect(rows.pop()).toBe('statusbar');
   });
 });

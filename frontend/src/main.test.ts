@@ -50,6 +50,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
+  WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),
   WindowToggleMaximise: vi.fn(),
@@ -621,6 +622,28 @@ describe('the encoding and line-ending commands', () => {
 });
 
 /**
+ * The frameless window's resize border. `ui/windowedges.test.ts` covers what
+ * each strip does; this is the half that puts them on screen at all, which
+ * nothing else would notice going missing.
+ */
+describe('the window resize border', () => {
+  it('mounts all eight strips onto #app', () => {
+    const edges = document.querySelectorAll('#app > .window-edge');
+
+    expect([...edges].map((e) => (e as HTMLElement).dataset.edge)).toEqual([
+      'n',
+      's',
+      'e',
+      'w',
+      'ne',
+      'nw',
+      'se',
+      'sw',
+    ]);
+  });
+});
+
+/**
  * View > Outline, Ctrl+Shift+O (SPEC 6.9). The sidebar itself is
  * `ui/outlinepane.test.ts`'s subject; this is main.ts's half.
  */
@@ -648,20 +671,6 @@ describe('the outline toggle', () => {
    * Hidden by default (SPEC 6.9), and the mocked settings say so -- so a sidebar
    * present before anything is clicked would mean bootstrap ignored the setting.
    */
-  /**
-   * The window is frameless, so the right edge is page content rather than an
-   * OS frame -- and a native scrollbar there swallows the pointer, which is why
-   * this strip exists at all. It must survive the outline being toggled, since
-   * mounting the sidebar prepends to the same row.
-   */
-  it('keeps the resize gutter at the right edge of the row', () => {
-    const gutter = (): Element | null => document.querySelector('.workspace > .resize-gutter');
-    expect(gutter()).not.toBeNull();
-
-    emit('view.outline');
-    expect(gutter()).not.toBeNull();
-  });
-
   it('starts hidden, then mounts and unmounts on the command', async () => {
     expect(document.querySelector('.outline-column')).toBeNull();
 
@@ -686,10 +695,6 @@ describe('the outline toggle', () => {
     expect([...workspace.children].map((child) => child.className)).toEqual([
       'outline-column',
       'editor-split',
-      // Position in this list is not load-bearing -- the gutter is absolutely
-      // positioned, so it is out of the flex flow. It is listed because the
-      // assertion is about the row's whole contents.
-      'resize-gutter',
     ]);
   });
 

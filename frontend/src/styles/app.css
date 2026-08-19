@@ -42,56 +42,90 @@ body {
 .workspace {
   display: flex;
   flex: 1 1 auto;
-  /* The containing block for `.resize-gutter` below. */
-  position: relative;
   /* Both rows need this or a long document stretches the flex item instead of
      scrolling inside it, and the status bar walks off the bottom. */
   min-height: 0;
 }
 
 /*
- * A transparent strip over the window's right edge, so the window can be
- * resized there.
+ * The window's resize borders (ui/windowedges.ts -- read that file first).
  *
- * The window is frameless, so there is no OS resize border: Wails' injected
- * runtime watches `mousemove` on `window`, and when the pointer is within its
- * `borderThickness` of an edge it arms a resize that the next `mousedown`
- * starts. That works everywhere the pointer generates a mousemove -- and
- * Chromium does **not** dispatch mouse events to the page over a native
- * scrollbar. A vertical scrollbar is 15px and sits flush at the window's right
- * edge, so it swallows the whole 6px band: beside the editor or the preview,
- * Wails never learned the pointer was on the edge and the window would not
- * resize. Reported by the owner, who found the right edge worked over the tab
- * strip and the status bar -- the two rows with no scrollbar -- and nowhere
- * else.
+ * The window is frameless, so these eight strips are the resize border: there
+ * is no OS one. They sit above everything, popups included, because a native
+ * resize border does too -- you can always grab the rim of a window, whatever
+ * is on screen.
  *
- * This element restores it by being something the pointer can actually be over.
- * It spans only the workspace row, deliberately: the chrome rows above and the
- * status bar below already work, and extending it over the menu bar would put a
- * 6px dead zone across the window's close button, which is exactly where people
- * throw the mouse.
- *
- * `position: absolute` is the whole mechanism, and it is enough on its own: a
- * positioned element paints above in-flow content, so the pointer lands here
- * rather than on the scrollbar underneath. No `z-index` is needed and there
- * deliberately is none -- measured both ways in the harness, and a declaration
- * that changes nothing is one a test would then pin as if it mattered.
- *
- * It costs the outer 6px of a 15px scrollbar, which still leaves 9px to grab,
- * and it sets its own `e-resize` cursor because Wails sets that on
- * `documentElement`, where any element with its own `cursor` overrides it.
- *
- * Known gap: with the status bar hidden, the window's bottom edge is this row
- * too, and a horizontal scrollbar there has the same problem. Not covered --
- * docs/testing.md carries it.
+ * `position: fixed`, so they track the viewport rather than any row. That is
+ * what lets the top edge cover the menu bar's buttons and the bottom edge cover
+ * the status bar's, which is exactly where the owner could not resize before.
+ * It costs the outer 6px of those buttons, which is what a real Windows title
+ * bar costs too.
  */
-.resize-gutter {
-  position: absolute;
-  top: 0;
+.window-edge {
+  position: fixed;
+  z-index: 200;
+}
+
+.window-edge--n,
+.window-edge--s {
+  left: 0;
   right: 0;
+  height: var(--resize-gutter);
+  cursor: ns-resize;
+}
+
+.window-edge--e,
+.window-edge--w {
+  top: 0;
   bottom: 0;
   width: var(--resize-gutter);
-  cursor: e-resize;
+  cursor: ew-resize;
+}
+
+.window-edge--n {
+  top: 0;
+}
+.window-edge--s {
+  bottom: 0;
+}
+.window-edge--e {
+  right: 0;
+}
+.window-edge--w {
+  left: 0;
+}
+
+/* The corners are larger than the edges and stack above them, because a corner
+   is the only place two axes are available and a 6px square is not a target
+   anyone can hit. Windows' own grip is about this size. */
+.window-edge--ne,
+.window-edge--nw,
+.window-edge--se,
+.window-edge--sw {
+  width: var(--resize-corner);
+  height: var(--resize-corner);
+  z-index: 201;
+}
+
+.window-edge--ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.window-edge--nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.window-edge--se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+.window-edge--sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
 }
 
 /* The outline sidebar (SPEC §6.9). `flex: 0 0 auto` so the inline flex-basis
@@ -297,6 +331,15 @@ body {
   z-index: 100;
   min-width: 220px;
   padding: 4px;
+  /* The window is small and these lists are not: View has nine items, the
+     toolbar's overflow menu sixteen, and an un-maximised window can be shorter
+     than either. Without a bound the popup is simply clipped by the window with
+     no way to reach the rest -- reported by the owner against View. `100dvh`
+     less a margin keeps it inside the window wherever it is anchored; the
+     scroll is on the popup so the items below stay reachable. */
+  max-height: calc(100dvh - 2 * var(--h-menubar));
+  overflow-y: auto;
+
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -348,6 +391,15 @@ body {
   z-index: 100;
   min-width: 200px;
   padding: 4px;
+  /* The window is small and these lists are not: View has nine items, the
+     toolbar's overflow menu sixteen, and an un-maximised window can be shorter
+     than either. Without a bound the popup is simply clipped by the window with
+     no way to reach the rest -- reported by the owner against View. `100dvh`
+     less a margin keeps it inside the window wherever it is anchored; the
+     scroll is on the popup so the items below stay reachable. */
+  max-height: calc(100dvh - 2 * var(--h-menubar));
+  overflow-y: auto;
+
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);

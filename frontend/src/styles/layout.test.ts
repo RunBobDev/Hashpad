@@ -76,34 +76,44 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
-   * The window is frameless, so its right edge is page content rather than an
-   * OS frame: Wails arms a resize from a `mousemove` near the edge, and
-   * Chromium dispatches no mouse events over a native scrollbar -- which is
-   * 15px and sits flush there, swallowing Wails' whole 6px band. `.resize-gutter`
-   * is a real element in that band so the pointer has something to be over.
+   * The frameless window's resize border (ui/windowedges.ts). Eight strips at
+   * the rim, replacing three separate ways Wails' own edge detection failed
+   * here: a native scrollbar swallowing the pointer on the right, the chrome
+   * buttons on the top, and `outerHeight` not being `innerHeight` on the bottom.
    *
-   * Three declarations, each load-bearing: `position: absolute` is what lifts
-   * it above the scrollbar (a positioned element paints above in-flow content,
-   * which is why no `z-index` is needed and none is asserted -- an earlier
-   * version pinned one, and the harness showed the gutter wins the hit test
-   * without it); `right: 0` is what puts it on the edge; and without a width it
-   * is nothing at all.
-   *
-   * Verified for real in `frontend/harness/layout.html`, where
-   * `window.layout.rightEdge()` reports `resize-gutter` with it and
-   * `preview-pane` -- the scroll container, meaning its scrollbar -- without.
+   * `position: fixed` is the load-bearing part -- it is what puts them at the
+   * *window's* rim rather than inside whatever row they were appended to -- and
+   * the z-index is what keeps them above popups, which is how a real resize
+   * border behaves. Verified for real in `frontend/harness/layout.html`, where
+   * `window.layout.rightEdge()` names what the pointer would land on.
    */
-  it('the resize gutter covers the right edge, above the scrollbar', () => {
-    const gutter = rule('.resize-gutter');
+  it('the resize border is fixed to the viewport, above everything', () => {
+    const edge = rule('.window-edge');
 
-    expect(gutter).toMatch(/position:\s*absolute\s*;/);
-    expect(gutter).toMatch(/right:\s*0\s*;/);
-    expect(gutter).toMatch(/width:\s*var\(--resize-gutter\)\s*;/);
+    expect(edge).toMatch(/position:\s*fixed\s*;/);
+    expect(edge).toMatch(/z-index:\s*\d+\s*;/);
   });
 
-  /** Absolute positioning needs a positioned ancestor, or it escapes the row. */
-  it('the workspace is the gutter’s containing block', () => {
-    expect(rule('.workspace')).toMatch(/position:\s*relative\s*;/);
+  /** All four sides, or one of them silently is not resizable. */
+  it.each([['n'], ['s'], ['e'], ['w'], ['ne'], ['nw'], ['se'], ['sw']])(
+    'declares a .window-edge--%s rule',
+    (edge) => {
+      expect(() => rule(`.window-edge--${edge}`)).not.toThrow();
+    },
+  );
+
+  /**
+   * Both popup kinds. The window can be shorter than a nine-item View menu when
+   * it is not maximised, and an unbounded popup is simply clipped by the window
+   * with no way to reach the rest of it -- reported by the owner. The bound has
+   * to come with the scroll: `max-height` alone would clip it just the same,
+   * only sooner.
+   */
+  it.each([['.menu-popup'], ['.popup-menu']])('%s is bounded and scrolls', (selector) => {
+    const popup = rule(selector);
+
+    expect(popup).toMatch(/max-height:\s*calc\(100dvh/);
+    expect(popup).toMatch(/overflow-y:\s*auto\s*;/);
   });
 
   /**

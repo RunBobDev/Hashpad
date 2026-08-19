@@ -376,11 +376,7 @@ describe('mountStatusBar', () => {
       button.click();
 
       const items = [...document.querySelectorAll('.popup-menu button')];
-      expect(items.map((item) => item.textContent)).toEqual([
-        '✓UTF-8',
-        'UTF-8 BOM',
-        'UTF-16 LE',
-      ]);
+      expect(items.map((item) => item.textContent)).toEqual(['✓UTF-8', 'UTF-8 BOM', 'UTF-16 LE']);
 
       (items[1] as HTMLButtonElement).click();
       expect(commands).toEqual([encodingCommand('utf-8-bom')]);

@@ -1,6 +1,12 @@
 import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_OUTLINE_WIDTH, createUntitledDocument, EMPTY_STATUS, type AppState, type Document } from './document';
+import {
+  DEFAULT_OUTLINE_WIDTH,
+  createUntitledDocument,
+  EMPTY_STATUS,
+  type AppState,
+  type Document,
+} from './document';
 import {
   activateDocument,
   dropScratchDocuments,

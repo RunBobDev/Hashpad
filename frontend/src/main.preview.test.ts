@@ -21,6 +21,7 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
+  WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),
   WindowToggleMaximise: vi.fn(),
@@ -142,8 +143,14 @@ describe('bootstrap', () => {
   // #app is a flex column, so the editor and the preview need a row of their
   // own -- and the toolbar has to keep landing above that row, not inside it.
   it('wraps the editor in a split row, with the toolbar still above it', () => {
-    const app = document.querySelector('#app')!;
-    expect([...app.children].map((child) => child.className)).toEqual([
+    // `.window-edge` children are the frameless window's resize border
+    // (ui/windowedges.ts), fixed to the viewport rather than laid out in the
+    // column -- not rows, so not part of this assertion.
+    const rows = [...document.querySelector('#app')!.children]
+      .map((child) => child.className)
+      .filter((name) => !name.startsWith('window-edge'));
+
+    expect(rows).toEqual([
       'menubar',
       'tabbar',
       'toolbar',
@@ -152,9 +159,8 @@ describe('bootstrap', () => {
       'workspace',
       'statusbar',
     ]);
-    expect([...app.querySelector('.editor-split')!.children].map((c) => c.className)).toEqual([
-      'editor-area',
-    ]);
+    const split = document.querySelector('.editor-split')!;
+    expect([...split.children].map((c) => c.className)).toEqual(['editor-area']);
   });
 });
 
