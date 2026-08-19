@@ -33,6 +33,34 @@ body {
   height: 100%;
 }
 
+/*
+ * The status bar (SPEC §6.1's bottom row). A sibling of `.editor-split`, not a
+ * child: it spans the full window width, under the outline column Checkpoint
+ * G.3 will add beside the editor as well as under the editor itself.
+ *
+ * Fixed height like the other chrome rows, and `--size-ui` like them too -- so
+ * it is one of the rows Ctrl+scroll deliberately does not scale (see --zoom in
+ * variables.css).
+ */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 0 0 var(--h-statusbar);
+  padding: 0 12px;
+  background: var(--bg-app);
+  border-top: 1px solid var(--border);
+  color: var(--fg-secondary);
+  font-size: var(--size-ui);
+  /* A status readout is not text to select, and a stray drag across it while
+     reaching for the editor should not highlight it. */
+  user-select: none;
+  /* The row cannot grow, so a narrow window must clip the last segment rather
+     than wrap it onto a second line and push the editor up. */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 /* Visible focus indicators everywhere (SPEC §10). */
 :focus-visible {
   outline: 2px solid var(--accent);

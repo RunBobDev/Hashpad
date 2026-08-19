@@ -426,3 +426,44 @@ Do each of these in **light and dark**, switching with View > Theme.
       containment is decided lexically, so a symlink inside a document's folder
       pointing outside it will be served. See the Task 4 section for the full
       reasoning and the one file to change if that trade stops being acceptable.
+
+## Checkpoint G.2 — the status bar
+
+The automated tests cover what the row *says* (`ui/statusbar.test.ts`), the
+counting rules behind it (`statusOf` in `state/document.test.ts`), the two
+publish seams (`editor/extensions.test.ts`, `files/documentops.test.ts`) and the
+View toggle (`main.test.ts`). None of them can see the row, because jsdom has no
+layout engine and resolves `var(--…)` to the empty string — so its height, its
+contrast and whether it clips gracefully are only checkable here.
+
+- [ ] **It is 24px and it is at the bottom**, below the editor *and* below the
+      preview when the split is open — one full-width row, not one per pane.
+      `--h-statusbar` is 24px and `--size-ui` is 14px, which is tight; if the
+      text looks cramped or is clipped vertically, the row needs its own size
+      token rather than a taller bar (SPEC §6.1 fixes the height).
+- [ ] **The text reads in both themes.** `--fg-secondary` on `--bg-app`, which
+      is a pairing no existing row uses — every other use of that token is on
+      `--bg-editor` or `--bg-elevated`. Check light and dark.
+- [ ] **A narrow window clips rather than wraps.** Drag the window as narrow as
+      it goes. The row must lose its right-hand segments off the edge; if it
+      wraps to a second line it will push the editor up, and `white-space:
+      nowrap` plus `overflow: hidden` is what is supposed to prevent that.
+- [ ] **Ln/Col tracks the caret with no lag**, including held arrow keys and
+      click-to-place. This is the one number that updates on every cursor move,
+      and `countWords` runs on the same path — measured at 2.05 ms on a
+      5,000-line document, which should be invisible. Try it on something long;
+      if typing feels heavier with the bar on than off, the count needs the
+      150 ms debounce that `state/document.ts`'s `countWords` comment names.
+- [ ] **Select some text and the counts change subject**, with " selected" on
+      both. Deselect and they go back to the whole document.
+- [ ] **Encoding and line ending match the file.** Open a CRLF file and a UTF-8
+      BOM file and confirm the row names them — this is the first UI anywhere
+      that surfaces Checkpoint B's detection, so it is also the first chance to
+      notice the detector being wrong.
+- [ ] **The view-mode segment follows Ctrl+Shift+P**, Source ↔ Split.
+- [ ] **View > Status Bar removes the row and the editor grows into the space**,
+      and the choice survives a restart. The row is unmounted, not hidden, so a
+      leftover 24px gap means the flex row is still reserving it.
+- [ ] **Ctrl+scroll does not scale it.** The status bar is chrome, and SPEC §6.6
+      says zoom never touches chrome — the same check as G.1's, now with one
+      more row to watch.

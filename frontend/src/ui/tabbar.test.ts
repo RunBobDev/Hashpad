@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { EditorState } from '@codemirror/state';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createUntitledDocument, type AppState, type Document } from '../state/document';
+import {
+  EMPTY_STATUS,
+  createUntitledDocument,
+  type AppState,
+  type Document,
+} from '../state/document';
 import { reorderDocument } from '../state/documents';
 import { COMMAND_EVENT } from './menubar';
 import {
@@ -117,6 +122,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    status: EMPTY_STATUS,
   };
 }
 

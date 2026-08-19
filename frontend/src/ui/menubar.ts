@@ -162,6 +162,7 @@ const MENUS: Menu[] = [
       { id: 'theme.dark', label: 'Theme: Dark', enabled: true },
       { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: true },
       { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: false },
+      { id: 'view.statusBar', label: 'Status Bar', enabled: true },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: true },
       { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+Plus', enabled: true },
       { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+Minus', enabled: true },

@@ -15,6 +15,7 @@ import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
+import { statusOf } from '../state/document';
 
 /**
  * Builds a CodeMirror command that dispatches the given `hashpad:command` id
@@ -113,6 +114,37 @@ export function publishActiveFormats(state: EditorState): void {
   const next = activeFormats(state).join('|');
   if (next === store.getState().activeFormats) return;
   store.setState((prev) => ({ ...prev, activeFormats: next }));
+}
+
+/**
+ * Publishes the caret position and the word/character counts for the status bar
+ * (SPEC §6.11).
+ *
+ * Fires on the same two triggers as `syncActiveFormats` and for the same
+ * reason: a selection-only move changes both the column and -- because the
+ * counts describe the selection when there is one -- the counts as well.
+ * Folding it into that listener would save a function call and cost the reader
+ * the ability to see the two concerns separately.
+ *
+ * No early-out on an unchanged value here, unlike `publishActiveFormats`
+ * above. That one compares a string it has already built; this would have to
+ * compare five fields to skip a `setState` that store.ts's `isEqual` already
+ * makes free -- a selector over `status` does not notify when the fields match.
+ * The check would be a second, weaker copy of the store's own.
+ */
+function syncStatus(update: ViewUpdate): void {
+  if (!update.docChanged && !update.selectionSet) return;
+  publishStatus(update.state);
+}
+
+/**
+ * The same publish without a `ViewUpdate` -- see `publishActiveFormats` for why
+ * every seam that swaps the view's state outside a transaction has to call one
+ * of these itself. The seams are the same two: `switchToDocument` and
+ * `main.ts`'s bootstrap.
+ */
+export function publishStatus(state: EditorState): void {
+  store.setState((prev) => ({ ...prev, status: statusOf(state) }));
 }
 
 /**
@@ -264,6 +296,7 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
     darkThemeCompartment.of(EditorView.darkTheme.of(isDark)),
     EditorView.updateListener.of(syncActiveDocument),
     EditorView.updateListener.of(syncActiveFormats),
+    EditorView.updateListener.of(syncStatus),
   ];
 }
 

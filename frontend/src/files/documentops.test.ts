@@ -22,7 +22,7 @@ import { confirmSave } from '../ui/confirmdialog';
 import { ReadFile, WriteFile } from '../../wailsjs/go/app/App';
 import { buildExtensions } from '../editor/extensions';
 import { getEditorView, setEditorView, store } from '../state/appcontext';
-import { createUntitledDocument, isDirty, type Document } from '../state/document';
+import { EMPTY_STATUS, createUntitledDocument, isDirty, type Document } from '../state/document';
 import {
   closeDocumentWithPrompt,
   documentDirOf,
@@ -74,6 +74,7 @@ beforeEach(() => {
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    status: EMPTY_STATUS,
   }));
   vi.clearAllMocks();
 });
@@ -129,6 +130,36 @@ describe('switchToDocument keeps the published active formats in step', () => {
     switchToDocument('bold-doc');
     expect(store.getState().activeFormats).toBe('bold');
   });
+
+  /**
+   * The same hole, the same fix, for SPEC 6.11's status bar -- and a more
+   * visible one, because the counts differ between any two documents while the
+   * formats often do not. Without the republish the bar keeps showing the
+   * outgoing document's line, column and word count until the user types.
+   */
+  it('republishes the status on switch', () => {
+    const short = docWithCaretIn('short-doc', 'one two', 7);
+    const long = docWithCaretIn('long-doc', 'a b c d e f', 3);
+    store.setState((prev) => ({ ...prev, documents: [short, long], activeDocumentId: null }));
+
+    switchToDocument('short-doc');
+    expect(store.getState().status).toEqual({
+      line: 1,
+      col: 8,
+      words: 2,
+      chars: 7,
+      selection: false,
+    });
+
+    switchToDocument('long-doc');
+    expect(store.getState().status).toEqual({
+      line: 1,
+      col: 4,
+      words: 6,
+      chars: 11,
+      selection: false,
+    });
+  });
 });
 
 describe('switchToDocument', () => {
@@ -145,6 +176,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -166,6 +198,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -187,6 +220,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -211,6 +245,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -238,6 +273,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
@@ -266,6 +302,7 @@ describe('openDocumentInNewTab', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -303,6 +340,7 @@ describe('openDocumentInNewTab', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -334,6 +372,7 @@ describe('opening a document over the startup tab', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(documents.find((d) => d.id === activeId)!.editorState);
   }
@@ -383,6 +422,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(b.editorState);
 
@@ -405,6 +445,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -426,6 +467,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
@@ -450,6 +492,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
@@ -473,6 +516,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -501,6 +545,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -533,6 +578,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -562,6 +608,7 @@ describe('reopenLastClosed', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
 
@@ -583,6 +630,7 @@ describe('reopenLastClosed', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -612,6 +660,7 @@ describe('reopenLastClosed', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      status: EMPTY_STATUS,
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));

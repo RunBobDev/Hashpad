@@ -1,6 +1,6 @@
 import type { EditorView } from '@codemirror/view';
 import { createStore, type Store } from './store';
-import { DEFAULT_SPLIT_RATIO, type AppState } from './document';
+import { DEFAULT_SPLIT_RATIO, EMPTY_STATUS, type AppState } from './document';
 
 /**
  * The single central store (SPEC §5.1) and the one shared `EditorView` live
@@ -37,6 +37,10 @@ export const store: Store<AppState> = createStore<AppState>({
   // what a settings file that has never been edited carries.
   syncScroll: true,
   wordWrap: true,
+  // Also the value bootstrap republishes, as it happens: the startup document
+  // is empty and `statusOf` of an empty document is exactly this. It stops
+  // being a placeholder the first time the user types or a file is opened.
+  status: EMPTY_STATUS,
 });
 
 let editorView: EditorView | undefined;

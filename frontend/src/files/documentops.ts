@@ -13,7 +13,7 @@
  */
 import { EditorState } from '@codemirror/state';
 import { ReadFile } from '../../wailsjs/go/app/App';
-import { buildExtensions, publishActiveFormats } from '../editor/extensions';
+import { buildExtensions, publishActiveFormats, publishStatus } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
 import { createUntitledDocument, isDirty, type Document } from '../state/document';
 import {
@@ -138,11 +138,13 @@ export function switchToDocument(id: string): void {
     view.setState(incoming.editorState);
     if (incoming.scrollSnapshot) view.dispatch({ effects: incoming.scrollSnapshot });
 
-    // The other side of that same coin: `syncActiveFormats` is an
-    // updateListener too, so it does not fire here either -- and unlike
-    // `syncActiveDocument`, it needs to. Without this the toolbar keeps
-    // showing the outgoing document's active formatting until the user types.
+    // The other side of that same coin: `syncActiveFormats` and `syncStatus`
+    // are updateListeners too, so neither fires here -- and unlike
+    // `syncActiveDocument`, both need to. Without these the toolbar keeps
+    // showing the outgoing document's active formatting until the user types,
+    // and the status bar keeps showing its line, column and counts.
     publishActiveFormats(view.state);
+    publishStatus(view.state);
   }
 }
 

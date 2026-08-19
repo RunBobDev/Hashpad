@@ -12,7 +12,7 @@
  * that would leave `.toolbar` in the DOM, which the assertion below treats
  * as a failure just as much as the wrong pinned set would.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { ShowWindow } from '../wailsjs/go/app/App';
 
 vi.mock('../wailsjs/runtime/runtime', () => ({
@@ -30,10 +30,17 @@ vi.mock('../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
-    window: { previewSplitRatio: 0.5 },
+    window: { previewSplitRatio: 0.5, statusBarVisible: false },
     // Also read by bootstrap. Go always sends the block, so a mock without it
     // would make bootstrap throw where the real app never can.
+    // Both blocks are read by bootstrap and Go always sends them, so a mock
+    // without them makes bootstrap throw where the real app never can -- and a
+    // bootstrap that throws silently runs its `catch` path, seeding every
+    // setting from the compiled-in defaults instead of from this mock. That is
+    // exactly what happened to this file between G.1 and G.2: `editor` was
+    // added to the read and not to the mock, and no test noticed.
     preview: { syncScroll: true },
+    editor: { wordWrap: true },
     toolbar: { visible: false, pinned: ['bold'] },
   }),
   ReadFile: vi.fn(),
@@ -44,16 +51,34 @@ vi.mock('../wailsjs/go/app/App', () => ({
   WriteFile: vi.fn(),
 }));
 
-describe('bootstrap honouring settings.toolbar.visible', () => {
-  it('does not mount the toolbar when toolbar.visible is false', async () => {
+describe('bootstrap honouring the chrome visibility settings', () => {
+  /**
+   * In `beforeAll` rather than in the first `it`, which is where it used to be.
+   * A bootstrap runs once per module instance and the ESM registry is shared
+   * across a file, so a second test cannot import it again -- it gets the
+   * cached module and whatever DOM the first test left. That was fine while
+   * there was one test; the moment G.2 added a second, the pair only passed in
+   * declaration order and `vitest --sequence.shuffle` failed on it. Hoisting
+   * the setup is what makes each test independent of the others' order, which
+   * is the arrangement `main.toolbarSeed.test.ts` already uses.
+   */
+  beforeAll(async () => {
     document.body.innerHTML = '<div id="app"></div>';
     await import('./main');
     await vi.waitFor(() => expect(ShowWindow).toHaveBeenCalled());
+  });
 
+  it('does not mount the toolbar when toolbar.visible is false', () => {
     expect(document.querySelector('.toolbar')).toBeNull();
     // The menu bar is unrelated to this setting and must still be there --
     // otherwise this test would also pass against a bootstrap that crashed
     // before mounting anything at all, which is not what it claims to prove.
+    expect(document.querySelector('[role="menubar"]')).not.toBeNull();
+  });
+
+  /** The same claim for SPEC 6.11's row, and the same guard against a crash. */
+  it('does not mount the status bar when window.statusBarVisible is false', () => {
+    expect(document.querySelector('.statusbar')).toBeNull();
     expect(document.querySelector('[role="menubar"]')).not.toBeNull();
   });
 });

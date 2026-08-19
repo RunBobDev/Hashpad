@@ -11,7 +11,7 @@ import {
 } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import { COMMANDS, toEditorCommand, type CommandId } from './editor/commands';
-import { publishActiveFormats, setWordWrap } from './editor/extensions';
+import { publishActiveFormats, publishStatus, setWordWrap } from './editor/extensions';
 import {
   openFiles,
   resolveDocumentsBeforeQuit,
@@ -28,6 +28,7 @@ import {
 } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
+import { mountStatusBar } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
 import { mountZoom, zoomIn, zoomOut, zoomReset } from './ui/zoom';
@@ -109,6 +110,28 @@ store.setState((prev) => ({
 // 'light' choice that must never be overridden by the OS.
 let themeMode: ThemeMode = 'system';
 
+/**
+ * The mounted status bar's teardown, or `null` when the row is off. It doubles
+ * as the visibility flag -- a separate boolean beside it is a second source of
+ * truth that can disagree with the DOM, the same reasoning that keeps `isDirty`
+ * derived rather than stored.
+ *
+ * Declared **above** `void bootstrap()` and not beside `setStatusBar`, which is
+ * where it started. `bootstrap`'s `finally` reads it, and a `let` is in its
+ * temporal dead zone until module evaluation reaches the declaration -- normally
+ * irrelevant, because `await LoadSettings()` suspends and the module finishes
+ * evaluating first. But the generated binding is a plain
+ * `window['go']['app']['App']['LoadSettings']()`, which throws a TypeError
+ * *synchronously* if Wails has not injected `window.go` yet. Nothing has awaited
+ * at that point, so the `catch` and `finally` run inside module evaluation, and
+ * `setStatusBar` would hit the dead zone and throw before reaching `ShowWindow`.
+ * main.go uses `StartHidden`, so that is a permanently invisible window -- the
+ * exact failure this whole block is built to prevent, and the one Checkpoint D
+ * had to add a Go-side backstop for. `root`, `view` and `themeMode` are all
+ * already declared above the call for the same reason.
+ */
+let statusBarTeardown: (() => void) | null = null;
+
 function isThemeMode(value: string): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark';
 }
@@ -139,6 +162,8 @@ async function bootstrap(): Promise<void> {
   // SPEC §6.6's default, and Go's (`DefaultSettings`), so a failed settings load
   // leaves the same behaviour a fresh install has.
   let wordWrap = true;
+  // Same again for SPEC §6.11's row.
+  let statusBarVisible = true;
 
   try {
     const settings = await LoadSettings();
@@ -183,6 +208,8 @@ async function bootstrap(): Promise<void> {
     // -- a throw here must not cost the theme, the toolbar and the ratio theirs.
     syncScroll = settings.preview.syncScroll;
     wordWrap = settings.editor.wordWrap;
+    // Taken as-is for the same reason `toolbar.visible` is -- see that comment.
+    statusBarVisible = settings.window.statusBarVisible;
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -223,6 +250,15 @@ async function bootstrap(): Promise<void> {
     // this block rather than at construction.
     setWordWrap(view, wordWrap);
     publishActiveFormats(view.state);
+    // Defensive symmetry with the line above rather than an observable fix: the
+    // startup document is always empty, and `statusOf` of an empty document is
+    // exactly `EMPTY_STATUS`, so today this publishes the value the store
+    // already holds and `isEqual` drops the notification. It stays because it is
+    // one line and it is what keeps this correct the day the startup document
+    // stops being empty -- a file opened from the command line, say. Nothing
+    // tests it, because there is no behaviour to assert.
+    publishStatus(view.state);
+    setStatusBar(statusBarVisible);
     ShowWindow();
   }
 }
@@ -406,6 +442,36 @@ async function setWordWrapSetting(wordWrap: boolean): Promise<void> {
   }
 }
 
+/** Idempotent, so a call that repeats the current state mounts nothing twice. */
+function setStatusBar(visible: boolean): void {
+  if (visible) {
+    statusBarTeardown ??= mountStatusBar(root!);
+    return;
+  }
+  statusBarTeardown?.();
+  statusBarTeardown = null;
+}
+
+/**
+ * View > Status Bar (SPEC §6.11). Applied first, persisted after, a failed disk
+ * write logged rather than thrown -- the same ordering and error handling as
+ * `setWordWrapSetting` above, and for the same reason.
+ *
+ * Unlike word wrap this needs no store field: nothing but this row reacts to
+ * it, and the row's own presence in the DOM is the state.
+ */
+async function setStatusBarSetting(visible: boolean): Promise<void> {
+  setStatusBar(visible);
+
+  try {
+    const settings = await LoadSettings();
+    settings.window.statusBarVisible = visible;
+    await SaveSettings(settings);
+  } catch (err) {
+    console.error('hashpad: failed to persist the status-bar setting', err);
+  }
+}
+
 // There is no OS-level watcher (see internal/app/theme.go), so this is how a
 // theme changed mid-session gets picked up -- a registry read on focus costs
 // microseconds, so polling it here is free.
@@ -560,6 +626,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'view.wordWrap':
       void setWordWrapSetting(!store.getState().wordWrap);
+      break;
+    case 'view.statusBar':
+      void setStatusBarSetting(statusBarTeardown === null);
       break;
     case 'view.zoomIn':
       zoomIn();

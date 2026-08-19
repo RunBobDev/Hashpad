@@ -1,6 +1,6 @@
 import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
-import { createUntitledDocument, type AppState, type Document } from './document';
+import { createUntitledDocument, EMPTY_STATUS, type AppState, type Document } from './document';
 import {
   activateDocument,
   dropScratchDocuments,
@@ -35,6 +35,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    status: EMPTY_STATUS,
   };
 }
 

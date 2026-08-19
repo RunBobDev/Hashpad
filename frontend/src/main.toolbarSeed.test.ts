@@ -37,10 +37,17 @@ vi.mock('../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
-    window: { previewSplitRatio: 0.5 },
+    window: { previewSplitRatio: 0.5, statusBarVisible: true },
     // Also read by bootstrap. Go always sends the block, so a mock without it
     // would make bootstrap throw where the real app never can.
+    // Both blocks are read by bootstrap and Go always sends them, so a mock
+    // without them makes bootstrap throw where the real app never can -- and a
+    // bootstrap that throws silently runs its `catch` path, seeding every
+    // setting from the compiled-in defaults instead of from this mock. That is
+    // exactly what happened to this file between G.1 and G.2: `editor` was
+    // added to the read and not to the mock, and no test noticed.
     preview: { syncScroll: true },
+    editor: { wordWrap: true },
     // Neither of these is in DEFAULT_PINNED (bold, italic, strikethrough,
     // inlineCode, heading, bulletList, numberedList, taskList, link, table).
     toolbar: { visible: true, pinned: ['blockquote', 'footnote'] },
@@ -82,6 +89,12 @@ describe('bootstrap seeding the toolbar from settings', () => {
   // is a plain flex column with no `order` anywhere, so DOM order is visual
   // order, and nothing caught it: every other toolbar assertion tests
   // presence, and both builds were silent.
+  //
+  // Extended in G.2 to the whole chrome stack rather than just the toolbar's
+  // slot in it: the status bar is the one row that *is* appended, so it is the
+  // one row for which "below the editor" is correct -- and an assertion listing
+  // every child in order is what keeps the next row someone adds from landing
+  // between them by accident.
   it('sits between the tab strip and the editor area', () => {
     const app = document.querySelector('#app')!;
     expect([...app.children].map((child) => child.className)).toEqual([
@@ -89,6 +102,7 @@ describe('bootstrap seeding the toolbar from settings', () => {
       'tabbar',
       'toolbar',
       'editor-split',
+      'statusbar',
     ]);
   });
 
@@ -107,6 +121,7 @@ describe('bootstrap seeding the toolbar from settings', () => {
       'tabbar',
       'toolbar',
       'editor-split',
+      'statusbar',
     ]);
   });
 });

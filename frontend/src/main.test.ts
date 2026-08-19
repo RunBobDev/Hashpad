@@ -28,7 +28,7 @@
 import { EditorState } from '@codemirror/state';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildExtensions } from './editor/extensions';
-import { createUntitledDocument, type Document } from './state/document';
+import { createUntitledDocument, EMPTY_STATUS, type Document } from './state/document';
 import { getEditorView, store } from './state/appcontext';
 import { COMMAND_EVENT } from './ui/menubar';
 import { DEFAULT_PINNED } from './ui/toolbar';
@@ -63,10 +63,17 @@ vi.mock('../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn().mockResolvedValue({
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
-    window: { previewSplitRatio: 0.5 },
+    window: { previewSplitRatio: 0.5, statusBarVisible: true },
     // Also read by bootstrap. Go always sends the block, so a mock without it
     // would make bootstrap throw where the real app never can.
+    // Both blocks are read by bootstrap and Go always sends them, so a mock
+    // without them makes bootstrap throw where the real app never can -- and a
+    // bootstrap that throws silently runs its `catch` path, seeding every
+    // setting from the compiled-in defaults instead of from this mock. That is
+    // exactly what happened to this file between G.1 and G.2: `editor` was
+    // added to the read and not to the mock, and no test noticed.
     preview: { syncScroll: true },
+    editor: { wordWrap: true },
     toolbar: {
       visible: true,
       pinned: [
@@ -118,6 +125,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    status: EMPTY_STATUS,
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);
@@ -532,5 +540,79 @@ describe('theme.system / theme.light / theme.dark commands', () => {
     expect(SystemThemeIsDark).not.toHaveBeenCalled();
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(store.getState().isDark).toBe(true);
+  });
+});
+
+/**
+ * View > Status Bar (SPEC 6.11). The row itself is `ui/statusbar.test.ts`'s
+ * subject; what these prove is main.ts's half -- that the command mounts and
+ * unmounts rather than hiding, and that the choice reaches settings.json.
+ */
+describe('the status bar toggle', () => {
+  beforeEach(() => {
+    vi.mocked(SaveSettings).mockClear();
+  });
+
+  /**
+   * Unmounted, not hidden. A row left in the DOM behind a `display: none` would
+   * keep its store subscription and keep rebuilding six spans on every
+   * keystroke -- and it would satisfy any assertion written against
+   * visibility rather than presence. Same reasoning, and the same shape of
+   * test, as `main.toolbarHidden.test.ts`.
+   */
+  it('removes the row from the DOM and puts it back', async () => {
+    // Snapshotted at call time, not read off `mock.calls` afterwards.
+    // `LoadSettings` resolves one shared object and `setStatusBarSetting`
+    // mutates it in place, so `calls[0][0]` and `calls[1][0]` are the *same*
+    // object and both would read whatever the last write left -- an assertion
+    // that happens to hold only because of where it sits in this test.
+    const saved: boolean[] = [];
+    vi.mocked(SaveSettings).mockImplementation(async (settings) => {
+      saved.push(settings.window.statusBarVisible);
+    });
+
+    expect(document.querySelector('.statusbar')).not.toBeNull();
+
+    emit('view.statusBar');
+    expect(document.querySelector('.statusbar')).toBeNull();
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+
+    emit('view.statusBar');
+    expect(document.querySelector('.statusbar')).not.toBeNull();
+    await vi.waitFor(() => expect(saved).toHaveLength(2));
+
+    expect(saved).toEqual([false, true]);
+  });
+
+  /**
+   * It stays the last child. `mountStatusBar` appends, so a row remounted while
+   * anything else had been added after it would come back in the wrong place --
+   * and today nothing is, which is exactly why an assertion about order is
+   * worth having before G.3 adds something.
+   */
+  it('comes back as the last row', () => {
+    emit('view.statusBar');
+    emit('view.statusBar');
+
+    const app = document.querySelector('#app')!;
+    expect([...app.children].pop()!.className).toBe('statusbar');
+  });
+
+  /**
+   * The failure has already happened by the time the disk write is attempted --
+   * SPEC 6.13's "every setting takes effect immediately" -- so a rejected
+   * SaveSettings must not put the row back.
+   */
+  it('keeps the change when persisting it fails', async () => {
+    vi.mocked(SaveSettings).mockRejectedValueOnce(new Error('disk full'));
+
+    emit('view.statusBar');
+    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+
+    expect(document.querySelector('.statusbar')).toBeNull();
+    // Put it back: main.ts is a module singleton shared by every test in this
+    // file, so a test that leaves the row off is a test that changes what the
+    // next one sees -- and `--sequence.shuffle` decides which one that is.
+    emit('view.statusBar');
   });
 });

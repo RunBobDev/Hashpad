@@ -34,7 +34,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
     toolbar: { visible: true, pinned: ['bold'] },
     // Not 0.5: the compiled-in default is 0.5, so a bootstrap that never read
     // settings at all would pass a 0.5 assertion.
-    window: { previewSplitRatio: 0.3 },
+    window: { previewSplitRatio: 0.3, statusBarVisible: true },
     // False for the same reason, the compiled-in default being true (Go's
     // `DefaultSettings`, and state/appcontext.ts's placeholder).
     preview: { syncScroll: false },
@@ -143,6 +143,7 @@ describe('bootstrap', () => {
       'tabbar',
       'toolbar',
       'editor-split',
+      'statusbar',
     ]);
     expect([...app.querySelector('.editor-split')!.children].map((c) => c.className)).toEqual([
       'editor-area',

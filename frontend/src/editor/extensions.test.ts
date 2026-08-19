@@ -3,7 +3,7 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, it } from 'vitest';
 import { store, setEditorView } from '../state/appcontext';
-import { createUntitledDocument, isDirty } from '../state/document';
+import { EMPTY_STATUS, createUntitledDocument, isDirty } from '../state/document';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { COMMANDS, toEditorCommand } from './commands';
 import { buildExtensions, setWordWrap } from './extensions';
@@ -27,6 +27,7 @@ function resetStore(): void {
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    status: EMPTY_STATUS,
   }));
 }
 
@@ -124,6 +125,65 @@ describe('syncActiveDocument update listener', () => {
     // Same EditorState reference: the listener never fired a store write.
     expect(updated!.editorState).toBe(doc.editorState);
     expect(isDirty(updated!)).toBe(false);
+
+    view.destroy();
+  });
+});
+
+/**
+ * The status bar's data (SPEC 6.11). Its own listener rather than a branch of
+ * `syncActiveDocument` above, and these two tests are why: the column and --
+ * because the counts describe the selection when there is one -- the counts
+ * both change on a selection-only move, which `syncActiveDocument` deliberately
+ * ignores.
+ */
+describe('syncStatus update listener', () => {
+  afterEach(resetStore);
+
+  function mountView(doc: string): EditorView {
+    const view = new EditorView({
+      state: EditorState.create({ doc, extensions: buildExtensions(false) }),
+      parent: document.createElement('div'),
+    });
+    setEditorView(view);
+    return view;
+  }
+
+  it('publishes the caret and the counts on an edit', () => {
+    const view = mountView('one two');
+
+    // `selection` as well as `changes`, because that is what typing does -- an
+    // insert on its own leaves a caret that sits before it exactly where it was,
+    // so the column would not move and the assertion would pin nothing.
+    view.dispatch({ changes: { from: 7, insert: ' three' }, selection: { anchor: 13 } });
+
+    expect(store.getState().status).toEqual({
+      line: 1,
+      col: 14,
+      words: 3,
+      chars: 13,
+      selection: false,
+    });
+
+    view.destroy();
+  });
+
+  /**
+   * The distinguishing case. `syncActiveDocument` returns early here, so a
+   * status bar wired to the store's active document instead of to this listener
+   * would freeze its column the moment the user stopped typing and started
+   * arrowing around.
+   */
+  it('publishes on a selection-only move, which syncActiveDocument ignores', () => {
+    const view = mountView('one two three');
+    view.dispatch({ selection: { anchor: 0 } });
+    const before = store.getState().status;
+
+    view.dispatch({ selection: { anchor: 4, head: 7 } });
+
+    const after = store.getState().status;
+    expect(before.selection).toBe(false);
+    expect(after).toEqual({ line: 1, col: 8, words: 1, chars: 3, selection: true });
 
     view.destroy();
   });
