@@ -18,9 +18,15 @@ import {
   type Document,
   type EditorStatus,
 } from '../state/document';
+import { COMMAND_EVENT } from './menubar';
+import { closePopupMenu } from './popupmenu';
 import {
   buildStatusBar,
+  encodingCommand,
+  lineEndingCommand,
   mountStatusBar,
+  parseStatusCommand,
+  segmentItems,
   statusBarModel,
   statusSegments,
   type StatusBarModel,
@@ -29,6 +35,11 @@ import {
 const teardowns: (() => void)[] = [];
 
 afterEach(() => {
+  // Before the DOM is cleared: the popup is a module singleton appended to
+  // `document.body`, so a test that leaves one open leaves this module holding
+  // a reference to a detached node -- and `--sequence.shuffle` decides which
+  // test finds out.
+  closePopupMenu();
   while (teardowns.length > 0) teardowns.pop()!();
   document.body.replaceChildren();
 });
@@ -39,8 +50,14 @@ function model(overrides: Partial<StatusBarModel> = {}): StatusBarModel {
     encoding: 'utf-8',
     lineEnding: 'lf',
     viewMode: 'source',
+    mixedLineEndings: false,
     ...overrides,
   };
+}
+
+/** Just the readouts, which is what most of these cases are about. */
+function texts(model: StatusBarModel): string[] {
+  return statusSegments(model).map((segment) => segment.text);
 }
 
 function docWith(text: string, overrides: Partial<Document> = {}): Document {
@@ -53,9 +70,7 @@ function seed(documents: Document[], activeId: string | null, status: EditorStat
 
 describe('statusSegments', () => {
   it('shows SPEC 6.11 six segments in 6.1 order', () => {
-    const segments = statusSegments(
-      model({ line: 12, col: 4, words: 1247, chars: 6891, viewMode: 'source' }),
-    );
+    const segments = texts(model({ line: 12, col: 4, words: 1247, chars: 6891 }));
 
     // Separators come from `toLocaleString`, which is the product behaviour --
     // follow the OS. Hard-coding the comma would red this suite on a machine
@@ -77,7 +92,7 @@ describe('statusSegments', () => {
    * loss. The suffix is the explanation.
    */
   it('says so when the counts describe a selection', () => {
-    const segments = statusSegments(model({ words: 12, chars: 74, selection: true }));
+    const segments = texts(model({ words: 12, chars: 74, selection: true }));
 
     expect(segments[1]).toBe('12 words selected');
     expect(segments[2]).toBe('74 chars selected');
@@ -85,7 +100,7 @@ describe('statusSegments', () => {
 
   it('names every encoding, line ending and view mode', () => {
     const labels = (overrides: Partial<StatusBarModel>): string[] =>
-      statusSegments(model(overrides)).slice(3);
+      texts(model(overrides)).slice(3);
 
     expect(labels({ encoding: 'utf-8-bom', lineEnding: 'crlf' })).toEqual([
       'UTF-8 BOM',
@@ -107,9 +122,86 @@ describe('statusSegments', () => {
    * detector rather than as "no file yet" if that ever changed.
    */
   it('omits the document segments when there is no document', () => {
-    const segments = statusSegments(model({ encoding: null, lineEnding: null, viewMode: null }));
+    const segments = texts(model({ encoding: null, lineEnding: null, viewMode: null }));
 
     expect(segments).toEqual(['Ln 1, Col 1', '0 words', '0 chars']);
+  });
+
+  /**
+   * Which segments are clickable is a product decision, not an accident of
+   * rendering: SPEC 6.11 names the encoding and the line ending. The view mode
+   * is deliberately not one -- it already has Ctrl+Shift+P and a View menu item,
+   * and a third way in that looked identical to its two neighbours would imply
+   * all three are the same kind of control.
+   */
+  it('makes exactly the encoding and line-ending segments clickable', () => {
+    const menus = statusSegments(model()).map((segment) => segment.menu);
+
+    expect(menus).toEqual([undefined, undefined, undefined, 'encoding', 'lineEnding', undefined]);
+  });
+
+  /**
+   * Saving flattens a mixed file to one convention, which is a change the user
+   * never asked for -- Go reports it (`FileContents.Mixed`) so the row can warn
+   * before it happens.
+   */
+  it('warns on the line-ending segment when the file mixes conventions', () => {
+    const mixed = statusSegments(model({ mixedLineEndings: true }))[4];
+    const clean = statusSegments(model({ mixedLineEndings: false }))[4];
+
+    expect(mixed?.title).toContain('CRLF and LF');
+    expect(clean?.title).toBeUndefined();
+  });
+});
+
+describe('parseStatusCommand', () => {
+  it('round-trips both kinds', () => {
+    expect(parseStatusCommand(encodingCommand('utf-8-bom'))).toEqual({
+      kind: 'encoding',
+      value: 'utf-8-bom',
+    });
+    expect(parseStatusCommand(lineEndingCommand('crlf'))).toEqual({
+      kind: 'lineEnding',
+      value: 'crlf',
+    });
+  });
+
+  /**
+   * The value is validated, not cast. These ids travel on a `document`-level
+   * event bus anything can dispatch to, and the value ends up in
+   * `Document.encoding` and then in Go's `WriteFile` -- so an unrecognised one
+   * has to be refused here rather than become an encoding no decoder knows.
+   */
+  it('refuses a value it does not recognise', () => {
+    expect(parseStatusCommand('document.encoding:latin-1')).toBeNull();
+    expect(parseStatusCommand('document.lineEnding:cr')).toBeNull();
+    expect(parseStatusCommand('document.encoding:')).toBeNull();
+  });
+
+  it('ignores commands belonging to anything else', () => {
+    expect(parseStatusCommand('view.preview')).toBeNull();
+    expect(parseStatusCommand('tab.close:abc')).toBeNull();
+  });
+});
+
+describe('segmentItems', () => {
+  it('offers every encoding, with the current one ticked', () => {
+    const items = segmentItems('encoding', model({ encoding: 'utf-16le' }));
+
+    expect(items.map((item) => item.label)).toEqual(['UTF-8', 'UTF-8 BOM', 'UTF-16 LE']);
+    expect(items.map((item) => item.checked)).toEqual([false, false, true]);
+    expect(items[2]?.id).toBe(encodingCommand('utf-16le'));
+  });
+
+  /**
+   * The menu names the platform where the row does not. 'LF' is enough as a
+   * readout for someone who already knows; it is not enough as a choice.
+   */
+  it('names the platform in the line-ending menu', () => {
+    const items = segmentItems('lineEnding', model({ lineEnding: 'crlf' }));
+
+    expect(items.map((item) => item.label)).toEqual(['LF (Unix)', 'CRLF (Windows)']);
+    expect(items.map((item) => item.checked)).toEqual([false, true]);
   });
 });
 
@@ -137,6 +229,23 @@ describe('buildStatusBar', () => {
     expect(bar.getAttribute('aria-label')).toBe('Editor status');
     expect(bar.hasAttribute('aria-live')).toBe(false);
   });
+
+  /**
+   * Real buttons, not spans with click handlers. A button is focusable, reached
+   * by Tab, operable with Enter and Space, and announced as something that does
+   * something -- none of which comes free (SPEC 10). The readouts stay spans so
+   * they are not in the tab order at all.
+   */
+  it('renders the clickable segments as buttons and the rest as spans', () => {
+    const bar = buildStatusBar(model());
+    const tags = [...bar.children].map((child) => child.tagName);
+
+    expect(tags).toEqual(['SPAN', 'SPAN', 'SPAN', 'BUTTON', 'BUTTON', 'SPAN']);
+    for (const button of bar.querySelectorAll('button')) {
+      expect(button.type).toBe('button');
+      expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    }
+  });
 });
 
 describe('statusBarModel', () => {
@@ -154,6 +263,7 @@ describe('statusBarModel', () => {
       encoding: 'utf-16le',
       lineEnding: 'crlf',
       viewMode: 'split',
+      mixedLineEndings: false,
     });
   });
 
@@ -243,6 +353,59 @@ describe('mountStatusBar', () => {
     store.setState((prev) => ({ ...prev, status: { ...EMPTY_STATUS, line: 2 } }));
 
     expect([...root.children].map((child) => child.className)).toEqual(['statusbar', 'after']);
+  });
+
+  /**
+   * The whole path: click the segment, pick a value, and see the command on the
+   * bus. Nothing here writes the store -- `main.ts` owns document mutation, the
+   * same boundary the tab strip and the toolbar keep -- so the command *is* the
+   * behaviour as far as this module is concerned.
+   */
+  it('opens a menu from the encoding segment and emits the chosen command', () => {
+    const doc = docWith('a', { encoding: 'utf-8' });
+    seed([doc], doc.id, EMPTY_STATUS);
+    const root = mount();
+    const commands: string[] = [];
+    const listen = (event: Event): void => {
+      commands.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    try {
+      const button = root.querySelectorAll('button')[0]!;
+      button.click();
+
+      const items = [...document.querySelectorAll('.popup-menu button')];
+      expect(items.map((item) => item.textContent)).toEqual([
+        '✓UTF-8',
+        'UTF-8 BOM',
+        'UTF-16 LE',
+      ]);
+
+      (items[1] as HTMLButtonElement).click();
+      expect(commands).toEqual([encodingCommand('utf-8-bom')]);
+    } finally {
+      document.removeEventListener(COMMAND_EVENT, listen);
+      closePopupMenu();
+    }
+  });
+
+  /**
+   * Clicking the trigger of an open menu must close it. Without the
+   * `isPopupOpenFor` guard the click closes and immediately reopens the same
+   * menu, so the button can never dismiss what it opened -- the bug the
+   * toolbar's heading button already had to solve.
+   */
+  it('closes its own menu on a second click', () => {
+    const doc = docWith('a');
+    seed([doc], doc.id, EMPTY_STATUS);
+    const button = mount().querySelectorAll('button')[1]!;
+
+    button.click();
+    expect(document.querySelector('.popup-menu')).not.toBeNull();
+
+    button.click();
+    expect(document.querySelector('.popup-menu')).toBeNull();
   });
 
   it('removes the row and stops listening when torn down', () => {

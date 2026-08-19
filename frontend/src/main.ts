@@ -29,7 +29,7 @@ import {
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { mountShortcuts } from './ui/shortcuts';
-import { mountStatusBar } from './ui/statusbar';
+import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
 import { mountZoom, zoomIn, zoomOut, zoomReset } from './ui/zoom';
@@ -464,6 +464,38 @@ function setStatusBar(visible: boolean): void {
 }
 
 /**
+ * The status bar's encoding and line-ending menus (SPEC §6.11).
+ *
+ * Writes the document and stops. Nothing is saved here and nothing should be:
+ * `isDirty` now compares the encoding and line ending against their saved
+ * counterparts, so the change shows up as a dirty tab immediately and reaches
+ * the disk on the next Ctrl+S like any other edit. Writing the file behind the
+ * user's back because they opened a dropdown would be the surprising choice,
+ * and it is not available for an untitled document anyway.
+ *
+ * Untitled documents are deliberately *not* excluded. There is no file to
+ * disagree with yet, so the pick simply becomes what Save As will write.
+ */
+function setDocumentEncoding(command: string): void {
+  const parsed = parseStatusCommand(command);
+  if (parsed === null) return;
+
+  const id = store.getState().activeDocumentId;
+  if (id === null) return;
+
+  store.setState((prev) => ({
+    ...prev,
+    documents: prev.documents.map((doc) =>
+      doc.id === id
+        ? parsed.kind === 'encoding'
+          ? { ...doc, encoding: parsed.value }
+          : { ...doc, lineEnding: parsed.value }
+        : doc,
+    ),
+  }));
+}
+
+/**
  * View > Status Bar (SPEC §6.11). Applied first, persisted after, a failed disk
  * write logged rather than thrown -- the same ordering and error handling as
  * `setWordWrapSetting` above, and for the same reason.
@@ -545,6 +577,15 @@ document.addEventListener(COMMAND_EVENT, (event) => {
   }
   if (id.startsWith('toolbar.unpin:')) {
     void setToolbarPinned(id.slice('toolbar.unpin:'.length), false);
+    return;
+  }
+
+  // Carries the chosen value, so like the tab commands below it cannot be
+  // matched by the plain-string switch. `parseStatusCommand` answers null for
+  // anything that is not one of ours, including an id with our prefix and a
+  // value no decoder knows.
+  if (parseStatusCommand(id) !== null) {
+    setDocumentEncoding(id);
     return;
   }
 

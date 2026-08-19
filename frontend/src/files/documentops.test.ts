@@ -23,6 +23,7 @@ import { ReadFile, WriteFile } from '../../wailsjs/go/app/App';
 import { buildExtensions } from '../editor/extensions';
 import { getEditorView, setEditorView, store } from '../state/appcontext';
 import { EMPTY_STATUS, createUntitledDocument, isDirty, type Document } from '../state/document';
+import { activeDocument } from '../state/documents';
 import {
   closeDocumentWithPrompt,
   documentDirOf,
@@ -290,6 +291,55 @@ describe('switchToDocument', () => {
 });
 
 describe('openDocumentInNewTab', () => {
+  /**
+   * A freshly opened file must be **clean**, and that is not automatic now that
+   * `isDirty` compares metadata as well as text: the detected encoding and line
+   * ending have to be recorded as the saved ones too. Seeding them from the
+   * defaults instead would make every UTF-16 or LF file arrive with a dirty dot
+   * and prompt on close, having been edited by nobody.
+   */
+  it('opens clean, with the detected encoding recorded as the saved one', () => {
+    openDocumentInNewTab({
+      path: 'C:/notes/unix.md',
+      content: 'hello',
+      encoding: 'utf-16le',
+      lineEnding: 'lf',
+    });
+
+    const doc = activeDocument(store.getState())!;
+    expect(doc.encoding).toBe('utf-16le');
+    expect(doc.savedEncoding).toBe('utf-16le');
+    expect(doc.savedLineEnding).toBe('lf');
+    expect(isDirty(doc)).toBe(false);
+  });
+
+  /**
+   * Go reports `mixed` because saving flattens the whole file to one convention.
+   * It has to survive the trip into the model or the status bar cannot warn.
+   */
+  it('carries the mixed-line-endings flag through from the file', () => {
+    openDocumentInNewTab({
+      path: 'C:/notes/mixed.md',
+      content: 'hello',
+      encoding: 'utf-8',
+      lineEnding: 'crlf',
+      mixed: true,
+    });
+
+    expect(activeDocument(store.getState())!.mixedLineEndings).toBe(true);
+  });
+
+  it('treats an absent mixed flag as not mixed', () => {
+    openDocumentInNewTab({
+      path: 'C:/notes/plain.md',
+      content: 'hello',
+      encoding: 'utf-8',
+      lineEnding: 'crlf',
+    });
+
+    expect(activeDocument(store.getState())!.mixedLineEndings).toBe(false);
+  });
+
   it('adds a new tab, activates it, and loads its text into the view', () => {
     const a = cleanDoc('a', 'doc A');
     store.setState(() => ({

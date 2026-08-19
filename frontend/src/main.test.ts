@@ -28,11 +28,17 @@
 import { EditorState } from '@codemirror/state';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildExtensions } from './editor/extensions';
-import { createUntitledDocument, EMPTY_STATUS, type Document } from './state/document';
+import { createUntitledDocument, EMPTY_STATUS, isDirty, type Document } from './state/document';
 import { getEditorView, store } from './state/appcontext';
 import { COMMAND_EVENT } from './ui/menubar';
 import { DEFAULT_PINNED } from './ui/toolbar';
-import { ReadFile, SaveSettings, ShowWindow, SystemThemeIsDark } from '../wailsjs/go/app/App';
+import {
+  ReadFile,
+  SaveSettings,
+  ShowWindow,
+  SystemThemeIsDark,
+  WriteFile,
+} from '../wailsjs/go/app/App';
 
 vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
@@ -540,6 +546,65 @@ describe('theme.system / theme.light / theme.dark commands', () => {
     expect(SystemThemeIsDark).not.toHaveBeenCalled();
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(store.getState().isDark).toBe(true);
+  });
+});
+
+/**
+ * The status bar's encoding and line-ending menus (SPEC 6.11). `statusbar.ts`
+ * emits the command; this is the half that acts on it.
+ */
+describe('the encoding and line-ending commands', () => {
+  it('writes the choice to the active document and makes it dirty', () => {
+    const doc = cleanDoc('enc', 'hello', 'C:/notes.md');
+    setupDocs([doc], doc.id);
+    expect(isDirty(store.getState().documents[0]!)).toBe(false);
+
+    emit('document.lineEnding:lf');
+
+    const after = store.getState().documents[0]!;
+    expect(after.lineEnding).toBe('lf');
+    // The point of the whole file-model change: a metadata edit is a real,
+    // saveable change, so the tab shows a dirty dot and Ctrl+S has work to do.
+    expect(isDirty(after)).toBe(true);
+    // And it did not touch the disk on its own -- opening a dropdown is not a
+    // request to write the file.
+    expect(WriteFile).not.toHaveBeenCalled();
+  });
+
+  it('writes the encoding too, leaving the line ending alone', () => {
+    const doc = cleanDoc('enc2', 'hello', 'C:/notes.md');
+    setupDocs([doc], doc.id);
+
+    emit('document.encoding:utf-16le');
+
+    const after = store.getState().documents[0]!;
+    expect(after.encoding).toBe('utf-16le');
+    expect(after.lineEnding).toBe(doc.lineEnding);
+  });
+
+  it('only touches the active document', () => {
+    const active = cleanDoc('a', 'one');
+    const other = cleanDoc('b', 'two');
+    setupDocs([active, other], active.id);
+
+    emit('document.encoding:utf-8-bom');
+
+    expect(store.getState().documents.find((d) => d.id === 'b')!.encoding).toBe(other.encoding);
+  });
+
+  /**
+   * The bus is a `document`-level event anything can dispatch to, and the value
+   * ends up in Go's `WriteFile`. An unrecognised one must be dropped rather than
+   * written into the document as an encoding no decoder knows.
+   */
+  it('ignores a value it does not recognise', () => {
+    const doc = cleanDoc('enc3', 'hello');
+    setupDocs([doc], doc.id);
+
+    emit('document.encoding:latin-1');
+
+    expect(store.getState().documents[0]!.encoding).toBe(doc.encoding);
+    expect(isDirty(store.getState().documents[0]!)).toBe(false);
   });
 });
 

@@ -1,10 +1,15 @@
 import type { EditorState, StateEffect, Text } from '@codemirror/state';
 
+/** Mirrors Go's `app.Encoding` (internal/app/textfile.go). */
+export type Encoding = 'utf-8' | 'utf-8-bom' | 'utf-16le';
+
+/** Mirrors Go's `app.LineEnding`. */
+export type LineEnding = 'lf' | 'crlf';
+
 /**
- * Dirty state is derived (`!editorState.doc.eq(savedDoc)`), never stored as a
- * flag — that avoids an entire category of bugs where the flag and reality
- * drift apart. CodeMirror owns the text; this model deliberately does not
- * duplicate it.
+ * Dirty state is derived, never stored as a flag — that avoids an entire
+ * category of bugs where the flag and reality drift apart. CodeMirror owns the
+ * text; this model deliberately does not duplicate it.
  */
 export interface Document {
   id: string;
@@ -18,8 +23,42 @@ export interface Document {
    * than being silently downgraded to `'source'`.
    */
   previousViewMode: 'source' | 'live';
-  encoding: 'utf-8' | 'utf-8-bom' | 'utf-16le';
-  lineEnding: 'lf' | 'crlf';
+  /**
+   * How this document will be written (SPEC §3.1). Detected on open, changeable
+   * from the status bar, and handed to Go's `WriteFile`, which owns the byte
+   * round trip -- the editor's buffer is always UTF-16 JavaScript text with LF
+   * separators regardless of what either of these says.
+   */
+  encoding: Encoding;
+  lineEnding: LineEnding;
+  /**
+   * What is actually on disk, the metadata counterpart of `savedDoc`, and the
+   * reason changing either of the two above is a *saveable* change rather than
+   * a silent one.
+   *
+   * Without these, `isDirty` could only see text. Switching a file from CRLF to
+   * LF would leave the document looking clean, Ctrl+S would have nothing to do,
+   * and the choice would evaporate on close -- the user having been shown a
+   * menu that did nothing. Storing a dirty *flag* instead was the alternative
+   * and is the thing this model exists to avoid, so the fix is to widen what
+   * "saved" means rather than to start tracking it by hand.
+   *
+   * Both are meaningless for a document that has never been saved, where
+   * `filePath` is null and there is no disk state to differ from. They are
+   * seeded to the same values as the live pair there, so an untitled document
+   * starts clean.
+   */
+  savedEncoding: Encoding;
+  savedLineEnding: LineEnding;
+  /**
+   * Whether the file as read used both CRLF and LF. Go reports it
+   * (`app.FileContents.Mixed`) because saving flattens the whole file to one
+   * convention, and a user who never chose that deserves to be told rather than
+   * to find out from a diff. Surfaced as the line-ending segment's tooltip.
+   *
+   * False for an untitled document: nothing has been read, so nothing was mixed.
+   */
+  mixedLineEndings: boolean;
   /**
    * CodeMirror's scroll position, captured as a StateEffect when this document
    * is switched away from and replayed when it comes back. Design §4.4 dropped
@@ -167,8 +206,18 @@ export function clampSplitRatio(value: unknown): number {
   return Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, value));
 }
 
+/**
+ * Text *or* metadata. The encoding and line ending are part of what a save
+ * writes, so a document whose text is untouched but whose line ending the user
+ * just changed has genuinely unsaved changes -- and the close prompt, the tab's
+ * dirty dot and Ctrl+S all key off this one function.
+ */
 export function isDirty(doc: Document): boolean {
-  return !doc.editorState.doc.eq(doc.savedDoc);
+  return (
+    !doc.editorState.doc.eq(doc.savedDoc) ||
+    doc.encoding !== doc.savedEncoding ||
+    doc.lineEnding !== doc.savedLineEnding
+  );
 }
 
 /**
@@ -277,6 +326,9 @@ export function createUntitledDocument(editorState: EditorState): Document {
     previousViewMode: 'source',
     encoding: 'utf-8',
     lineEnding: 'crlf',
+    savedEncoding: 'utf-8',
+    savedLineEnding: 'crlf',
+    mixedLineEndings: false,
     scrollSnapshot: null,
   };
 }

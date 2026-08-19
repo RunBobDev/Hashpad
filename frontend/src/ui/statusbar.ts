@@ -19,17 +19,22 @@
  * busiest subscriber in the app, and worth remembering before adding a seventh
  * segment that is expensive to compute.
  *
- * SPEC §6.11 also asks for clicking the encoding and line-ending segments to
- * open a menu that changes them. That is deliberately not here yet: changing
- * either has to make the document dirty, and dirtiness in this app is *derived*
- * (`isDirty` compares the doc against `savedDoc`) rather than stored as a flag,
- * so a metadata-only change has nothing to compare against and would be
- * silently unsaveable. Doing it properly means giving `Document` a saved
- * encoding and line ending too -- a change to the file model, not to this row.
+ * The encoding and line-ending segments are buttons that open a menu (SPEC
+ * §6.11). That needed the file model to change first, not this row: dirtiness
+ * here is *derived* rather than stored as a flag, so until `Document` carried a
+ * `savedEncoding`/`savedLineEnding` to compare against, picking a new line
+ * ending left the document looking clean, gave Ctrl+S nothing to do, and threw
+ * the choice away on close.
+ *
+ * Choosing an item dispatches a `hashpad:command` rather than writing the store
+ * from here, the same as the tab strip and the toolbar. Changing a document is
+ * main.ts's job; see `ui/tabbar.ts`'s header for why that boundary exists.
  */
 import { store } from '../state/appcontext';
 import { activeDocument } from '../state/documents';
-import type { AppState, Document, EditorStatus } from '../state/document';
+import type { AppState, Document, EditorStatus, Encoding, LineEnding } from '../state/document';
+import { emitCommand } from './menubar';
+import { closePopupMenu, isPopupOpenFor, openPopupMenu, type PopupItem } from './popupmenu';
 
 /**
  * Everything the row displays, flattened into one level of primitives so that
@@ -46,21 +51,60 @@ export interface StatusBarModel extends EditorStatus {
    * fresh one. It is here because `activeDocument` is typed nullable, and three
    * blank segments is the wrong answer if that ever stops being true.
    */
-  encoding: Document['encoding'] | null;
-  lineEnding: Document['lineEnding'] | null;
+  encoding: Encoding | null;
+  lineEnding: LineEnding | null;
   viewMode: Document['viewMode'] | null;
+  /** Drives the line-ending segment's tooltip; see `Document.mixedLineEndings`. */
+  mixedLineEndings: boolean;
 }
 
-const ENCODING_LABELS: Record<Document['encoding'], string> = {
+const ENCODING_LABELS: Record<Encoding, string> = {
   'utf-8': 'UTF-8',
   'utf-8-bom': 'UTF-8 BOM',
   'utf-16le': 'UTF-16 LE',
 };
 
-const LINE_ENDING_LABELS: Record<Document['lineEnding'], string> = {
+const LINE_ENDING_LABELS: Record<LineEnding, string> = {
   lf: 'LF',
   crlf: 'CRLF',
 };
+
+const ENCODING_PREFIX = 'document.encoding:';
+const LINE_ENDING_PREFIX = 'document.lineEnding:';
+
+/** The command id `main.ts` recognises as "write this encoding to the active document". */
+export function encodingCommand(encoding: Encoding): string {
+  return `${ENCODING_PREFIX}${encoding}`;
+}
+
+export function lineEndingCommand(lineEnding: LineEnding): string {
+  return `${LINE_ENDING_PREFIX}${lineEnding}`;
+}
+
+/**
+ * Reverses the two above. Same arrangement as `ui/tabbar.ts`'s
+ * `parseTabCommand`: one module understands the encoding, and main.ts's router
+ * does not re-derive the prefixes for itself.
+ *
+ * The value is validated against the label tables rather than cast. These ids
+ * arrive as strings on a `document`-level event bus that anything can dispatch
+ * to, and `WriteFile` hands whatever it is to Go -- so an unrecognised value is
+ * answered with `null` here rather than becoming a `Document.encoding` no
+ * decoder knows.
+ */
+export function parseStatusCommand(
+  command: string,
+): { kind: 'encoding'; value: Encoding } | { kind: 'lineEnding'; value: LineEnding } | null {
+  if (command.startsWith(ENCODING_PREFIX)) {
+    const value = command.slice(ENCODING_PREFIX.length);
+    return value in ENCODING_LABELS ? { kind: 'encoding', value: value as Encoding } : null;
+  }
+  if (command.startsWith(LINE_ENDING_PREFIX)) {
+    const value = command.slice(LINE_ENDING_PREFIX.length);
+    return value in LINE_ENDING_LABELS ? { kind: 'lineEnding', value: value as LineEnding } : null;
+  }
+  return null;
+}
 
 const VIEW_MODE_LABELS: Record<Document['viewMode'], string> = {
   source: 'Source',
@@ -75,6 +119,7 @@ export function statusBarModel(state: AppState): StatusBarModel {
     encoding: doc?.encoding ?? null,
     lineEnding: doc?.lineEnding ?? null,
     viewMode: doc?.viewMode ?? null,
+    mixedLineEndings: doc?.mixedLineEndings ?? false,
   };
 }
 
@@ -88,25 +133,71 @@ function count(value: number, noun: string): string {
   return `${value.toLocaleString()} ${noun}`;
 }
 
+/** One readout in the row. `menu` is what makes it a button instead of a span. */
+export interface StatusSegment {
+  text: string;
+  menu?: 'encoding' | 'lineEnding';
+  /** Hover text, currently only the mixed-line-endings warning. */
+  title?: string;
+}
+
+/**
+ * What a mixed file's line-ending segment says on hover. Worth a tooltip rather
+ * than a visible marker: it is true of the file as read, it stops being true
+ * the moment the user saves, and the row has no space for a fourth state.
+ */
+const MIXED_TITLE =
+  'This file mixes CRLF and LF line endings. Saving will convert the whole file to one.';
+
 /**
  * The segments, in SPEC §6.1's order. A segment with nothing to say is omitted
  * rather than rendered empty -- before the first document exists there is no
  * encoding to name, and "Ln 1, Col 1" beside three blanks reads as a bug.
  */
-export function statusSegments(model: StatusBarModel): string[] {
-  const segments = [
-    `Ln ${model.line}, Col ${model.col}`,
+export function statusSegments(model: StatusBarModel): StatusSegment[] {
+  const segments: StatusSegment[] = [
+    { text: `Ln ${model.line}, Col ${model.col}` },
     // The suffix is what stops the counts silently changing subject: with a
     // selection they describe it rather than the document (SPEC §6.11), and
     // a number that drops from 1,247 to 12 with no explanation looks like
     // data loss.
-    count(model.words, model.selection ? 'words selected' : 'words'),
-    count(model.chars, model.selection ? 'chars selected' : 'chars'),
+    { text: count(model.words, model.selection ? 'words selected' : 'words') },
+    { text: count(model.chars, model.selection ? 'chars selected' : 'chars') },
   ];
-  if (model.encoding !== null) segments.push(ENCODING_LABELS[model.encoding]);
-  if (model.lineEnding !== null) segments.push(LINE_ENDING_LABELS[model.lineEnding]);
-  if (model.viewMode !== null) segments.push(VIEW_MODE_LABELS[model.viewMode]);
+  if (model.encoding !== null) {
+    segments.push({ text: ENCODING_LABELS[model.encoding], menu: 'encoding' });
+  }
+  if (model.lineEnding !== null) {
+    segments.push({
+      text: LINE_ENDING_LABELS[model.lineEnding],
+      menu: 'lineEnding',
+      ...(model.mixedLineEndings ? { title: MIXED_TITLE } : {}),
+    });
+  }
+  // Not a menu, deliberately: the view mode has a command of its own
+  // (Ctrl+Shift+P, View > Preview), and a second way in that looked identical
+  // to the two above would imply the three are the same kind of control.
+  if (model.viewMode !== null) segments.push({ text: VIEW_MODE_LABELS[model.viewMode] });
   return segments;
+}
+
+/** The menu behind each clickable segment, with the current value ticked. */
+export function segmentItems(menu: 'encoding' | 'lineEnding', model: StatusBarModel): PopupItem[] {
+  if (menu === 'encoding') {
+    return (Object.keys(ENCODING_LABELS) as Encoding[]).map((id) => ({
+      id: encodingCommand(id),
+      label: ENCODING_LABELS[id],
+      checked: id === model.encoding,
+    }));
+  }
+  return (Object.keys(LINE_ENDING_LABELS) as LineEnding[]).map((id) => ({
+    id: lineEndingCommand(id),
+    // The bare 'LF'/'CRLF' the row shows is not enough in a menu you are
+    // choosing from -- naming the platform is what makes the choice meaningful
+    // to someone who does not already know the difference.
+    label: id === 'lf' ? 'LF (Unix)' : 'CRLF (Windows)',
+    checked: id === model.lineEnding,
+  }));
 }
 
 export function buildStatusBar(model: StatusBarModel): HTMLElement {
@@ -125,13 +216,51 @@ export function buildStatusBar(model: StatusBarModel): HTMLElement {
   bar.setAttribute('role', 'region');
   bar.setAttribute('aria-label', 'Editor status');
 
-  for (const text of statusSegments(model)) {
-    const segment = document.createElement('span');
-    segment.className = 'statusbar__segment';
-    segment.textContent = text;
-    bar.append(segment);
+  for (const segment of statusSegments(model)) {
+    bar.append(buildSegment(segment, model));
   }
   return bar;
+}
+
+/**
+ * A plain readout is a `<span>`; a segment with a menu is a real `<button>`.
+ *
+ * Not a span with a click handler: a button is focusable, reachable by Tab,
+ * operable with Enter and Space, and announced as something that does
+ * something -- none of which comes free, and all of which SPEC §10 asks for.
+ * `aria-haspopup` tells a screen reader what the something is.
+ */
+function buildSegment(segment: StatusSegment, model: StatusBarModel): HTMLElement {
+  const menu = segment.menu;
+  const element = document.createElement(menu === undefined ? 'span' : 'button');
+  element.className = 'statusbar__segment';
+  element.textContent = segment.text;
+  if (segment.title !== undefined) element.title = segment.title;
+  if (menu === undefined || !(element instanceof HTMLButtonElement)) return element;
+
+  // `type="button"`: a bare <button> defaults to type="submit", which is inert
+  // today only because there is no <form> anywhere in the app.
+  element.type = 'button';
+  element.classList.add('statusbar__segment--menu');
+  element.setAttribute('aria-haspopup', 'menu');
+  element.addEventListener('click', (event) => {
+    // Without this the click carries on to `document`, where the outside-click
+    // listener `openPopupMenu` registers a moment later is waiting -- and closes
+    // the popup this very click just opened. A listener added mid-dispatch still
+    // fires for the event in flight, because the target's own handlers run
+    // before the event reaches `document`. `ui/toolbar.ts`'s heading button
+    // needs the same line for the same reason.
+    event.stopPropagation();
+    // Toggle rather than reopen: without this, clicking an open menu's own
+    // trigger closes and immediately rebuilds it, so the button can never
+    // dismiss what it opened. Same guard the toolbar's heading button uses.
+    if (isPopupOpenFor(element)) {
+      closePopupMenu();
+      return;
+    }
+    openPopupMenu({ anchor: element, items: segmentItems(menu, model), onChoose: emitCommand });
+  });
+  return element;
 }
 
 /**

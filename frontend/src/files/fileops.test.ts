@@ -133,11 +133,64 @@ describe('dirty tracking', () => {
     expect(isDirty(doc)).toBe(true); // sanity: starts dirty, same as a real unsaved edit
 
     store.setState((prev) => ({ ...prev, documents: [doc], activeDocumentId: doc.id }));
-    markSaved(doc.id, changed.doc);
+    markSaved(doc.id, changed.doc, doc.encoding, doc.lineEnding);
 
     const saved = store.getState().documents.find((d) => d.id === doc.id);
     expect(saved).toBeDefined();
     expect(isDirty(saved!)).toBe(false);
+  });
+
+  /**
+   * The metadata half of the same regression, and the reason `isDirty` grew
+   * past comparing text. Changing the line ending is a real change to what a
+   * save writes, so the document has to *become* dirty -- otherwise Ctrl+S has
+   * nothing to do, the close prompt never asks, and the choice the user made in
+   * the status bar quietly disappears when the tab closes.
+   */
+  it('is dirty after the line ending changes, and clean once that is saved', () => {
+    const state = EditorState.create({ doc: 'hello' });
+    const doc = docWith({ editorState: state, savedDoc: state.doc, lineEnding: 'crlf' });
+    expect(isDirty(doc)).toBe(false);
+
+    const switched = { ...doc, lineEnding: 'lf' as const };
+    expect(isDirty(switched)).toBe(true);
+
+    store.setState((prev) => ({ ...prev, documents: [switched], activeDocumentId: switched.id }));
+    markSaved(switched.id, state.doc, switched.encoding, switched.lineEnding);
+
+    expect(isDirty(store.getState().documents[0]!)).toBe(false);
+  });
+
+  /** The same for the encoding, which is the other half of what gets written. */
+  it('is dirty after the encoding changes', () => {
+    const state = EditorState.create({ doc: 'hello' });
+    const doc = docWith({ editorState: state, savedDoc: state.doc, encoding: 'utf-8' });
+
+    expect(isDirty(doc)).toBe(false);
+    expect(isDirty({ ...doc, encoding: 'utf-8-bom' })).toBe(true);
+  });
+
+  /**
+   * `markSaved` takes the values it was handed rather than re-reading the
+   * document, and this is the case that needs it: the user changes the encoding
+   * again while a write is in flight. The document must stay dirty, because the
+   * file on disk has the *old* encoding -- recording the current one would
+   * leave it looking clean while holding a setting the file does not have.
+   */
+  it('records the encoding it was given, not the one the document now holds', () => {
+    const state = EditorState.create({ doc: 'hello' });
+    const doc = docWith({ editorState: state, savedDoc: state.doc, encoding: 'utf-8' });
+    store.setState((prev) => ({ ...prev, documents: [doc], activeDocumentId: doc.id }));
+
+    // The write went out as utf-8; the user picked UTF-16 LE before it landed.
+    store.setState((prev) => ({
+      ...prev,
+      documents: prev.documents.map((d) => ({ ...d, encoding: 'utf-16le' as const })),
+    }));
+    markSaved(doc.id, state.doc, 'utf-8', doc.lineEnding);
+
+    expect(store.getState().documents[0]!.savedEncoding).toBe('utf-8');
+    expect(isDirty(store.getState().documents[0]!)).toBe(true);
   });
 });
 

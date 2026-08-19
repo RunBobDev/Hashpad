@@ -29,15 +29,21 @@ import { displayName, saveDocument } from './fileops';
 /**
  * The shape `openDocumentInNewTab` needs from a freshly read file. Structurally
  * compatible with `app.FileContents` (wailsjs/go/models.ts), which is what
- * `ReadFile` actually returns — `FileContents` additionally carries `mixed`,
- * which this module has no use for, so the parameter type only names what it
- * reads.
+ * `ReadFile` actually returns.
+ *
+ * `mixed` used to be omitted here as something this module had no use for. It
+ * has one now: saving flattens a mixed file to a single convention, and the
+ * status bar's line-ending segment says so in its tooltip. Optional rather than
+ * required because `fileops.test.ts` and `main.test.ts` build these by hand,
+ * and a missing flag should mean "not mixed" rather than a compile error in
+ * every fixture.
  */
 export interface FileContentsLike {
   path: string;
   content: string;
   encoding: string;
   lineEnding: string;
+  mixed?: boolean;
 }
 
 /**
@@ -168,6 +174,12 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
     // just restores what the binding's typing lost.
     encoding: contents.encoding as Document['encoding'],
     lineEnding: contents.lineEnding as Document['lineEnding'],
+    // Freshly read, so what is on disk is exactly what was just detected --
+    // the document opens clean, and only a later change to either makes it
+    // dirty (see `isDirty`).
+    savedEncoding: contents.encoding as Document['encoding'],
+    savedLineEnding: contents.lineEnding as Document['lineEnding'],
+    mixedLineEndings: contents.mixed ?? false,
     scrollSnapshot: null,
   };
 

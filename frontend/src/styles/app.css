@@ -61,6 +61,29 @@ body {
   overflow: hidden;
 }
 
+/* The clickable segments (SPEC §6.11's encoding and line-ending menus). Real
+   <button>s, so they need their chrome stripped back to look like the readouts
+   beside them -- a row of 24px text is no place for borders. The hover
+   background is what tells the user these two are different from their
+   neighbours; `:focus-visible` below still gives them a ring. */
+.statusbar__segment--menu {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0 6px;
+  /* Cancels the 6px above at the row's edges, so the first and last segments
+     still line up with the row's own padding. */
+  margin: 0 -6px;
+  height: 100%;
+  border-radius: var(--radius);
+  cursor: default;
+}
+
+.statusbar__segment--menu:hover {
+  background: var(--bg-hover);
+}
+
 /* Visible focus indicators everywhere (SPEC §10). */
 :focus-visible {
   outline: 2px solid var(--accent);

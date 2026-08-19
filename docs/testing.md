@@ -497,3 +497,36 @@ what it cannot check is whether WebView2 agrees.
 - [ ] **Ctrl+S while the Save / Don't Save prompt is open does nothing.** The
       forwarder stands aside for an open `<dialog>`, or a save would start behind
       the prompt that is asking about it.
+
+## Checkpoint G.2b — the encoding and line-ending menus
+
+SPEC §6.11's clickable segments. The file model changed to make them possible:
+`Document` now carries `savedEncoding`/`savedLineEnding` beside `savedDoc`, so
+`isDirty` sees a metadata change and a switched line ending is something Ctrl+S
+can actually write. jsdom can click the buttons but cannot check what lands on
+disk, which is the whole point of the feature.
+
+- [ ] **Switch a CRLF file to LF, save, and check the bytes.** The tab must show
+      a dirty dot the moment the menu closes, and the saved file must actually
+      use LF. This is the end-to-end claim; everything else here is detail.
+- [ ] **Switch the encoding to UTF-8 BOM and save.** The file should gain a BOM.
+      Then reopen it and confirm the segment still says UTF-8 BOM -- that is the
+      detector and the writer agreeing, which no frontend test can check.
+- [ ] **UTF-16 LE round trip**, the same way. Non-ASCII text is worth using here.
+- [ ] **Change a setting and close the tab without saving.** The Save / Don't
+      Save prompt must appear -- if it does not, `isDirty` is not seeing
+      metadata and the choice is being silently discarded.
+- [ ] **Open a file with mixed line endings** and hover the line-ending segment.
+      The tooltip should warn that saving flattens the file. Then save and
+      confirm it did, and that the warning is gone after reopening.
+- [ ] **The two segments look like readouts, not buttons**, until hovered. They
+      are real `<button>`s with their chrome stripped; check the hover
+      background reads in both themes and that Tab reaches them with a visible
+      focus ring.
+- [ ] **Keyboard only:** Tab to the encoding segment, Enter to open, arrows to
+      move, Enter to choose, Escape to dismiss. Focus should come back to the
+      segment.
+- [ ] **Clicking the segment a second time closes its menu** rather than
+      reopening it.
+- [ ] **An untitled document lets you pick both**, and Save As then writes what
+      was picked.

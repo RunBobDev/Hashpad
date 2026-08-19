@@ -23,7 +23,7 @@ import type { Text } from '@codemirror/state';
 import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
 import { openDocumentInNewTab } from './documentops';
 import type { SaveChoice } from '../ui/confirmdialog';
-import { isDirty, type Document } from '../state/document';
+import { isDirty, type Document, type Encoding, type LineEnding } from '../state/document';
 import { getEditorView, store } from '../state/appcontext';
 
 /** Basename of a path, or `Untitled` for a document never saved to disk. */
@@ -73,15 +73,29 @@ function currentText(doc: Document): Text {
 }
 
 /**
- * Writes `savedDoc` back into the store so `isDirty` for that document goes
+ * Records what just reached the disk, so `isDirty` for that document goes
  * false. Exported (rather than kept module-private) purely so
  * fileops.test.ts can exercise it directly against the store without going
  * through the DOM-/IPC-bound `saveActive`/`saveActiveAs`.
+ *
+ * Takes the encoding and line ending as well as the text, and takes them as
+ * *arguments* rather than reading them off the document. They are part of what
+ * `WriteFile` wrote, so they need the same treatment the text already gets:
+ * captured before the IPC round trip and replayed here, or a user who changes
+ * the encoding again while a save is in flight ends up with a document that
+ * claims to be clean while holding a setting the file does not have.
  */
-export function markSaved(id: string, savedDoc: Text): void {
+export function markSaved(
+  id: string,
+  savedDoc: Text,
+  savedEncoding: Encoding,
+  savedLineEnding: LineEnding,
+): void {
   store.setState((prev) => ({
     ...prev,
-    documents: prev.documents.map((doc) => (doc.id === id ? { ...doc, savedDoc } : doc)),
+    documents: prev.documents.map((doc) =>
+      doc.id === id ? { ...doc, savedDoc, savedEncoding, savedLineEnding } : doc,
+    ),
   }));
 }
 
@@ -145,7 +159,9 @@ export async function saveDocument(id: string): Promise<boolean> {
     return false;
   }
 
-  markSaved(doc.id, snapshot);
+  // `doc` was captured before the await, so these are the values that were
+  // actually written -- not whatever the store holds now.
+  markSaved(doc.id, snapshot, doc.encoding, doc.lineEnding);
   return true;
 }
 
@@ -187,7 +203,17 @@ export async function saveDocumentAs(id: string): Promise<boolean> {
   store.setState((prev) => ({
     ...prev,
     documents: prev.documents.map((d) =>
-      d.id === doc.id ? { ...d, filePath: path, savedDoc: snapshot } : d,
+      d.id === doc.id
+        ? {
+            ...d,
+            filePath: path,
+            savedDoc: snapshot,
+            // Same reasoning as `saveDocument`'s `markSaved` call: these are the
+            // values handed to `WriteFile` above, read off the pre-await `doc`.
+            savedEncoding: doc.encoding,
+            savedLineEnding: doc.lineEnding,
+          }
+        : d,
     ),
   }));
 
