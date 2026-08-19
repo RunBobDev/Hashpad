@@ -577,3 +577,8 @@ is covered by a test.
       exists for.
 - [ ] **Colours read in both themes**, including the hover state and the focus
       ring on the resizer.
+- [ ] **Un-maximise the window and put something wide in the preview** -- a long
+      fenced code line, or a 400-character unbroken token. The pane must gain a
+      horizontal scrollbar and the text must be reachable. This was broken by
+      G.3a and fixed in the same checkpoint; `frontend/harness/layout.html` is
+      the fastest way to re-check it, via `window.layout.overflow()`.

@@ -588,6 +588,17 @@ body {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  /* Both axes, and `min-width` is the one that bites. A flex item defaults to
+     `min-width: auto`, which refuses to shrink below its content's min-content
+     width -- and this row's content includes a preview pane that may hold a
+     400-character unbroken token. Until G.3a this row was a child of `#app`, a
+     flex *column*, where width is the cross axis and the default never applied;
+     putting it inside `.workspace` made width the main axis and the row grew to
+     its content instead of to the window. Measured at a 900px window: the row
+     became 3945px, which pushed the preview pane -- and therefore the pane's own
+     horizontal scrollbar -- off the right edge, with `html, body { overflow:
+     hidden }` leaving nothing to scroll it back. */
+  min-width: 0;
 }
 
 /* Both minimums are load-bearing and neither replaces the other: min-height
