@@ -76,6 +76,37 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
+   * The window is frameless, so its right edge is page content rather than an
+   * OS frame: Wails arms a resize from a `mousemove` near the edge, and
+   * Chromium dispatches no mouse events over a native scrollbar -- which is
+   * 15px and sits flush there, swallowing Wails' whole 6px band. `.resize-gutter`
+   * is a real element in that band so the pointer has something to be over.
+   *
+   * Three declarations, each load-bearing: `position: absolute` is what lifts
+   * it above the scrollbar (a positioned element paints above in-flow content,
+   * which is why no `z-index` is needed and none is asserted -- an earlier
+   * version pinned one, and the harness showed the gutter wins the hit test
+   * without it); `right: 0` is what puts it on the edge; and without a width it
+   * is nothing at all.
+   *
+   * Verified for real in `frontend/harness/layout.html`, where
+   * `window.layout.rightEdge()` reports `resize-gutter` with it and
+   * `preview-pane` -- the scroll container, meaning its scrollbar -- without.
+   */
+  it('the resize gutter covers the right edge, above the scrollbar', () => {
+    const gutter = rule('.resize-gutter');
+
+    expect(gutter).toMatch(/position:\s*absolute\s*;/);
+    expect(gutter).toMatch(/right:\s*0\s*;/);
+    expect(gutter).toMatch(/width:\s*var\(--resize-gutter\)\s*;/);
+  });
+
+  /** Absolute positioning needs a positioned ancestor, or it escapes the row. */
+  it('the workspace is the gutter’s containing block', () => {
+    expect(rule('.workspace')).toMatch(/position:\s*relative\s*;/);
+  });
+
+  /**
    * The pane is what scrolls when its content is too wide, so its own overflow
    * must stay `auto`. `hidden` here would clip the same text with no scrollbar
    * -- the symptom this whole file is about, reached by a different route.

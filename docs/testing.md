@@ -582,3 +582,35 @@ is covered by a test.
       horizontal scrollbar and the text must be reachable. This was broken by
       G.3a and fixed in the same checkpoint; `frontend/harness/layout.html` is
       the fastest way to re-check it, via `window.layout.overflow()`.
+
+## Window resizing at the right edge
+
+The window is frameless, so there is no OS resize border: Wails' injected
+runtime watches `mousemove` on `window` and arms a resize when the pointer comes
+within 6px of an edge. Chromium dispatches no mouse events over a native
+scrollbar, and a scrollbar is 15px sitting flush at the right edge -- so beside
+the editor or the preview, Wails never saw the pointer and the window would not
+resize. `.resize-gutter` is a transparent strip in that band so there is
+something to be over.
+
+None of this is visible to jsdom, and `frontend/harness/layout.html` can only
+show what the pointer would *land on* (`window.layout.rightEdge()`), not whether
+Windows then resizes. Only these checks can.
+
+- [ ] **Drag the right edge beside the editor**, with a document long enough to
+      show a scrollbar. Then the same beside the preview with the split open.
+      Both were broken before this fix.
+- [ ] **Drag the right edge over the tab strip and over the status bar.** These
+      always worked; they must keep working.
+- [ ] **The top-right corner still closes the window.** The gutter deliberately
+      stops below the menu bar so it cannot put a dead strip across the close
+      button -- if the button feels 6px narrow, it is spanning too far.
+- [ ] **The preview's scrollbar is still grabbable.** The gutter takes the outer
+      6px of its 15px, leaving 9px.
+- [ ] **The cursor turns into a resize arrow** on that edge.
+- [ ] **Left, top and bottom edges still resize.** They have no scrollbar
+      against them and so were never affected.
+
+Known gap, not covered: with the status bar hidden (View > Status Bar), the
+window's bottom edge is the workspace row, and a horizontal scrollbar there has
+exactly the same problem. There is no bottom gutter.

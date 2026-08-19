@@ -26,7 +26,7 @@
  * documents alone.
  */
 import { EditorState } from '@codemirror/state';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildExtensions } from './editor/extensions';
 import {
   DEFAULT_OUTLINE_WIDTH,
@@ -630,9 +630,38 @@ describe('the outline toggle', () => {
   });
 
   /**
+   * Closed through the real command rather than by removing the node, so the
+   * handle and the settings write come back to rest too.
+   *
+   * In `afterEach` and not at the end of each test body, because a failing
+   * assertion aborts before that line -- `main.ts` is a module singleton shared
+   * by this whole file, so one failure would leave the sidebar open and the
+   * *next* test's toggle would close it instead of opening it. That is exactly
+   * what happened when the resize gutter first changed this row's children: one
+   * real failure arrived wearing two.
+   */
+  afterEach(() => {
+    if (document.querySelector('.outline-column') !== null) emit('view.outline');
+  });
+
+  /**
    * Hidden by default (SPEC 6.9), and the mocked settings say so -- so a sidebar
    * present before anything is clicked would mean bootstrap ignored the setting.
    */
+  /**
+   * The window is frameless, so the right edge is page content rather than an
+   * OS frame -- and a native scrollbar there swallows the pointer, which is why
+   * this strip exists at all. It must survive the outline being toggled, since
+   * mounting the sidebar prepends to the same row.
+   */
+  it('keeps the resize gutter at the right edge of the row', () => {
+    const gutter = (): Element | null => document.querySelector('.workspace > .resize-gutter');
+    expect(gutter()).not.toBeNull();
+
+    emit('view.outline');
+    expect(gutter()).not.toBeNull();
+  });
+
   it('starts hidden, then mounts and unmounts on the command', async () => {
     expect(document.querySelector('.outline-column')).toBeNull();
 
@@ -657,8 +686,11 @@ describe('the outline toggle', () => {
     expect([...workspace.children].map((child) => child.className)).toEqual([
       'outline-column',
       'editor-split',
+      // Position in this list is not load-bearing -- the gutter is absolutely
+      // positioned, so it is out of the flex flow. It is listed because the
+      // assertion is about the row's whole contents.
+      'resize-gutter',
     ]);
-    emit('view.outline');
   });
 
   it('lists the active document’s headings', () => {
@@ -669,7 +701,6 @@ describe('the outline toggle', () => {
 
     const labels = [...document.querySelectorAll('.outline__item')].map((b) => b.textContent);
     expect(labels).toEqual(['Title', 'Section']);
-    emit('view.outline');
   });
 });
 

@@ -83,7 +83,22 @@ pane.innerHTML = [
 ].join('');
 editorSplit.append(pane);
 
+// Mirrors main.ts: the strip that makes the window's right edge resizable
+// despite the pane's scrollbar sitting in Wails' resize band.
+const gutter = document.createElement('div');
+gutter.className = 'resize-gutter';
+workspace.append(gutter);
+
 root.append(chrome('statusbar', 'var(--h-statusbar)', 'Ln 1, Col 1'));
+
+// Enough content that the pane really scrolls: without a vertical scrollbar
+// there is nothing at the right edge to be blocked by, and the question this
+// page exists to answer does not arise.
+for (let i = 0; i < 200; i++) {
+  const filler = document.createElement('p');
+  filler.textContent = `filler line ${i}`;
+  pane.append(filler);
+}
 
 interface Report {
   selector: string;
@@ -116,7 +131,23 @@ function measure(selector: string): Report {
   };
 }
 
-(window as unknown as { layout: { overflow(): Report[] } }).layout = {
+/**
+ * What the pointer would land on down the window's right edge, which is the
+ * question behind "can I resize the window here". Wails arms a resize from a
+ * `mousemove` -- and Chromium dispatches no mouse events over a native
+ * scrollbar, so anything reporting the scroll container rather than the gutter
+ * is an edge the window cannot be resized from.
+ */
+function rightEdge(): { y: number; at: string }[] {
+  const w = window.innerWidth;
+  return [40, 80, Math.round(window.innerHeight / 2), window.innerHeight - 12].map((y) => {
+    const el = document.elementFromPoint(w - 3, y);
+    return { y, at: el === null ? 'nothing' : el.className || el.tagName };
+  });
+}
+
+(window as unknown as { layout: { overflow(): Report[]; rightEdge: typeof rightEdge } }).layout = {
+  rightEdge,
   overflow: () =>
     [
       'html',

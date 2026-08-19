@@ -22,6 +22,13 @@
   /* Subtle, not rounded-bubble — SPEC §6.1 */
   --radius: 4px;
 
+  /* Mirrors Wails' own `borderThickness` (its injected runtime, main.js): the
+     width of the band at the window's edge where a mousemove arms a resize.
+     This is a frameless window, so that band is ordinary page content rather
+     than an OS frame — see `.resize-gutter` in app.css for why we have to put
+     a real element in it. If Wails ever changes its constant, this follows. */
+  --resize-gutter: 6px;
+
   /* PLATFORM: the one piece of per-OS styling in shared CSS. Segoe UI Variable
      on Win11, Segoe UI on Win10, system sans on Linux (SPEC §6.1). */
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;

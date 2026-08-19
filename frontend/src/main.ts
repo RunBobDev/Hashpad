@@ -98,6 +98,17 @@ const editorSplit = document.createElement('div');
 editorSplit.className = 'editor-split';
 workspace.append(editorSplit);
 
+// A transparent strip over the window's right edge, so the window can be
+// resized there at all -- see `.resize-gutter` in app.css for the whole story.
+// Appended last for readability only: it is absolutely positioned, so it is out
+// of the flex flow and paints above the pane's scrollbar wherever it sits among
+// its siblings.
+const resizeGutter = document.createElement('div');
+resizeGutter.className = 'resize-gutter';
+// Decoration, not content: it exists for the pointer and has nothing to say.
+resizeGutter.setAttribute('aria-hidden', 'true');
+workspace.append(resizeGutter);
+
 const editorArea = document.createElement('div');
 editorArea.className = 'editor-area';
 editorSplit.append(editorArea);
