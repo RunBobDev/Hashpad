@@ -577,6 +577,28 @@ is covered by a test.
       exists for.
 - [ ] **Colours read in both themes**, including the hover state and the focus
       ring on the resizer.
+
+### G.3b — the current section
+
+jsdom has no layout, so every test of this states a scroll position rather than
+producing one. That the numbers a real editor reports are the ones those tests
+assume is only checkable here.
+
+- [ ] **Scroll the editor and watch the sidebar keep up.** The highlighted item
+      should change as each heading passes the top of the viewport -- not late,
+      not a section behind.
+- [ ] **Exactly one item is ever marked.**
+- [ ] **Scroll above the first heading** (a document with an intro paragraph, or
+      front matter). Nothing should be marked: there is no section there.
+- [ ] **A long outline scrolls itself to follow**, but only when the current item
+      would otherwise be off-screen -- it must not yank while you are reading.
+- [ ] **Click a heading, then check the mark moved to it.** The click scrolls the
+      editor, and the highlight follows from that scroll rather than from the
+      click, so this is really a check that the two agree.
+- [ ] **Type above a heading with the outline open.** Lines shift down; the mark
+      must stay on the section you are in rather than jumping or vanishing.
+- [ ] **The mark is legible in both themes**, and distinguishable from hover
+      while hovering a *different* item.
 - [ ] **Un-maximise the window and put something wide in the preview** -- a long
       fenced code line, or a 400-character unbroken token. The pane must gain a
       horizontal scrollbar and the text must be reachable. This was broken by

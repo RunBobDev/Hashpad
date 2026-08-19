@@ -32,3 +32,25 @@ if (typeof Range !== 'undefined') {
     return new DOMRect(0, 0, 0, 0);
   };
 }
+
+/**
+ * jsdom implements no scrolling at all, so `Element.scrollIntoView` is simply
+ * absent -- calling it throws rather than doing nothing. Real code calls it for
+ * good reasons (`ui/outline.ts` keeps the current section in view,
+ * `preview/pane.ts` follows a `#fragment`), and every browser has it.
+ *
+ * A no-op rather than a spy: what these calls *do* is scrolling, which jsdom
+ * cannot model and no assertion here could check honestly. The tests around
+ * them assert the state that drives the scroll -- which item is
+ * `aria-current`, which anchor was resolved -- and leave the scrolling itself
+ * to the manual checks in docs/testing.md.
+ *
+ * `??=` so a test that wants to watch the call can install its own first, and
+ * guarded on `typeof Element` because most test files run under the default
+ * `node` environment with no DOM globals at all.
+ */
+if (typeof Element !== 'undefined') {
+  Element.prototype.scrollIntoView ??= function scrollIntoView() {
+    /* jsdom has no layout to scroll. */
+  };
+}

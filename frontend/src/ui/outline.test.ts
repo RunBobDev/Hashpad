@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Text } from '@codemirror/state';
-import { outlineHeadings } from './outline';
+import { activeHeadingIndex, outlineHeadings } from './outline';
 
 const NL = String.fromCharCode(10);
 
@@ -139,5 +139,44 @@ describe('outlineHeadings', () => {
 
   it('reads a document that arrives as one string the same way', () => {
     expect(outlineHeadings(Text.of(('# A' + NL + '## B').split(NL)))).toHaveLength(2);
+  });
+});
+
+/**
+ * Which section a given source line falls under (SPEC 6.9's "current section
+ * highlighted as you scroll"). Pure and off the DOM, like the scanner above --
+ * the sidebar that renders the answer is `outlinepane.test.ts`'s subject.
+ */
+describe('activeHeadingIndex', () => {
+  const HEADINGS = [
+    { line: 1, level: 1, text: 'One' },
+    { line: 10, level: 2, text: 'Two' },
+    { line: 20, level: 2, text: 'Three' },
+  ];
+
+  it('takes the last heading at or before the line', () => {
+    expect(activeHeadingIndex(HEADINGS, 1)).toBe(0);
+    expect(activeHeadingIndex(HEADINGS, 9)).toBe(0);
+    expect(activeHeadingIndex(HEADINGS, 10)).toBe(1);
+    expect(activeHeadingIndex(HEADINGS, 19)).toBe(1);
+    expect(activeHeadingIndex(HEADINGS, 20)).toBe(2);
+  });
+
+  /** Past the last heading the document is still inside its section. */
+  it('stays on the last heading below it', () => {
+    expect(activeHeadingIndex(HEADINGS, 9999)).toBe(2);
+  });
+
+  /**
+   * A document can open with prose above its first heading -- front matter, an
+   * intro paragraph -- and there is genuinely no section there. Highlighting
+   * the first heading anyway would claim the reader is somewhere they are not.
+   */
+  it('reports no section above the first heading', () => {
+    expect(activeHeadingIndex([{ line: 5, level: 1, text: 'Later' }], 1)).toBe(-1);
+  });
+
+  it('has no section at all in a document with no headings', () => {
+    expect(activeHeadingIndex([], 1)).toBe(-1);
   });
 });

@@ -184,6 +184,20 @@ body {
   color: var(--fg-primary);
 }
 
+/* The section being read (SPEC §6.9). Keyed off the same `aria-current` the
+   screen reader uses, so the visible state and the announced one cannot drift
+   apart. Weight and colour rather than a background: a filled row would compete
+   with :hover, and the user needs to be able to see both at once -- which one is
+   current, and which one the pointer is about to choose.
+
+   The bar carries the meaning for anyone who cannot separate the two greys;
+   colour alone would not (SPEC §10). */
+.outline__item[aria-current] {
+  color: var(--fg-primary);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 /* The drag handle. Same shape as the preview divider: a thin strip that is
    wider than it looks, because a 1px target is unhittable. */
 .outline-resizer {

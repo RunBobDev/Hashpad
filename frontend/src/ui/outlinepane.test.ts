@@ -23,7 +23,7 @@ import {
   type Document,
 } from '../state/document';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
-import { buildOutline, mountOutline, type OutlineHandle } from './outline';
+import { buildOutline, mountOutline, setActiveHeading, type OutlineHandle } from './outline';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
@@ -138,6 +138,23 @@ describe('buildOutline', () => {
 
     expect(items(nav)[0]!.getAttribute('aria-label')).toBe('Heading level 3: Deep');
     expect(nav.getAttribute('aria-label')).toBe('Document outline');
+  });
+
+  it('marks one item and unmarks the rest', () => {
+    const nav = buildOutline(
+      [
+        { line: 1, level: 1, text: 'A' },
+        { line: 2, level: 1, text: 'B' },
+      ],
+      () => {},
+    );
+
+    setActiveHeading(nav, 1);
+    expect(nav.querySelectorAll('[aria-current]')).toHaveLength(1);
+    expect(items(nav)[1]!.getAttribute('aria-current')).toBe('location');
+
+    setActiveHeading(nav, -1);
+    expect(nav.querySelectorAll('[aria-current]')).toHaveLength(0);
   });
 
   /** A blank sidebar reads as broken. Say why it is empty instead. */
@@ -296,6 +313,159 @@ describe('mountOutline', () => {
       // Two presses, one write: the debounce is what stops a drag writing the
       // settings file once per pixel.
       expect(SaveSettings).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * SPEC 6.9's "current section highlighted as you scroll". jsdom has no layout,
+   * so the editor's real geometry is unavailable -- `lineBlockAtHeight` and
+   * `documentTop` are stubbed to state a scroll position, and what is tested is
+   * the mapping and the DOM write on top of it. That the numbers a real browser
+   * reports are the ones assumed here is a manual check.
+   */
+  describe('the current section', () => {
+    /** Where the editor's scroller sits down the window, once chrome is above it. */
+    const SCROLLER_TOP = 100;
+    /** Pretend line height, so a height maps back to a line the stub can name. */
+    const LINE_HEIGHT = 10;
+
+    /**
+     * Scrolls the editor so `line` is at the top of its viewport.
+     *
+     * The geometry is stated rather than stubbed away, and that matters: the
+     * conversion under test is `scrollDOM.rect.top - documentTop`, which mixes a
+     * screen coordinate with the document's own origin. jsdom reports both as
+     * zero, and zero is exactly the arrangement in which reading `scrollTop`
+     * instead would give the same answer -- so a test that left them at zero
+     * could not tell a correct conversion from a wrong one. It could not: an
+     * earlier version stubbed `lineBlockAtHeight` to ignore its argument
+     * entirely, and swapping the conversion for `scrollDOM.scrollTop` passed.
+     *
+     * Same technique, and the same reasoning, as `preview/pane.test.ts`'s
+     * `placeScroller`.
+     */
+    function scrollTopLineTo(view: EditorView, line: number): void {
+      const scrolled = (line - 1) * LINE_HEIGHT;
+      view.scrollDOM.getBoundingClientRect = () =>
+        ({ top: SCROLLER_TOP, left: 0, bottom: 0, right: 0, width: 0, height: 0 }) as DOMRect;
+      Object.defineProperty(view, 'documentTop', {
+        value: SCROLLER_TOP - scrolled,
+        configurable: true,
+      });
+      // Answers from the height it is handed, so a conversion that computes the
+      // wrong height names the wrong line.
+      view.lineBlockAtHeight = (height: number) => {
+        const at = Math.min(Math.max(Math.round(height / LINE_HEIGHT) + 1, 1), view.state.doc.lines);
+        const target = view.state.doc.line(at);
+        return { from: target.from, to: target.to, top: 0, height: 10, bottom: 10 } as ReturnType<
+          typeof view.lineBlockAtHeight
+        >;
+      };
+
+      view.scrollDOM.dispatchEvent(new Event('scroll'));
+    }
+
+    function currentLabel(root: HTMLElement): string | null {
+      return root.querySelector('.outline__item[aria-current]')?.textContent ?? null;
+    }
+
+    const DOC = ['# One', 'body', '## Two', 'body', '## Three', 'body'].join(NL);
+
+    it('marks the section the viewport is in, and follows it', () => {
+      const { workspace, view } = mount(DOC);
+
+      scrollTopLineTo(view, 2);
+      expect(currentLabel(workspace)).toBe('One');
+
+      scrollTopLineTo(view, 4);
+      expect(currentLabel(workspace)).toBe('Two');
+
+      scrollTopLineTo(view, 6);
+      expect(currentLabel(workspace)).toBe('Three');
+    });
+
+    /** Exactly one at a time, or the sidebar claims the reader is in two places. */
+    it('marks only one item', () => {
+      const { workspace, view } = mount(DOC);
+
+      scrollTopLineTo(view, 5);
+
+      expect(workspace.querySelectorAll('.outline__item[aria-current]')).toHaveLength(1);
+    });
+
+    /**
+     * `aria-current`, not a class: the visible state and the announced one come
+     * from one attribute, so a screen-reader user is told which section they are
+     * in rather than left to infer it from a colour.
+     */
+    it('says which section it is through ARIA', () => {
+      const { workspace, view } = mount(DOC);
+
+      scrollTopLineTo(view, 4);
+
+      expect(
+        workspace.querySelector('.outline__item[aria-current]')?.getAttribute('aria-current'),
+      ).toBe('location');
+    });
+
+    /** Prose above the first heading is in no section at all. */
+    it('marks nothing above the first heading', () => {
+      const { workspace, view } = mount(['intro', '', '# One', 'body'].join(NL));
+
+      scrollTopLineTo(view, 1);
+
+      expect(currentLabel(workspace)).toBeNull();
+    });
+
+    /**
+     * A rebuilt list carries no marks, so the cached index has to be discarded
+     * with it -- otherwise the highlight vanishes on the next edit and does not
+     * come back until the user scrolls across a boundary.
+     */
+    it('keeps the mark when an edit rebuilds the list', () => {
+      const { workspace, view } = mount(DOC);
+      scrollTopLineTo(view, 4);
+      expect(currentLabel(workspace)).toBe('Two');
+
+      view.dispatch({ changes: { from: view.state.doc.length, insert: `${NL}## Four` } });
+
+      expect(currentLabel(workspace)).toBe('Two');
+    });
+
+    /**
+     * The editor's scroller outlives the sidebar, so this listener is the one
+     * real leak in the module -- and it is invisible from the DOM once the
+     * sidebar is gone. Asserting "nothing threw" cannot see it: `querySelector`
+     * on a detached nav is perfectly happy. So this watches the registration
+     * itself, which is the only observable difference.
+     */
+    it('takes its scroll listener off the editor when destroyed', () => {
+      const seeded = seed(DOC);
+      const added: EventListenerOrEventListenerObject[] = [];
+      const removed: EventListenerOrEventListenerObject[] = [];
+      const realAdd = seeded.view.scrollDOM.addEventListener.bind(seeded.view.scrollDOM);
+      const realRemove = seeded.view.scrollDOM.removeEventListener.bind(seeded.view.scrollDOM);
+      seeded.view.scrollDOM.addEventListener = ((
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+      ) => {
+        if (type === 'scroll') added.push(listener);
+        realAdd(type, listener, options);
+      }) as typeof seeded.view.scrollDOM.addEventListener;
+      seeded.view.scrollDOM.removeEventListener = ((
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | EventListenerOptions,
+      ) => {
+        if (type === 'scroll') removed.push(listener);
+        realRemove(type, listener, options);
+      }) as typeof seeded.view.scrollDOM.removeEventListener;
+
+      mountOutline(seeded.workspace, seeded.view).destroy();
+
+      expect(added).toHaveLength(1);
+      expect(removed).toEqual(added);
     });
   });
 

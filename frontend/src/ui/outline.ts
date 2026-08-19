@@ -193,6 +193,39 @@ export function buildOutline(
   return nav;
 }
 
+/**
+ * Which heading the given source line falls under -- the last one at or before
+ * it -- or `-1` for a line above the first heading, where the document is in no
+ * section at all.
+ *
+ * A linear scan rather than a binary search. The list is short (a long document
+ * runs to tens of headings, not thousands) and this runs on scroll, where the
+ * cost that matters is the DOM write the caller then skips, not the compare.
+ */
+export function activeHeadingIndex(headings: readonly Heading[], line: number): number {
+  let active = -1;
+  for (let i = 0; i < headings.length; i++) {
+    if (headings[i]!.line > line) break;
+    active = i;
+  }
+  return active;
+}
+
+/**
+ * Marks one item as the section being read, and unmarks the rest.
+ *
+ * `aria-current="location"` rather than a class alone: that value is exactly
+ * what ARIA defines for "the current item within a set", so a screen-reader user
+ * is told which section they are in rather than left to infer it from a colour.
+ * The stylesheet hangs off the same attribute, so the two cannot disagree.
+ */
+export function setActiveHeading(nav: HTMLElement, index: number): void {
+  nav.querySelectorAll<HTMLElement>('.outline__item').forEach((item, i) => {
+    if (i === index) item.setAttribute('aria-current', 'location');
+    else item.removeAttribute('aria-current');
+  });
+}
+
 export interface OutlineHandle {
   destroy(): void;
 }
@@ -215,6 +248,10 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
    * paragraph, which is most typing, changes nothing about the list.
    */
   let signature = '';
+  /** The rendered list, kept so the scroll handler need not rescan the document. */
+  let headings: Heading[] = [];
+  /** Index of the highlighted item, or -1 above the first heading. */
+  let active = -1;
 
   const column = document.createElement('div');
   column.className = 'outline-column';
@@ -231,8 +268,19 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
     return doc === null ? [] : outlineHeadings(doc.editorState.doc);
   }
 
+  /**
+   * Joins the flattened list. A newline cannot occur inside a heading -- every
+   * one of them is a single source line -- so it cannot shift a boundary and
+   * make two different lists compare equal.
+   *
+   * Spelled out rather than inlined because an earlier version of this line was
+   * written with a stray NUL as the separator. It worked, and every gate passed,
+   * and the file read as binary to `grep`.
+   */
+  const SEPARATOR = String.fromCharCode(10);
+
   function signatureOf(headings: readonly Heading[]): string {
-    return headings.map((h) => `${h.line}:${h.level}:${h.text}`).join(' ');
+    return headings.map((h) => `${h.line}:${h.level}:${h.text}`).join(SEPARATOR);
   }
 
   /**
@@ -258,8 +306,45 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
     view.focus();
   }
 
+  /**
+   * The source line at the top of the editor's viewport.
+   *
+   * `lineBlockAtHeight` measures in the document's own coordinate space, whose
+   * origin sits at `documentTop` on screen, while the top of what the user can
+   * see is the scroller's own screen top -- the difference between those two is
+   * the whole conversion. `preview/pane.ts` does the same sum for scroll sync
+   * and is *not* shared with: it needs a fractional line and a clamp against
+   * CodeMirror's estimated gap blocks, and this needs neither. Two callers of
+   * one three-line conversion, with different requirements, is not an
+   * abstraction worth the coupling -- especially as that module is lazily
+   * loaded and this one must not pull it in.
+   */
+  function topSourceLine(): number {
+    const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
+    const block = view.lineBlockAtHeight(height);
+    return view.state.doc.lineAt(block.from).number;
+  }
+
+  /**
+   * SPEC §6.9's "current section highlighted as you scroll".
+   *
+   * Only touches the DOM when the answer changes, which on a scroll through one
+   * long section is almost never -- the scan itself is a few compares over a
+   * short list, and the write is what would cost something.
+   */
+  function refreshActive(): void {
+    const next = activeHeadingIndex(headings, topSourceLine());
+    if (next === active) return;
+    active = next;
+    setActiveHeading(nav, active);
+    // `nearest`, so an item already visible is left where it is. Anything
+    // stronger would yank the sidebar on every section boundary while the user
+    // is reading, which is worse than not following at all.
+    nav.querySelectorAll('.outline__item')[active]?.scrollIntoView({ block: 'nearest' });
+  }
+
   function render(): HTMLElement {
-    const headings = headingsNow();
+    headings = headingsNow();
     signature = signatureOf(headings);
     return buildOutline(headings, goTo);
   }
@@ -268,13 +353,21 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
   column.append(nav, resizer);
 
   function refresh(): void {
-    const headings = headingsNow();
-    const next = signatureOf(headings);
-    if (next === signature) return;
-    const rebuilt = buildOutline(headings, goTo);
-    nav.replaceWith(rebuilt);
-    nav = rebuilt;
-    signature = next;
+    const scanned = headingsNow();
+    const next = signatureOf(scanned);
+    // The active *index* can move even when the list does not -- typing above a
+    // heading pushes every line down -- so this runs either way.
+    if (next !== signature) {
+      headings = scanned;
+      signature = next;
+      const rebuilt = buildOutline(headings, goTo);
+      nav.replaceWith(rebuilt);
+      nav = rebuilt;
+      // A freshly built list carries no marks, so the cached index would make
+      // `refreshActive` below decide nothing had changed and skip the write.
+      active = -1;
+    }
+    refreshActive();
   }
 
   function applyWidth(width: number): void {
@@ -354,9 +447,15 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
   // unrelated `setState` hands back the same object and does not.
   const unsubscribe = store.subscribe((state) => activeDocument(state), refresh);
 
+  // The editor's scroller outlives this sidebar, so unlike the elements above
+  // this listener is a real leak if `destroy` forgets it.
+  view.scrollDOM.addEventListener('scroll', refreshActive, { passive: true });
+  refreshActive();
+
   return {
     destroy(): void {
       unsubscribe();
+      view.scrollDOM.removeEventListener('scroll', refreshActive);
       endDrag?.();
       if (saveTimer !== null) {
         clearTimeout(saveTimer);
