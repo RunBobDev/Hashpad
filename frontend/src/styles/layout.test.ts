@@ -117,6 +117,21 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
+   * The find panel's second row. Hidden until Ctrl+H asks for it, because
+   * Ctrl+F is much the commoner case and a replace field nobody asked for is a
+   * second thing to read past every time you look for a word.
+   *
+   * `display: none` and not `visibility`/`height`: a hidden row has to be out of
+   * the tab order and out of the accessibility tree, not merely invisible. And
+   * it is asserted here rather than in `findreplace.test.ts` because jsdom loads
+   * no stylesheet -- a test there can see the class, never what the class does.
+   */
+  it('the replace row is hidden until the panel is replacing', () => {
+    expect(rule('.findbar__row--replace')).toMatch(/display:\s*none\s*;/);
+    expect(rule('.findbar--replacing .findbar__row--replace')).toMatch(/display:\s*flex\s*;/);
+  });
+
+  /**
    * The pane is what scrolls when its content is too wide, so its own overflow
    * must stay `auto`. `hidden` here would clip the same text with no scrollbar
    * -- the symptom this whole file is about, reached by a different route.

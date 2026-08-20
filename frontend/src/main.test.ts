@@ -626,7 +626,7 @@ describe('the encoding and line-ending commands', () => {
  * editor; this is the menu's way to the same command, and the only part of the
  * find feature that lives in main.ts.
  */
-describe('the Find menu item', () => {
+describe('the Find and Replace menu items', () => {
   it('opens the find panel', () => {
     expect(document.querySelector('.findbar')).toBeNull();
 
@@ -635,6 +635,14 @@ describe('the Find menu item', () => {
     expect(document.querySelector('.findbar')).not.toBeNull();
     // Put it away again: main.ts is a module singleton shared by this file, and
     // a panel left open changes what the next test sees.
+    document.querySelector<HTMLButtonElement>('.findbar__close')!.click();
+  });
+
+  it('opens it with the replace row from Edit > Replace', () => {
+    emit('edit.replace');
+
+    const bar = document.querySelector('.findbar')!;
+    expect(bar.classList.contains('findbar--replacing')).toBe(true);
     document.querySelector<HTMLButtonElement>('.findbar__close')!.click();
   });
 });

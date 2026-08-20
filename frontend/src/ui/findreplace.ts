@@ -1,5 +1,5 @@
 /**
- * Find (SPEC §6.7's Ctrl+F half; replace is G.4b).
+ * Find and replace (SPEC §6.7).
  *
  * Built on `@codemirror/search`, which SPEC names, with **our own panel**: the
  * spec asks for it "styled to match the app rather than left at its defaults",
@@ -21,6 +21,9 @@ import {
   findNext,
   findPrevious,
   getSearchQuery,
+  openSearchPanel,
+  replaceAll,
+  replaceNext,
   SearchQuery,
   setSearchQuery,
 } from '@codemirror/search';
@@ -199,6 +202,56 @@ export function buildFindPanel(view: EditorView): Panel {
   const close = action('×', 'Close find', closeSearchPanel);
   close.classList.add('findbar__close');
 
+  const replaceInput = document.createElement('input');
+  replaceInput.className = 'findbar__input findbar__replace';
+  replaceInput.type = 'text';
+  replaceInput.placeholder = 'Replace';
+  replaceInput.setAttribute('aria-label', 'Replace with');
+
+  /**
+   * Replace, made to work on the first click.
+   *
+   * `replaceNext` only replaces when the selection is *exactly* a match; with
+   * the caret anywhere else it merely moves to the next one. Typing a query and
+   * clicking Replace leaves the caret wherever it was, so the button would do
+   * nothing visible the first time and replace on the second -- and the same for
+   * Enter in the replace field.
+   *
+   * Stepping to a match first makes one click mean one replacement. The count is
+   * capped and this runs on a click rather than a keystroke, so walking the
+   * document to ask "are we on a match" is affordable here in a way it would not
+   * be on the typing path.
+   */
+  function replaceCurrent(target: EditorView): boolean {
+    if (countMatches(target.state, getSearchQuery(target.state)).current === 0) findNext(target);
+    return replaceNext(target);
+  }
+
+  const replaceOne = action('Replace', 'Replace this match', replaceCurrent);
+  const replaceEvery = action('Replace All', 'Replace every match', replaceAll);
+  replaceOne.classList.add('findbar__wide');
+  replaceEvery.classList.add('findbar__wide');
+
+  replaceInput.addEventListener('input', () => {
+    apply(withChange(currentQuery(), { replace: replaceInput.value }));
+  });
+
+  replaceInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      // Enter in the *replace* field replaces, rather than searching on -- which
+      // is what every editor with this bar does, and the only reading of Enter
+      // here that is not just "the find field, but further away".
+      replaceCurrent(view);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSearchPanel(view);
+      view.focus();
+    }
+  });
+
   input.addEventListener('input', () => {
     apply(withChange(currentQuery(), { search: input.value }));
   });
@@ -218,12 +271,24 @@ export function buildFindPanel(view: EditorView): Panel {
     }
   });
 
-  dom.append(input, count, previous, next, ...toggles.map((t) => t.button), close);
+  // Two rows, and the second is hidden until Ctrl+H asks for it. Ctrl+F is the
+  // common case by a wide margin, and a replace field nobody asked for is a
+  // second thing to read past every time you look for a word.
+  const findRow = document.createElement('div');
+  findRow.className = 'findbar__row';
+  findRow.append(input, count, previous, next, ...toggles.map((t) => t.button), close);
+
+  const replaceRow = document.createElement('div');
+  replaceRow.className = 'findbar__row findbar__row--replace';
+  replaceRow.append(replaceInput, replaceOne, replaceEvery);
+
+  dom.append(findRow, replaceRow);
 
   /** Pushes the search state into the DOM. The panel never holds its own copy. */
   function sync(): void {
     const query = currentQuery();
     if (input.value !== query.search) input.value = query.search;
+    if (replaceInput.value !== query.replace) replaceInput.value = query.replace;
     for (const { toggle, button } of toggles) {
       button.setAttribute('aria-pressed', query[toggle.key] ? 'true' : 'false');
     }
@@ -260,4 +325,39 @@ export function buildFindPanel(view: EditorView): Panel {
       if (update.docChanged || update.selectionSet || update.transactions.length > 0) sync();
     },
   };
+}
+
+/** The class that reveals the replace row; also how `openReplacePanel` asks. */
+const REPLACING = 'findbar--replacing';
+
+/**
+ * Ctrl+H: open the panel with the replace row showing, and put the cursor in it.
+ *
+ * A `Command`, so it slots into the keymap beside `openSearchPanel` and returns
+ * the same "I handled this" boolean.
+ *
+ * Whether the replace row is showing is held as a class on the panel rather than
+ * as editor state, and that is a deliberate limit rather than an oversight. It
+ * is a property of *this panel instance* -- CodeMirror throws the panel away on
+ * close and builds a fresh one on open, so "showing" cannot outlive it anyway,
+ * and a `StateField` would be modelling a lifetime the DOM already owns. The
+ * cost is that reopening with Ctrl+F shows the find row alone, which is what
+ * every editor with this bar does.
+ *
+ * `openSearchPanel` first: it creates the panel when there is none, and the
+ * panel plugin builds it synchronously inside that dispatch, so the DOM below is
+ * there by the time this reads it. When one is already open it focuses the find
+ * field -- which is why the replace field is focused *after*, not before.
+ */
+export function openReplacePanel(view: EditorView): boolean {
+  openSearchPanel(view);
+
+  const bar = view.dom.querySelector<HTMLElement>('.findbar');
+  if (bar === null) return false;
+
+  bar.classList.add(REPLACING);
+  const replaceInput = bar.querySelector<HTMLInputElement>('.findbar__replace');
+  replaceInput?.focus();
+  replaceInput?.select();
+  return true;
 }

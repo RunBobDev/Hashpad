@@ -221,7 +221,10 @@ body {
  */
 .findbar {
   display: flex;
-  align-items: center;
+  /* A column of rows now that replace exists: the second is hidden until
+     Ctrl+H asks for it, so Ctrl+F -- much the commoner case -- still gets one
+     line rather than a replace field nobody asked for. */
+  flex-direction: column;
   gap: 4px;
   padding: 4px 8px;
   background: var(--bg-app);
@@ -230,6 +233,23 @@ body {
   /* --size-ui, not --size-editor: this is chrome, so Ctrl+scroll must not
      scale it even though it sits inside the editor's DOM. */
   font-size: var(--size-ui);
+}
+
+.findbar__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Revealed by `openReplacePanel` adding `findbar--replacing`. `display: none`
+   rather than visibility or height: a hidden row must be out of the tab order
+   and out of the accessibility tree, not merely invisible. */
+.findbar__row--replace {
+  display: none;
+}
+
+.findbar--replacing .findbar__row--replace {
+  display: flex;
 }
 
 .findbar__input {
@@ -265,6 +285,13 @@ body {
   color: var(--fg-secondary);
   font: inherit;
   cursor: default;
+}
+
+/* Replace and Replace All are words, not glyphs, so they need room the 24px
+   square buttons beside the find field do not. */
+.findbar__wide {
+  min-width: auto;
+  padding: 0 10px;
 }
 
 .findbar__toggle:hover,

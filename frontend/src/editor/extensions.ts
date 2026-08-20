@@ -14,7 +14,7 @@ import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
-import { buildFindPanel } from '../ui/findreplace';
+import { buildFindPanel, openReplacePanel } from '../ui/findreplace';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
 import { statusOf } from '../state/document';
@@ -219,6 +219,7 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
         // dispatches `edit.find`, which main.ts turns back into this command --
         // one implementation, two triggers, the same as every format command.
         { key: 'Mod-f', run: openSearchPanel },
+        { key: 'Mod-h', run: openReplacePanel },
         { key: 'Mod-g', run: findNext, shift: findPrevious },
         // F3 is the Windows convention and Notepad's own binding; SPEC §6.14
         // says match it wherever one exists.

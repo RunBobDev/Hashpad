@@ -662,10 +662,9 @@ rather than living in a row.
 - [ ] **Maximise and restore.** The strips are fixed to the viewport, so they
       should follow without leaving a dead band.
 
-## Checkpoint G.4a — find
+## Checkpoint G.4 — find and replace
 
-SPEC §6.7's Ctrl+F half. Replace (Ctrl+H) is G.4b and is deliberately not here
-yet; the Edit menu still shows it disabled.
+SPEC §6.7, both halves. G.4a was find; G.4b added the replace row.
 
 Built on `@codemirror/search`, which SPEC names, with our own panel through
 `createPanel` -- both because the spec asks for it styled to match the app and
@@ -703,3 +702,26 @@ highlighting or scrolling is covered by a test.
       into view.
 - [ ] **Open find, switch tabs, come back.** The search state belongs to the
       editor, so behaviour here is worth a look either way.
+
+### G.4b — replace
+
+- [ ] **Ctrl+H opens the panel with the replace row and the cursor in it**, from
+      closed *and* from an already-open find bar. Edit > Replace does the same.
+- [ ] **Ctrl+F alone never shows the replace row.** It is the commoner case and
+      should stay one line.
+- [ ] **Replace works on the first click.** Type a query, type a replacement,
+      click Replace once -- one match should change. CodeMirror's own
+      `replaceNext` only replaces when the caret is already exactly on a match,
+      so a first click that does nothing visible is that guard regressing.
+- [ ] **Replace All changes every match and nothing else.**
+- [ ] **Enter in the replace field replaces**; Enter in the find field still
+      searches on.
+- [ ] **One Ctrl+Z undoes a Replace All** -- the whole thing, not one match at a
+      time.
+- [ ] **The toggles apply to replacing too.** Turn on `Aa` and Replace All
+      against mixed case; only the exact-case matches should change.
+- [ ] **Regex replace with a capture group.** With `.*` on, replace `(\w+)@(\w+)`
+      by `$2:$1` and check the groups land the right way round -- this is
+      CodeMirror's substitution syntax, not ours, and nothing in `src/` tests it.
+- [ ] **Replace All on a large file** stays responsive, and Escape still closes.
+- [ ] **Both rows read correctly in dark mode**, and the buttons' hover states.

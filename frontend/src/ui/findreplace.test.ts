@@ -17,8 +17,9 @@ import {
   searchPanelOpen,
   setSearchQuery,
 } from '@codemirror/search';
+import { undo } from '@codemirror/commands';
 import { buildExtensions } from '../editor/extensions';
-import { countMatches, matchLabel } from './findreplace';
+import { countMatches, matchLabel, openReplacePanel } from './findreplace';
 
 const NL = String.fromCharCode(10);
 const views: EditorView[] = [];
@@ -367,5 +368,195 @@ describe('the find panel', () => {
     view.dispatch({ changes: { from: view.state.doc.length, insert: ' one' } });
 
     expect(countText(view)).toBe('2 matches');
+  });
+});
+
+describe('replace', () => {
+  function replaceField(view: EditorView): HTMLInputElement {
+    return panel(view).querySelector<HTMLInputElement>('.findbar__replace')!;
+  }
+
+  function button(view: EditorView, label: string): HTMLButtonElement {
+    const found = [...panel(view).querySelectorAll<HTMLButtonElement>('.findbar__action')].find(
+      (b) => b.textContent === label,
+    );
+    expect(found, `there should be a ${label} button`).toBeDefined();
+    return found!;
+  }
+
+  /** Types into the replace field the way a user does. */
+  function typeReplacement(view: EditorView, text: string): void {
+    const input = replaceField(view);
+    input.value = text;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function openWithReplace(doc: string): EditorView {
+    const view = editor(doc);
+    openReplacePanel(view);
+    return view;
+  }
+
+  /**
+   * Ctrl+F is much the commoner case, and a replace field nobody asked for is a
+   * second thing to read past every time you look for a word -- so the row is
+   * there but hidden, which is what every editor with this bar does.
+   */
+  it('hides the replace row until Ctrl+H asks for it', () => {
+    const view = open('one two');
+
+    expect(panel(view).classList.contains('findbar--replacing')).toBe(false);
+
+    openReplacePanel(view);
+
+    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
+  });
+
+  /** Ctrl+H, from inside the editor, the way the user reaches it. */
+  it('opens from Ctrl+H', () => {
+    const view = editor('one two');
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'h', keyCode: 72, ctrlKey: true, cancelable: true }),
+    );
+
+    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
+  });
+
+  /**
+   * The panel is a view of the search state, never a second copy -- the replace
+   * text included. Nothing sets it from outside today, but the find field is
+   * already held to this and the two must not drift apart.
+   */
+  it('follows the replace text when it is set from outside', () => {
+    const view = openWithReplace('one two');
+
+    view.dispatch({
+      effects: setSearchQuery.of(new SearchQuery({ search: 'one', replace: 'FROM_OUTSIDE' })),
+    });
+
+    expect(replaceField(view).value).toBe('FROM_OUTSIDE');
+  });
+
+  it('opens the panel from closed and shows replace in one press', () => {
+    const view = editor('one two');
+    expect(view.dom.querySelector('.findbar')).toBeNull();
+
+    openReplacePanel(view);
+
+    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
+  });
+
+  /**
+   * `openSearchPanel` focuses the *find* field, so the replace field has to be
+   * focused after it -- Ctrl+H means "I want to replace", and landing in the
+   * find box would make the second keystroke go to the wrong place.
+   */
+  it('puts the cursor in the replace field', () => {
+    const view = openWithReplace('one two');
+
+    expect(document.activeElement).toBe(replaceField(view));
+  });
+
+  it('puts what is typed into the query’s replace text', () => {
+    const view = openWithReplace('one two');
+
+    typeReplacement(view, 'THREE');
+
+    expect(getSearchQuery(view.state).replace).toBe('THREE');
+  });
+
+  it('replaces the current match and leaves the rest', () => {
+    const view = openWithReplace('one two one');
+    type(view, 'one');
+    typeReplacement(view, 'X');
+
+    button(view, 'Replace').click();
+
+    expect(view.state.doc.toString()).toBe('X two one');
+  });
+
+  it('replaces every match at once', () => {
+    const view = openWithReplace('one two one three one');
+    type(view, 'one');
+    typeReplacement(view, 'X');
+
+    button(view, 'Replace All').click();
+
+    expect(view.state.doc.toString()).toBe('X two X three X');
+  });
+
+  /** Enter in the replace field replaces; it does not search on. */
+  it('replaces on Enter in the replace field', () => {
+    const view = openWithReplace('one two one');
+    type(view, 'one');
+    typeReplacement(view, 'X');
+
+    replaceField(view).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+
+    expect(view.state.doc.toString()).toBe('X two one');
+  });
+
+  it('closes on Escape from the replace field', () => {
+    const view = openWithReplace('one two');
+
+    replaceField(view).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+
+    expect(view.dom.querySelector('.findbar')).toBeNull();
+  });
+
+  /**
+   * The toggles rebuild the query from the old one, so a dropped field would
+   * clear the replacement the user had already typed -- `withChange` carries
+   * `replace` for exactly this.
+   */
+  it('keeps the replacement when a toggle is flipped', () => {
+    const view = openWithReplace('One one');
+    type(view, 'one');
+    typeReplacement(view, 'X');
+
+    panel(view).querySelector<HTMLButtonElement>('[data-toggle="caseSensitive"]')!.click();
+
+    expect(getSearchQuery(view.state).replace).toBe('X');
+    expect(replaceField(view).value).toBe('X');
+  });
+
+  /** The toggles apply to replacing too, not only to counting. */
+  it('respects match case when replacing all', () => {
+    const view = openWithReplace('One one one');
+    type(view, 'one');
+    typeReplacement(view, 'X');
+    panel(view).querySelector<HTMLButtonElement>('[data-toggle="caseSensitive"]')!.click();
+
+    button(view, 'Replace All').click();
+
+    expect(view.state.doc.toString()).toBe('One X X');
+  });
+
+  /** A replacement is an edit like any other, so one Ctrl+Z must undo it. */
+  it('is undoable in one step', () => {
+    const view = openWithReplace('one two one');
+    type(view, 'one');
+    typeReplacement(view, 'X');
+    button(view, 'Replace All').click();
+    expect(view.state.doc.toString()).toBe('X two X');
+
+    undo(view);
+
+    expect(view.state.doc.toString()).toBe('one two one');
+  });
+
+  it('does nothing to the document when there are no matches', () => {
+    const view = openWithReplace('one two');
+    type(view, 'zzz');
+    typeReplacement(view, 'X');
+
+    button(view, 'Replace All').click();
+
+    expect(view.state.doc.toString()).toBe('one two');
   });
 });
