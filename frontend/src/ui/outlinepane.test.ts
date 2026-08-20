@@ -194,6 +194,51 @@ describe('mountOutline', () => {
   });
 
   /**
+   * The reason the highlight was landing one section early, and the half of it
+   * jsdom can still see.
+   *
+   * `yMargin` defaults to **5**, and `scrollRectIntoView` computes
+   * `targetTop = rect.top - yMargin` for the `'start'` strategy -- so the heading
+   * lands five pixels below the viewport top, putting the viewport's own top
+   * five pixels *above* the heading and inside the previous block. The
+   * highlight, which is derived from where the viewport ended up rather than
+   * from the click, then reads the section before.
+   *
+   * jsdom cannot scroll, so what is asserted is the request rather than its
+   * effect: the effect's `ScrollTarget` carries the margin, and it must be zero.
+   * Found by reading `@codemirror/view`'s source after two fixes reasoned from
+   * the wrong mechanism -- the manual check in docs/testing.md is what confirms
+   * the real thing.
+   */
+  it('asks for the heading at the very top, with no margin', () => {
+    const { workspace, view } = mount(`# One${NL}body${NL}## Two${NL}body`);
+    const targets: { y: unknown; yMargin: unknown }[] = [];
+    const realDispatch = view.dispatch.bind(view);
+    view.dispatch = ((...specs: Parameters<typeof view.dispatch>) => {
+      for (const spec of specs) {
+        const effects = (spec as { effects?: unknown }).effects;
+        for (const effect of Array.isArray(effects) ? effects : [effects]) {
+          // Duck-typed: the effect *type* CodeMirror uses for this is module
+          // private, so there is no `.is()` to ask. A `ScrollTarget` is the only
+          // effect value in this app carrying a `yMargin`.
+          const value = (effect as { value?: { y?: unknown; yMargin?: number } } | undefined)?.value;
+          if (value !== undefined && typeof value.yMargin === 'number') {
+            targets.push({ y: value.y, yMargin: value.yMargin });
+          }
+        }
+      }
+      realDispatch(...specs);
+    }) as typeof view.dispatch;
+
+    items(workspace)[1]!.click();
+
+    // `'start'` as well as the margin: with `'nearest'` a heading already just
+    // barely on screen would not move at all, so the viewport would stay in the
+    // previous section and the highlight would never reach the clicked one.
+    expect(targets).toEqual([{ y: 'start', yMargin: 0 }]);
+  });
+
+  /**
    * The list describes the last render and an edit can outrun it, so a click on
    * a heading whose line no longer exists is reachable -- and `doc.line` throws
    * for a line outside the document, which inside a click handler would take

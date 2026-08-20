@@ -314,6 +314,17 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
    * `y: 'start'` rather than the default `'nearest'`, because a heading already
    * just barely on screen should still travel to the top -- that is what "go to
    * this section" means.
+   *
+   * **`yMargin: 0` is load-bearing, not tidiness.** It defaults to 5, and
+   * `scrollRectIntoView` computes `targetTop = rect.top - yMargin` for the
+   * `'start'` strategy -- so the heading lands five pixels *below* the top of
+   * the viewport, which puts the viewport's own top five pixels *above* the
+   * heading, inside the previous block. `refreshActive` then reads the section
+   * before the one just clicked, and highlights it. Reported by the owner, twice:
+   * the jump was always right, because the jump is this dispatch, while the
+   * highlight is derived separately from where the viewport ended up. With no
+   * margin the two agree exactly, and `BOUNDARY_NUDGE` handles the boundary they
+   * then land on.
    */
   function goTo(line: number): void {
     const doc = view.state.doc;
@@ -324,7 +335,7 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
     const pos = doc.line(line).from;
     view.dispatch({
       selection: { anchor: pos },
-      effects: EditorView.scrollIntoView(pos, { y: 'start' }),
+      effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 0 }),
     });
     view.focus();
   }
