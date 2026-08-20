@@ -661,3 +661,40 @@ rather than living in a row.
       scrollable rather than clipped. Same for the toolbar's `···` overflow menu.
 - [ ] **Maximise and restore.** The strips are fixed to the viewport, so they
       should follow without leaving a dead band.
+
+## Checkpoint G.4a — find
+
+SPEC §6.7's Ctrl+F half. Replace (Ctrl+H) is G.4b and is deliberately not here
+yet; the Edit menu still shows it disabled.
+
+Built on `@codemirror/search`, which SPEC names, with our own panel through
+`createPanel` -- both because the spec asks for it styled to match the app and
+because match highlighting is gated on CodeMirror's panel being open.
+
+jsdom has no layout and cannot paint, so nothing below about appearance,
+highlighting or scrolling is covered by a test.
+
+- [ ] **Ctrl+F opens it with the cursor already in the box**, and Edit > Find
+      does the same. Then Escape closes it and the caret returns to the text.
+- [ ] **Every match is highlighted in the document**, and the current one
+      differently from the rest. This is the part that would have been silently
+      lost by rendering the panel outside CodeMirror's panel slot.
+- [ ] **Enter walks forward, Shift+Enter back, and both wrap** at the ends. F3
+      and Ctrl+G do the same from inside the editor.
+- [ ] **The count reads sensibly** -- "3 of 12" once you are on a match, "12
+      matches" before you have moved to one, "1 match", "No results", and
+      "999+ matches" in a document with more than that (try searching for `e`).
+- [ ] **A half-typed regex says "Bad pattern"** rather than "No results": turn
+      the `.*` toggle on and type `(`.
+- [ ] **The three toggles change what matches** and look engaged when on, in
+      both themes. Check `Aa` against a mixed-case word, `ab` against a word
+      that is also a prefix of another, and `.*` with something like `c.t`.
+- [ ] **Ctrl+A inside the find box selects the box's text**, not the whole
+      document. The box is the app's first text field, and the shortcut
+      forwarder had to learn to leave text fields alone.
+- [ ] **The panel does not scale with Ctrl+scroll** -- it is chrome, even though
+      it lives inside the editor's DOM.
+- [ ] **Scroll to a match far down a long document.** The editor should bring it
+      into view.
+- [ ] **Open find, switch tabs, come back.** The search state belongs to the
+      editor, so behaviour here is worth a look either way.

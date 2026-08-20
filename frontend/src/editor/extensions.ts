@@ -6,6 +6,7 @@ import {
   keymap,
 } from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import { findNext, findPrevious, openSearchPanel, search } from '@codemirror/search';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { Compartment } from '@codemirror/state';
@@ -13,6 +14,7 @@ import { blockquoteLines } from './blockquote';
 import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
+import { buildFindPanel } from '../ui/findreplace';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
 import { statusOf } from '../state/document';
@@ -190,6 +192,13 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
     // on the live view without rebuilding the state, which would throw away the
     // undo history and the selection.
     wordWrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
+    /**
+     * SPEC §6.7 names this package. The panel is ours (`ui/findreplace.ts`):
+     * the spec asks for it styled to match the app, and match highlighting is
+     * gated on CodeMirror's panel being open, so a panel rendered elsewhere in
+     * the chrome would have silently cost the highlights.
+     */
+    search({ top: true, createPanel: buildFindPanel }),
     // High precedence so these file-command shortcuts always win, regardless
     // of what defaultKeymap does or gains in a future CodeMirror version.
     Prec.high(
@@ -202,6 +211,18 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
         { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },
         { key: 'Mod-Shift-p', run: dispatchCommand('view.preview') },
         { key: 'Mod-Shift-o', run: dispatchCommand('view.outline') },
+        // Find (SPEC §6.7, §6.14). These are `@codemirror/search`'s own
+        // commands rather than `hashpad:command` ids: they act on the editor's
+        // search state and nothing outside the editor has an opinion about
+        // them, so routing them through the bus would add a hop that only
+        // main.ts would ever unwrap. The Edit menu goes the other way and
+        // dispatches `edit.find`, which main.ts turns back into this command --
+        // one implementation, two triggers, the same as every format command.
+        { key: 'Mod-f', run: openSearchPanel },
+        { key: 'Mod-g', run: findNext, shift: findPrevious },
+        // F3 is the Windows convention and Notepad's own binding; SPEC §6.14
+        // says match it wherever one exists.
+        { key: 'F3', run: findNext, shift: findPrevious },
         // Ctrl-Tab/Ctrl-Shift-Tab, spelled with the literal Ctrl- modifier
         // rather than Mod-, because SPEC §6.2 fixes this as a Windows-style
         // chord on every platform, not "whatever this OS calls its primary

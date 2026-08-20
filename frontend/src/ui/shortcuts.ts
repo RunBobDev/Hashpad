@@ -40,6 +40,29 @@ function isChord(event: KeyboardEvent): boolean {
 }
 
 /**
+ * Whether the event came from somewhere the user is typing.
+ *
+ * The find panel (G.4a) is the first text field in the app, and it lives inside
+ * `.cm-editor` but *outside* `contentDOM` -- so it falls straight through the
+ * guard below and every chord typed in it would be forwarded to the editor.
+ * Ctrl+A in the find field would select the whole document instead of the
+ * field's own text.
+ *
+ * Deliberately not written until there was a field to need it: until G.4a the
+ * app had no text input anywhere, and a guard for a case that cannot arise is
+ * a guard no test can justify.
+ */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  // Tag names only, deliberately. `isContentEditable` was here too and is gone:
+  // the one contenteditable in this app is CodeMirror's own `contentDOM`, which
+  // the guard above already excludes, so the branch was unreachable -- and
+  // unfalsifiable, since jsdom does not implement the property at all and the
+  // test for it passed whether the branch was there or not.
+  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+}
+
+/**
  * Wires the fallback and returns a teardown.
  *
  * Three things are deliberately left alone:
@@ -51,6 +74,9 @@ function isChord(event: KeyboardEvent): boolean {
  *   `showModal()`, which puts focus in the top layer, outside `contentDOM` --
  *   so without this, Ctrl+S while the Save/Don't Save prompt is up would start
  *   a save behind the prompt that is asking about it.
+ * - **A text field.** The find panel sits inside `.cm-editor` but outside
+ *   `contentDOM`, so it lands here -- and Ctrl+A there means "select what I have
+ *   typed", not "select the whole document".
  * - **Anything the keymap does not claim.** `runScopeHandlers` returns false
  *   for an unbound chord, and the browser's own default is then left intact.
  */
@@ -58,6 +84,7 @@ export function mountShortcuts(view: EditorView, target: Window = window): () =>
   const onKeyDown = (event: KeyboardEvent): void => {
     if (!isChord(event)) return;
     if (view.contentDOM.contains(event.target as Node | null)) return;
+    if (isTextEntry(event.target)) return;
     if (document.querySelector('dialog[open]') !== null) return;
 
     // `runScopeHandlers` reports whether a binding claimed the key but does not

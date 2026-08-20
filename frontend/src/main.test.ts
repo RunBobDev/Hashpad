@@ -622,6 +622,24 @@ describe('the encoding and line-ending commands', () => {
 });
 
 /**
+ * Edit > Find (SPEC 6.7). The keymap binds `openSearchPanel` straight into the
+ * editor; this is the menu's way to the same command, and the only part of the
+ * find feature that lives in main.ts.
+ */
+describe('the Find menu item', () => {
+  it('opens the find panel', () => {
+    expect(document.querySelector('.findbar')).toBeNull();
+
+    emit('edit.find');
+
+    expect(document.querySelector('.findbar')).not.toBeNull();
+    // Put it away again: main.ts is a module singleton shared by this file, and
+    // a panel left open changes what the next test sees.
+    document.querySelector<HTMLButtonElement>('.findbar__close')!.click();
+  });
+});
+
+/**
  * The frameless window's resize border. `ui/windowedges.test.ts` covers what
  * each strip does; this is the half that puts them on screen at all, which
  * nothing else would notice going missing.

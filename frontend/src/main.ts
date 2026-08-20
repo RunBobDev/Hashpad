@@ -28,6 +28,7 @@ import {
 } from './files/documentops';
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
+import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountOutline, type OutlineHandle } from './ui/outline';
@@ -750,6 +751,12 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'view.statusBar':
       void setStatusBarSetting(statusBarTeardown === null);
+      break;
+    // The menu's way in. The keymap binds `openSearchPanel` directly, so this is
+    // the second trigger for the one implementation -- the same arrangement the
+    // format commands use.
+    case 'edit.find':
+      openSearchPanel(getEditorView());
       break;
     case 'view.outline':
       void setOutlineSetting(outlineHandle === null);

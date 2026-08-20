@@ -221,7 +221,8 @@ describe('mountOutline', () => {
           // Duck-typed: the effect *type* CodeMirror uses for this is module
           // private, so there is no `.is()` to ask. A `ScrollTarget` is the only
           // effect value in this app carrying a `yMargin`.
-          const value = (effect as { value?: { y?: unknown; yMargin?: number } } | undefined)?.value;
+          const value = (effect as { value?: { y?: unknown; yMargin?: number } } | undefined)
+            ?.value;
           if (value !== undefined && typeof value.yMargin === 'number') {
             targets.push({ y: value.y, yMargin: value.yMargin });
           }

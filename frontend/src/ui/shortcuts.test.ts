@@ -194,6 +194,22 @@ describe('mountShortcuts', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  /**
+   * The find panel is the app's first text field, and it sits inside
+   * `.cm-editor` but *outside* `contentDOM` -- so it falls through the
+   * editor-origin guard. Without a guard of its own, Ctrl+A there would select
+   * the whole document instead of what the user had typed into the box.
+   */
+  it.each([['INPUT'], ['TEXTAREA']])('leaves chords typed in a %s alone', (tag) => {
+    const box = document.createElement(tag.toLowerCase());
+    document.body.append(box);
+
+    const event = press('a', { ctrlKey: true }, box);
+
+    expect(commands).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('stops forwarding once torn down', () => {
     teardown();
 

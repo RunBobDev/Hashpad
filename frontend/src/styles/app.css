@@ -214,6 +214,75 @@ body {
 }
 
 /*
+ * The find panel (SPEC §6.7). Rendered by `ui/findreplace.ts` through
+ * `@codemirror/search`'s `createPanel`, so it lives inside `.cm-panels` at the
+ * top of the editor -- which is why it is styled here as app chrome rather than
+ * left at the package's own defaults, exactly as the spec asks.
+ */
+.findbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  /* --size-ui, not --size-editor: this is chrome, so Ctrl+scroll must not
+     scale it even though it sits inside the editor's DOM. */
+  font-size: var(--size-ui);
+}
+
+.findbar__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-editor);
+  color: var(--fg-primary);
+  font: inherit;
+}
+
+/* Reserves its own width so the row does not shuffle sideways as the count
+   changes from "" to "No results" to "3 of 12" on every keystroke. */
+.findbar__count {
+  flex: 0 0 auto;
+  min-width: 88px;
+  padding: 0 4px;
+  color: var(--fg-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.findbar__toggle,
+.findbar__action {
+  flex: 0 0 auto;
+  min-width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  cursor: default;
+}
+
+.findbar__toggle:hover,
+.findbar__action:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* An engaged toggle. Background *and* foreground, not colour alone (SPEC §10) --
+   and keyed off `aria-pressed` so the visible state cannot drift from the
+   announced one, the same arrangement the outline's current section uses. */
+.findbar__toggle[aria-pressed='true'] {
+  background: var(--bg-active);
+  color: var(--fg-primary);
+  font-weight: 600;
+}
+
+/*
  * The status bar (SPEC §6.1's bottom row). A sibling of `.editor-split`, not a
  * child: it spans the full window width, under the outline column Checkpoint
  * G.3 will add beside the editor as well as under the editor itself.

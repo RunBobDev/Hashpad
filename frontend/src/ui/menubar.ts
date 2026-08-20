@@ -129,7 +129,7 @@ const MENUS: Menu[] = [
     items: [
       { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: true },
       { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: true },
-      { id: 'edit.find', label: 'Find…', shortcut: 'Ctrl+F', enabled: false },
+      { id: 'edit.find', label: 'Find…', shortcut: 'Ctrl+F', enabled: true },
       { id: 'edit.replace', label: 'Replace…', shortcut: 'Ctrl+H', enabled: false },
     ],
   },
