@@ -63,7 +63,7 @@ body {
  */
 .window-edge {
   position: fixed;
-  z-index: 200;
+  z-index: var(--z-window-edge);
 }
 
 .window-edge--n,
@@ -104,7 +104,7 @@ body {
 .window-edge--sw {
   width: var(--resize-corner);
   height: var(--resize-corner);
-  z-index: 201;
+  z-index: calc(var(--z-window-edge) + 1);
 }
 
 .window-edge--ne {
@@ -205,7 +205,7 @@ body {
   margin-right: -2px;
   cursor: col-resize;
   background: transparent;
-  z-index: 1;
+  z-index: var(--z-outline-resizer);
 }
 
 .outline-resizer:hover,
@@ -285,6 +285,31 @@ body {
   color: var(--fg-secondary);
   font: inherit;
   cursor: default;
+}
+
+/* The expander. Rotates to point down when the replace row is showing, so the
+   chevron itself says which way it goes -- the same affordance every editor with
+   this bar uses. */
+.findbar__expand {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  cursor: default;
+  transition: transform 120ms ease;
+}
+
+.findbar__expand:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.findbar__expand[aria-expanded='true'] {
+  transform: rotate(90deg);
 }
 
 /* Replace and Replace All are words, not glyphs, so they need room the 24px
@@ -438,7 +463,7 @@ body {
      every item would become an unclickable window-drag handle. */
   --wails-draggable: no-drag;
   position: absolute;
-  z-index: 100;
+  z-index: var(--z-popup);
   min-width: 220px;
   padding: 4px;
   /* The window is small and these lists are not: View has nine items, the
@@ -498,7 +523,7 @@ body {
 .popup-menu {
   --wails-draggable: no-drag;
   position: absolute;
-  z-index: 100;
+  z-index: var(--z-popup);
   min-width: 200px;
   padding: 4px;
   /* The window is small and these lists are not: View has nine items, the

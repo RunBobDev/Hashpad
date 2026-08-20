@@ -125,6 +125,19 @@ function withChange(
   });
 }
 
+/** The class that reveals the replace row. */
+const REPLACING = 'findbar--replacing';
+
+/**
+ * Shows or hides the replace row, keeping the expander's `aria-expanded` in
+ * step. One function so the chevron and Ctrl+H cannot disagree about the state
+ * they both set.
+ */
+function setReplacing(bar: HTMLElement, on: boolean): void {
+  bar.classList.toggle(REPLACING, on);
+  bar.querySelector('.findbar__expand')?.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
+
 /**
  * The find panel. Handed to `search({ createPanel })`, so CodeMirror owns when
  * it exists and this owns what it looks like.
@@ -196,6 +209,29 @@ export function buildFindPanel(view: EditorView): Panel {
     });
     return button;
   }
+
+  /**
+   * The expander, and the only discoverable route to replace now that the Edit
+   * menu has one combined entry rather than two. Without it Ctrl+H would be the
+   * sole way in, which is no way in at all for someone who does not already
+   * know it -- the same reason SPEC §6.14 wants every shortcut reachable from a
+   * menu.
+   */
+  const expand = document.createElement('button');
+  expand.type = 'button';
+  expand.className = 'findbar__expand';
+  expand.textContent = '›';
+  expand.title = 'Toggle Replace';
+  expand.setAttribute('aria-label', 'Toggle Replace');
+  expand.setAttribute('aria-expanded', 'false');
+  expand.addEventListener('click', () => {
+    const on = !dom.classList.contains(REPLACING);
+    setReplacing(dom, on);
+    // Into the field it just revealed, or the click leaves the user pointing at
+    // a box they still have to reach for.
+    if (on) replaceInput.focus();
+    else input.focus();
+  });
 
   const previous = action('‹', 'Previous match', findPrevious);
   const next = action('›', 'Next match', findNext);
@@ -276,7 +312,7 @@ export function buildFindPanel(view: EditorView): Panel {
   // second thing to read past every time you look for a word.
   const findRow = document.createElement('div');
   findRow.className = 'findbar__row';
-  findRow.append(input, count, previous, next, ...toggles.map((t) => t.button), close);
+  findRow.append(expand, input, count, previous, next, ...toggles.map((t) => t.button), close);
 
   const replaceRow = document.createElement('div');
   replaceRow.className = 'findbar__row findbar__row--replace';
@@ -327,9 +363,6 @@ export function buildFindPanel(view: EditorView): Panel {
   };
 }
 
-/** The class that reveals the replace row; also how `openReplacePanel` asks. */
-const REPLACING = 'findbar--replacing';
-
 /**
  * Ctrl+H: open the panel with the replace row showing, and put the cursor in it.
  *
@@ -355,7 +388,7 @@ export function openReplacePanel(view: EditorView): boolean {
   const bar = view.dom.querySelector<HTMLElement>('.findbar');
   if (bar === null) return false;
 
-  bar.classList.add(REPLACING);
+  setReplacing(bar, true);
   const replaceInput = bar.querySelector<HTMLInputElement>('.findbar__replace');
   replaceInput?.focus();
   replaceInput?.select();

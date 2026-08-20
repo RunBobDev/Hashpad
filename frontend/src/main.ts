@@ -29,7 +29,6 @@ import {
 import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { openSearchPanel } from '@codemirror/search';
-import { openReplacePanel } from './ui/findreplace';
 import { mountShortcuts } from './ui/shortcuts';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountOutline, type OutlineHandle } from './ui/outline';
@@ -758,9 +757,6 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     // format commands use.
     case 'edit.find':
       openSearchPanel(getEditorView());
-      break;
-    case 'edit.replace':
-      openReplacePanel(getEditorView());
       break;
     case 'view.outline':
       void setOutlineSetting(outlineHandle === null);

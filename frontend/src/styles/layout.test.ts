@@ -51,6 +51,56 @@ function rule(selector: string): string {
   return expect.fail('no ' + selector + ' rule in app.css or preview.css');
 }
 
+/**
+ * The stacking order, which is the kind of thing that is only ever wrong in
+ * combination -- and was.
+ *
+ * `@codemirror/view`'s base theme puts `.cm-panels` at **300**, a number from
+ * the package rather than from us. Our menus were at 100, so with the find bar
+ * open any dropdown overlapping it was painted underneath and the overlapping
+ * rows simply disappeared. Reported by the owner. The window's resize border
+ * was at 200 and had the same problem one layer up: the find bar covered the
+ * top edge, so it could not be dragged while find was open.
+ *
+ * Both were a missing rule rather than two wrong numbers, so what is asserted
+ * here is the *order*, not the values.
+ */
+describe('the stacking order', () => {
+  /** `@codemirror/view`'s own `.cm-panels`. Not ours to set; everything above must clear it. */
+  const CODEMIRROR_PANELS = 300;
+
+  // Split rather than matched. A `new RegExp` built from a template literal
+  // needs its backslashes doubled, and the first version of this silently did
+  // not have them -- `\s` in a template literal is just `s`, so the pattern
+  // matched nothing and the test failed for a reason that had nothing to do
+  // with the stacking order. No escapes, no way to get that wrong.
+  function token(name: string): number {
+    const line = read('./variables.css')
+      .split('\n')
+      .find((candidate) => candidate.trim().startsWith(`--${name}:`));
+    expect(line, `variables.css should define --${name}`).toBeDefined();
+    return Number.parseInt(line!.split(':')[1]!.trim(), 10);
+  }
+
+  it('puts menus above CodeMirror’s editor panels', () => {
+    expect(token('z-popup')).toBeGreaterThan(CODEMIRROR_PANELS);
+  });
+
+  /** A frameless window has no OS frame -- these strips *are* its edges. */
+  it('puts the resize border above everything else', () => {
+    expect(token('z-window-edge')).toBeGreaterThan(token('z-popup'));
+    expect(token('z-window-edge')).toBeGreaterThan(CODEMIRROR_PANELS);
+  });
+
+  /** Every layer comes from the one list, so the next addition has to join it. */
+  it.each([['.menu-popup'], ['.popup-menu'], ['.window-edge']])(
+    '%s takes its layer from a token rather than a literal',
+    (selector) => {
+      expect(rule(selector)).toMatch(/z-index:\s*(var\(--z-|calc\(var\(--z-)/);
+    },
+  );
+});
+
 describe('flex items that must be allowed to shrink', () => {
   /**
    * Every child of a flex **row** here. A flex item defaults to
@@ -91,7 +141,7 @@ describe('flex items that must be allowed to shrink', () => {
     const edge = rule('.window-edge');
 
     expect(edge).toMatch(/position:\s*fixed\s*;/);
-    expect(edge).toMatch(/z-index:\s*\d+\s*;/);
+    expect(edge).toMatch(/z-index:\s*var\(--z-window-edge\)\s*;/);
   });
 
   /** All four sides, or one of them silently is not resizable. */

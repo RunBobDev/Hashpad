@@ -706,7 +706,19 @@ highlighting or scrolling is covered by a test.
 ### G.4b — replace
 
 - [ ] **Ctrl+H opens the panel with the replace row and the cursor in it**, from
-      closed *and* from an already-open find bar. Edit > Replace does the same.
+      closed *and* from an already-open find bar.
+- [ ] **The Edit menu has one entry, "Find and Replace…" (Ctrl+F)**, not two.
+      Replace is reached from the panel's own expander chevron or Ctrl+H.
+- [ ] **The chevron reveals and hides the replace row**, points down when open,
+      and puts the cursor in whichever field it just revealed. It is the only
+      discoverable route to replace now that the menu entry is gone.
+- [ ] **Open a menu with the find bar showing.** File, Edit and View must draw
+      *over* the bar, not under it -- CodeMirror puts its editor panels at
+      z-index 300 and the menus were at 100, so the overlapping rows of the
+      dropdown disappeared. Check with the replace row open too, which is taller.
+- [ ] **Drag the top window edge with the find bar open.** Same cause, one layer
+      up: the resize border was below the bar, so the top edge could not be
+      grabbed while find was showing.
 - [ ] **Ctrl+F alone never shows the replace row.** It is the commoner case and
       should stay one line.
 - [ ] **Replace works on the first click.** Type a query, type a replacement,

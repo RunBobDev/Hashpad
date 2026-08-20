@@ -438,6 +438,36 @@ describe('replace', () => {
     expect(replaceField(view).value).toBe('FROM_OUTSIDE');
   });
 
+  /**
+   * The expander is the only discoverable route to replace now that the Edit
+   * menu has one combined entry: without it Ctrl+H is the sole way in, which is
+   * no way in at all for someone who does not already know it.
+   */
+  it('reveals and hides the replace row from the expander', () => {
+    const view = open('one two');
+    const expander = panel(view).querySelector<HTMLButtonElement>('.findbar__expand')!;
+    expect(expander.getAttribute('aria-expanded')).toBe('false');
+
+    expander.click();
+    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
+    expect(expander.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(replaceField(view));
+
+    expander.click();
+    expect(panel(view).classList.contains('findbar--replacing')).toBe(false);
+    expect(expander.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(field(view));
+  });
+
+  /** Ctrl+H and the expander set the same state, so they must agree about it. */
+  it('leaves the expander expanded when Ctrl+H opened the row', () => {
+    const view = openWithReplace('one two');
+
+    expect(panel(view).querySelector('.findbar__expand')!.getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+  });
+
   it('opens the panel from closed and shows replace in one press', () => {
     const view = editor('one two');
     expect(view.dom.querySelector('.findbar')).toBeNull();

@@ -22,6 +22,23 @@
   /* Subtle, not rounded-bubble — SPEC §6.1 */
   --radius: 4px;
 
+  /* The whole stacking order, in one place, because it is the kind of thing
+     that is only ever wrong in combination. Menus were 100 and CodeMirror's
+     `.cm-panels` is **300** — a number from its own base theme, not ours — so
+     with the find bar open, any dropdown overlapping it was painted underneath
+     and the overlapping rows simply vanished. Reported by the owner.
+
+     Bottom to top:
+       1    the outline resizer, above its own column only
+       300  CodeMirror's editor panels (the find bar). Theirs; we work around it
+       400  menus and popups, which must clear the find bar
+       500  the window's resize border, which must clear everything — a frameless
+            window has no OS frame, so these strips *are* its edges
+     Anything new goes in this list, not in a rule. */
+  --z-outline-resizer: 1;
+  --z-popup: 400;
+  --z-window-edge: 500;
+
   /* Mirrors Wails' own `borderThickness` (its injected runtime, main.js): the
      width of the band at the window's edge where a mousemove arms a resize.
      This is a frameless window, so that band is ordinary page content rather

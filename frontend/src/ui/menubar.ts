@@ -129,8 +129,13 @@ const MENUS: Menu[] = [
     items: [
       { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: true },
       { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: true },
-      { id: 'edit.find', label: 'Find…', shortcut: 'Ctrl+F', enabled: true },
-      { id: 'edit.replace', label: 'Replace…', shortcut: 'Ctrl+H', enabled: true },
+      // One entry rather than two, at the owner's request: the panel is a single
+      // thing with a replace row you expand, so two menu items for one bar read
+      // as two features. Ctrl+H still opens it with the row already showing --
+      // it is the shortcut this menu does not display, which is the one place
+      // SPEC §6.14's "every shortcut reachable through a menu" is bent. The
+      // panel's own expander is what keeps replace discoverable without it.
+      { id: 'edit.find', label: 'Find and Replace…', shortcut: 'Ctrl+F', enabled: true },
     ],
   },
   {

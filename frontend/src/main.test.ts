@@ -638,12 +638,35 @@ describe('the Find and Replace menu items', () => {
     document.querySelector<HTMLButtonElement>('.findbar__close')!.click();
   });
 
-  it('opens it with the replace row from Edit > Replace', () => {
+  /**
+   * One entry, not two, at the owner's request. Asserted against the rendered
+   * menu rather than against main.ts's routing: an `edit.replace` item could be
+   * added back to the menu and route nowhere, which is invisible to a test that
+   * only emits commands -- and that is exactly what the first version of this
+   * checked.
+   */
+  it('offers one combined Edit menu entry rather than one for each', () => {
+    const edit = [...document.querySelectorAll<HTMLButtonElement>('.menubar button')].find(
+      (button) => button.textContent === 'Edit',
+    )!;
+    edit.click();
+
+    const items = [...document.querySelectorAll('.menu-popup [role="menuitem"]')].map((item) => ({
+      label: item.querySelector('span')?.textContent ?? '',
+      shortcut: item.querySelector('kbd')?.textContent ?? '',
+    }));
+
+    expect(items.filter((item) => /find|replace/i.test(item.label))).toEqual([
+      { label: 'Find and Replace…', shortcut: 'Ctrl+F' },
+    ]);
+    edit.click();
+  });
+
+  /** And the command it replaced is gone from the router with it. */
+  it('no longer routes a separate replace command', () => {
     emit('edit.replace');
 
-    const bar = document.querySelector('.findbar')!;
-    expect(bar.classList.contains('findbar--replacing')).toBe(true);
-    document.querySelector<HTMLButtonElement>('.findbar__close')!.click();
+    expect(document.querySelector('.findbar')).toBeNull();
   });
 });
 
