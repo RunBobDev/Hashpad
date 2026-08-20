@@ -705,13 +705,17 @@ highlighting or scrolling is covered by a test.
 
 ### G.4b — replace
 
-- [ ] **Ctrl+H opens the panel with the replace row and the cursor in it**, from
-      closed *and* from an already-open find bar.
+- [ ] **One line, in this order**: find field, count, ‹ ›, the three toggles,
+      replace field, Replace, Replace All, ×. Both fields the same width.
+- [ ] **Ctrl+H opens the bar with the cursor in the *replace* field**, from
+      closed and from an already-open bar. Ctrl+F puts it in the find field.
+      That is now the only difference between them.
 - [ ] **The Edit menu has one entry, "Find and Replace…" (Ctrl+F)**, not two.
-      Replace is reached from the panel's own expander chevron or Ctrl+H.
-- [ ] **The chevron reveals and hides the replace row**, points down when open,
-      and puts the cursor in whichever field it just revealed. It is the only
-      discoverable route to replace now that the menu entry is gone.
+- [ ] **Narrow the window right down.** The bar must stay on one line -- the two
+      fields shrink, the buttons keep their labels, and × stays reachable. If it
+      wraps to a second row the editor shifts down under the cursor mid-type.
+- [ ] **Open it with the outline showing**, which is the narrowest the editor
+      gets.
 - [ ] **Open a menu with the find bar showing.** File, Edit and View must draw
       *over* the bar, not under it -- CodeMirror puts its editor panels at
       z-index 300 and the menus were at 100, so the overlapping rows of the

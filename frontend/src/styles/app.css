@@ -221,11 +221,13 @@ body {
  */
 .findbar {
   display: flex;
-  /* A column of rows now that replace exists: the second is hidden until
-     Ctrl+H asks for it, so Ctrl+F -- much the commoner case -- still gets one
-     line rather than a replace field nobody asked for. */
-  flex-direction: column;
+  align-items: center;
   gap: 4px;
+  /* One line, at the owner's request: find, its controls, replace, its
+     controls, close. Never wraps -- a bar that reflows to two lines as the
+     window narrows would shift the editor under it while the user is typing. */
+  flex-wrap: nowrap;
+  overflow: hidden;
   padding: 4px 8px;
   background: var(--bg-app);
   border-bottom: 1px solid var(--border);
@@ -235,25 +237,13 @@ body {
   font-size: var(--size-ui);
 }
 
-.findbar__row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Revealed by `openReplacePanel` adding `findbar--replacing`. `display: none`
-   rather than visibility or height: a hidden row must be out of the tab order
-   and out of the accessibility tree, not merely invisible. */
-.findbar__row--replace {
-  display: none;
-}
-
-.findbar--replacing .findbar__row--replace {
-  display: flex;
-}
-
 .findbar__input {
-  flex: 1 1 auto;
+  /* `1 1 0`, so find and replace share the leftover space equally rather than
+     find claiming it all. Halving the old full-width find box is what lets both
+     fit on one line without either feeling cramped. `min-width: 0` lets them
+     shrink past their content on a narrow window instead of pushing the close
+     button off the end. */
+  flex: 1 1 0;
   min-width: 0;
   padding: 3px 6px;
   border: 1px solid var(--border-strong);
@@ -264,10 +254,11 @@ body {
 }
 
 /* Reserves its own width so the row does not shuffle sideways as the count
-   changes from "" to "No results" to "3 of 12" on every keystroke. */
+   changes from "" to "No results" to "3 of 12" on every keystroke. Narrower now
+   that it shares a line with the replace controls. */
 .findbar__count {
   flex: 0 0 auto;
-  min-width: 88px;
+  min-width: 76px;
   padding: 0 4px;
   color: var(--fg-secondary);
   text-align: right;
@@ -287,36 +278,14 @@ body {
   cursor: default;
 }
 
-/* The expander. Rotates to point down when the replace row is showing, so the
-   chevron itself says which way it goes -- the same affordance every editor with
-   this bar uses. */
-.findbar__expand {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 24px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--fg-secondary);
-  font: inherit;
-  cursor: default;
-  transition: transform 120ms ease;
-}
-
-.findbar__expand:hover {
-  background: var(--bg-hover);
-  color: var(--fg-primary);
-}
-
-.findbar__expand[aria-expanded='true'] {
-  transform: rotate(90deg);
-}
-
 /* Replace and Replace All are words, not glyphs, so they need room the 24px
-   square buttons beside the find field do not. */
+   square buttons beside the find field do not -- and they must not shrink to
+   nothing when the row is tight, since a button reading "Repl…" is no button. */
 .findbar__wide {
+  flex: 0 0 auto;
   min-width: auto;
   padding: 0 10px;
+  white-space: nowrap;
 }
 
 .findbar__toggle:hover,

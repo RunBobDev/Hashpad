@@ -398,83 +398,53 @@ describe('replace', () => {
   }
 
   /**
-   * Ctrl+F is much the commoner case, and a replace field nobody asked for is a
-   * second thing to read past every time you look for a word -- so the row is
-   * there but hidden, which is what every editor with this bar does.
+   * The panel is one row and always shows both halves, so the only thing Ctrl+H
+   * does differently from Ctrl+F is where the cursor lands -- which is the whole
+   * difference between "I want to find" and "I want to replace".
    */
-  it('hides the replace row until Ctrl+H asks for it', () => {
-    const view = open('one two');
-
-    expect(panel(view).classList.contains('findbar--replacing')).toBe(false);
-
-    openReplacePanel(view);
-
-    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
-  });
-
-  /** Ctrl+H, from inside the editor, the way the user reaches it. */
-  it('opens from Ctrl+H', () => {
+  it('opens from Ctrl+H with the cursor in the replace field', () => {
     const view = editor('one two');
 
     view.contentDOM.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'h', keyCode: 72, ctrlKey: true, cancelable: true }),
     );
 
-    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
-  });
-
-  /**
-   * The panel is a view of the search state, never a second copy -- the replace
-   * text included. Nothing sets it from outside today, but the find field is
-   * already held to this and the two must not drift apart.
-   */
-  it('follows the replace text when it is set from outside', () => {
-    const view = openWithReplace('one two');
-
-    view.dispatch({
-      effects: setSearchQuery.of(new SearchQuery({ search: 'one', replace: 'FROM_OUTSIDE' })),
-    });
-
-    expect(replaceField(view).value).toBe('FROM_OUTSIDE');
-  });
-
-  /**
-   * The expander is the only discoverable route to replace now that the Edit
-   * menu has one combined entry: without it Ctrl+H is the sole way in, which is
-   * no way in at all for someone who does not already know it.
-   */
-  it('reveals and hides the replace row from the expander', () => {
-    const view = open('one two');
-    const expander = panel(view).querySelector<HTMLButtonElement>('.findbar__expand')!;
-    expect(expander.getAttribute('aria-expanded')).toBe('false');
-
-    expander.click();
-    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
-    expect(expander.getAttribute('aria-expanded')).toBe('true');
+    expect(view.dom.querySelector('.findbar')).not.toBeNull();
     expect(document.activeElement).toBe(replaceField(view));
-
-    expander.click();
-    expect(panel(view).classList.contains('findbar--replacing')).toBe(false);
-    expect(expander.getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(field(view));
   });
 
-  /** Ctrl+H and the expander set the same state, so they must agree about it. */
-  it('leaves the expander expanded when Ctrl+H opened the row', () => {
-    const view = openWithReplace('one two');
+  /** Both halves are on screen from the moment the bar opens, however it opened. */
+  it('shows the replace controls even when opened with Ctrl+F', () => {
+    const view = open('one two');
 
-    expect(panel(view).querySelector('.findbar__expand')!.getAttribute('aria-expanded')).toBe(
-      'true',
-    );
+    expect(replaceField(view)).not.toBeNull();
+    expect(button(view, 'Replace')).toBeDefined();
+    expect(button(view, 'Replace All')).toBeDefined();
   });
 
-  it('opens the panel from closed and shows replace in one press', () => {
-    const view = editor('one two');
-    expect(view.dom.querySelector('.findbar')).toBeNull();
+  /**
+   * The owner's order: find, everything about find, replace, everything about
+   * replace, then close. Asserted because it is a layout decision someone will
+   * otherwise "tidy" -- the close button in particular belongs at the end, not
+   * beside the find controls it has nothing to do with.
+   */
+  it('lays the row out in one line, in that order', () => {
+    const view = open('one two');
+    const classes = [...panel(view).children].map((child) => child.className);
 
-    openReplacePanel(view);
-
-    expect(panel(view).classList.contains('findbar--replacing')).toBe(true);
+    expect(classes).toEqual([
+      'findbar__input',
+      'findbar__count',
+      'findbar__action',
+      'findbar__action',
+      'findbar__toggle',
+      'findbar__toggle',
+      'findbar__toggle',
+      'findbar__input findbar__replace',
+      'findbar__action findbar__wide',
+      'findbar__action findbar__wide',
+      'findbar__action findbar__close',
+    ]);
   });
 
   /**

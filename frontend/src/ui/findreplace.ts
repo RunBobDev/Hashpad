@@ -125,19 +125,6 @@ function withChange(
   });
 }
 
-/** The class that reveals the replace row. */
-const REPLACING = 'findbar--replacing';
-
-/**
- * Shows or hides the replace row, keeping the expander's `aria-expanded` in
- * step. One function so the chevron and Ctrl+H cannot disagree about the state
- * they both set.
- */
-function setReplacing(bar: HTMLElement, on: boolean): void {
-  bar.classList.toggle(REPLACING, on);
-  bar.querySelector('.findbar__expand')?.setAttribute('aria-expanded', on ? 'true' : 'false');
-}
-
 /**
  * The find panel. Handed to `search({ createPanel })`, so CodeMirror owns when
  * it exists and this owns what it looks like.
@@ -209,29 +196,6 @@ export function buildFindPanel(view: EditorView): Panel {
     });
     return button;
   }
-
-  /**
-   * The expander, and the only discoverable route to replace now that the Edit
-   * menu has one combined entry rather than two. Without it Ctrl+H would be the
-   * sole way in, which is no way in at all for someone who does not already
-   * know it -- the same reason SPEC §6.14 wants every shortcut reachable from a
-   * menu.
-   */
-  const expand = document.createElement('button');
-  expand.type = 'button';
-  expand.className = 'findbar__expand';
-  expand.textContent = '›';
-  expand.title = 'Toggle Replace';
-  expand.setAttribute('aria-label', 'Toggle Replace');
-  expand.setAttribute('aria-expanded', 'false');
-  expand.addEventListener('click', () => {
-    const on = !dom.classList.contains(REPLACING);
-    setReplacing(dom, on);
-    // Into the field it just revealed, or the click leaves the user pointing at
-    // a box they still have to reach for.
-    if (on) replaceInput.focus();
-    else input.focus();
-  });
 
   const previous = action('‹', 'Previous match', findPrevious);
   const next = action('›', 'Next match', findNext);
@@ -307,18 +271,27 @@ export function buildFindPanel(view: EditorView): Panel {
     }
   });
 
-  // Two rows, and the second is hidden until Ctrl+H asks for it. Ctrl+F is the
-  // common case by a wide margin, and a replace field nobody asked for is a
-  // second thing to read past every time you look for a word.
-  const findRow = document.createElement('div');
-  findRow.className = 'findbar__row';
-  findRow.append(expand, input, count, previous, next, ...toggles.map((t) => t.button), close);
-
-  const replaceRow = document.createElement('div');
-  replaceRow.className = 'findbar__row findbar__row--replace';
-  replaceRow.append(replaceInput, replaceOne, replaceEvery);
-
-  dom.append(findRow, replaceRow);
+  // One row, in the order the owner asked for: find and everything about find,
+  // then replace and everything about replace, then close. Both fields share the
+  // flexible space rather than find taking it all, which is what makes them both
+  // fit -- neither needs to be as wide as a whole-width find box was.
+  //
+  // This replaced a two-row panel whose second row was revealed by an expander.
+  // With replace always on screen there is nothing to reveal, so the expander
+  // and the `findbar--replacing` state went with it -- and so did the SPEC §6.14
+  // worry that removing Replace from the Edit menu left Ctrl+H undiscoverable:
+  // the buttons are simply always there now.
+  dom.append(
+    input,
+    count,
+    previous,
+    next,
+    ...toggles.map((t) => t.button),
+    replaceInput,
+    replaceOne,
+    replaceEvery,
+    close,
+  );
 
   /** Pushes the search state into the DOM. The panel never holds its own copy. */
   function sync(): void {
@@ -364,33 +337,26 @@ export function buildFindPanel(view: EditorView): Panel {
 }
 
 /**
- * Ctrl+H: open the panel with the replace row showing, and put the cursor in it.
+ * Ctrl+H: open the panel and put the cursor in the replace field.
  *
  * A `Command`, so it slots into the keymap beside `openSearchPanel` and returns
- * the same "I handled this" boolean.
+ * the same "I handled this" boolean. Since the panel became a single row there
+ * is nothing to reveal -- the only difference from Ctrl+F is which field the
+ * cursor lands in, which is the whole difference between "I want to find" and
+ * "I want to replace".
  *
- * Whether the replace row is showing is held as a class on the panel rather than
- * as editor state, and that is a deliberate limit rather than an oversight. It
- * is a property of *this panel instance* -- CodeMirror throws the panel away on
- * close and builds a fresh one on open, so "showing" cannot outlive it anyway,
- * and a `StateField` would be modelling a lifetime the DOM already owns. The
- * cost is that reopening with Ctrl+F shows the find row alone, which is what
- * every editor with this bar does.
- *
- * `openSearchPanel` first: it creates the panel when there is none, and the
- * panel plugin builds it synchronously inside that dispatch, so the DOM below is
- * there by the time this reads it. When one is already open it focuses the find
- * field -- which is why the replace field is focused *after*, not before.
+ * `openSearchPanel` first: it creates the panel when there is none,
+ * synchronously inside that dispatch, so the DOM below is there by the time this
+ * reads it. It also focuses the find field, which is why the replace field is
+ * focused *after*, not before.
  */
 export function openReplacePanel(view: EditorView): boolean {
   openSearchPanel(view);
 
-  const bar = view.dom.querySelector<HTMLElement>('.findbar');
-  if (bar === null) return false;
+  const replaceInput = view.dom.querySelector<HTMLInputElement>('.findbar__replace');
+  if (replaceInput === null) return false;
 
-  setReplacing(bar, true);
-  const replaceInput = bar.querySelector<HTMLInputElement>('.findbar__replace');
-  replaceInput?.focus();
-  replaceInput?.select();
+  replaceInput.focus();
+  replaceInput.select();
   return true;
 }

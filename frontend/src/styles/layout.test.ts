@@ -167,18 +167,16 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
-   * The find panel's second row. Hidden until Ctrl+H asks for it, because
-   * Ctrl+F is much the commoner case and a replace field nobody asked for is a
-   * second thing to read past every time you look for a word.
+   * The find bar is one line and must stay one. Wrapping to a second row as the
+   * window narrows would shift the editor down under the user's cursor mid-type,
+   * so the fields shrink instead -- which is what `min-width: 0` on them buys.
    *
-   * `display: none` and not `visibility`/`height`: a hidden row has to be out of
-   * the tab order and out of the accessibility tree, not merely invisible. And
-   * it is asserted here rather than in `findreplace.test.ts` because jsdom loads
-   * no stylesheet -- a test there can see the class, never what the class does.
+   * Asserted here rather than in `findreplace.test.ts` because jsdom loads no
+   * stylesheet: a test there can read the class list, never what the classes do.
    */
-  it('the replace row is hidden until the panel is replacing', () => {
-    expect(rule('.findbar__row--replace')).toMatch(/display:\s*none\s*;/);
-    expect(rule('.findbar--replacing .findbar__row--replace')).toMatch(/display:\s*flex\s*;/);
+  it('the find bar stays on one line', () => {
+    expect(rule('.findbar')).toMatch(/flex-wrap:\s*nowrap\s*;/);
+    expect(rule('.findbar__input')).toMatch(/min-width:\s*0\s*;/);
   });
 
   /**
