@@ -157,12 +157,37 @@ describe('the find panel', () => {
   });
 
   /**
-   * The package focuses whatever carries `main-field` when the panel opens.
-   * Without it the panel appears and the user's next keystroke goes into the
-   * document instead of the search box.
+   * The owner's report: "when I first press Ctrl+F the bar appears but is not in
+   * focus, so I type into the editor".
+   *
+   * `openSearchPanel` only focuses a panel that is *already* open -- with none
+   * open it dispatches `togglePanel` and returns -- so the panel has to focus
+   * itself on mount, which is what CodeMirror's own default panel does.
+   *
+   * The first version of this test asserted the `main-field` attribute instead,
+   * and passed the whole time the bar was opening unfocused: the attribute is
+   * how the package finds the field on a *second* press, not what focuses it.
+   * Asserting the mechanism rather than the outcome is what let this ship.
    */
-  it('marks the input as the field to focus', () => {
-    expect(field(open('hello')).getAttribute('main-field')).toBe('true');
+  it('puts the cursor in the search box on the first press', () => {
+    const view = open('hello');
+
+    expect(document.activeElement).toBe(field(view));
+    expect(field(view).getAttribute('main-field')).toBe('true');
+  });
+
+  /** So reopening find and typing replaces the last search rather than extending it. */
+  it('selects the query already in the box when reopened', () => {
+    const view = open('one two one');
+    type(view, 'one');
+    closeSearchPanel(view);
+
+    openSearchPanel(view);
+
+    const input = field(view);
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('one'.length);
   });
 
   it('puts what is typed into the editor’s search state', () => {

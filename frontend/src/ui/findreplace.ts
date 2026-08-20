@@ -139,7 +139,9 @@ export function buildFindPanel(view: EditorView): Panel {
   input.type = 'text';
   input.placeholder = 'Find';
   input.setAttribute('aria-label', 'Find');
-  // The package focuses whatever carries this when the panel opens.
+  // Marks this as the field find should return to. The package reads it when
+  // Ctrl+F is pressed while the panel is *already* open; focusing it on first
+  // open is `mount`'s job below.
   input.setAttribute('main-field', 'true');
 
   const count = document.createElement('span');
@@ -232,7 +234,26 @@ export function buildFindPanel(view: EditorView): Panel {
     dom,
     // Above the editor, where every Windows editor puts it.
     top: true,
-    mount: sync,
+    mount() {
+      sync();
+      // **The panel has to focus itself.** `openSearchPanel` only focuses a
+      // panel that is *already* open: when there is none it dispatches
+      // `togglePanel` and returns, so the first Ctrl+F opened a bar nobody was
+      // typing into and a second press was needed to get into it. Reported by
+      // the owner. CodeMirror's own default panel does exactly this in its own
+      // `mount`, which is what makes `main-field` work at all -- the attribute
+      // marks the field, it does not focus it.
+      //
+      // Both, explicitly. CodeMirror's own panel calls only `select()` and
+      // relies on it focusing as a side effect, which real browsers do and
+      // jsdom does not -- so leaning on that would have made this untestable
+      // here and left the fix resting on an implicit behaviour. `select()` is
+      // still wanted for its actual job: it selects whatever query is already
+      // in the box, so reopening find and typing replaces the last search
+      // rather than appending to it.
+      input.focus();
+      input.select();
+    },
     update(update) {
       // The count depends on the document and on which match is selected, not
       // only on the query -- so an edit or a `findNext` has to refresh it too.

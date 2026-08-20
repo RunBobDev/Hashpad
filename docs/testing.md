@@ -674,8 +674,13 @@ because match highlighting is gated on CodeMirror's panel being open.
 jsdom has no layout and cannot paint, so nothing below about appearance,
 highlighting or scrolling is covered by a test.
 
-- [ ] **Ctrl+F opens it with the cursor already in the box**, and Edit > Find
-      does the same. Then Escape closes it and the caret returns to the text.
+- [ ] **Ctrl+F opens it with the cursor already in the box** on the *first*
+      press, and Edit > Find does the same. Then Escape closes it and the caret
+      returns to the text. `openSearchPanel` does not focus a panel it is
+      opening -- only one already open -- so the panel focuses itself on mount;
+      needing a second Ctrl+F is the symptom of that regressing.
+- [ ] **Reopen find after a search.** The previous query should still be there
+      and selected, so typing replaces it rather than appending.
 - [ ] **Every match is highlighted in the document**, and the current one
       differently from the rest. This is the part that would have been silently
       lost by rendering the panel outside CodeMirror's panel slot.
