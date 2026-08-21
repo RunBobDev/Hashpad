@@ -807,6 +807,12 @@ the preview then renders what was written.
       over Ctrl+V.
 - [ ] **Drag an image file onto the editor.** It is copied into `assets/` under
       its own name and inserted **where the pointer was**, not at the caret.
+- [ ] **Drag an image whose filename has a space in it** -- the Snipping Tool's
+      own default (`Screenshot 2026-08-21 120000.png`) will do. It must render,
+      not appear as literal text. A bare space ends a CommonMark destination, so
+      before the fix this was every screenshot dragged in by its own name; the
+      generated markdown wraps such paths in `<>` now. Same for a name with
+      parentheses, which `Copy` gives you as ` (1)`.
 - [ ] **Drag the same image twice.** The second becomes `name-2.png` rather than
       overwriting the first.
 - [ ] **Drag an image that already sits beside the document** (from the folder

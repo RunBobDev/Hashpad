@@ -111,9 +111,42 @@ function insertMarkdown(view: EditorView, expectedId: string, markdown: string, 
   view.focus();
 }
 
+/**
+ * Written as a constant because a literal backslash in a regex replacement is
+ * the kind of thing that survives review and then loses a slash to some later
+ * edit or tool. This module's escaping is exactly what the bug below was about.
+ */
+const BACKSLASH = '\\';
+
+/**
+ * A path, spelled so CommonMark reads all of it as the destination.
+ *
+ * **A bare space ends the destination**, and what follows is parsed as a title
+ * -- which `2026-08-21 120000.png` is not, so the whole image fails to parse and
+ * markdown-it emits the literal text `![](assets/Screenshot 2026-08-21.png)`
+ * instead of an image. Reported by the owner. Parentheses break it the same way,
+ * by closing the destination early.
+ *
+ * Angle brackets are CommonMark's answer: inside `<...>` a destination may hold
+ * spaces and parens, and `<`/`>` themselves are backslash-escaped. Only used
+ * when needed, because `![](assets/pic.png)` is what a person would have typed
+ * and this text is in a document they read.
+ *
+ * A `%` in the filename is the one case still not round-tripped: markdown-it
+ * percent-decodes the destination, so `a%20b.png` arrives as `a b.png`.
+ * Pre-encoding it does not help -- the encoder runs over our escape too, and it
+ * comes back doubled. That is how markdown-it treats *any* image path, typed or
+ * generated, so it is a property of the renderer rather than of this feature.
+ * Measured across both approaches, not assumed.
+ */
+export function escapeDestination(relativePath: string): string {
+  if (!/[ ()<>]/.test(relativePath)) return relativePath;
+  return `<${relativePath.replace(/[<>]/g, (character) => BACKSLASH + character)}>`;
+}
+
 /** The markdown for an image, with the empty alt SPEC §6.10 specifies. */
-function imageMarkdown(relativePath: string): string {
-  return `![](${relativePath})`;
+export function imageMarkdown(relativePath: string): string {
+  return `![](${escapeDestination(relativePath)})`;
 }
 
 /**
