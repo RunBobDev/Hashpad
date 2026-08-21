@@ -427,6 +427,12 @@ describe('replace', () => {
    * replace, then close. Asserted because it is a layout decision someone will
    * otherwise "tidy" -- the close button in particular belongs at the end, not
    * beside the find controls it has nothing to do with.
+   *
+   * The count's position is load-bearing rather than incidental. It reserves a
+   * fixed width, so wherever it sits there is blank space; between the field and
+   * the buttons that space read as a gap splitting find from its own controls,
+   * which the owner reported as the buttons looking like they belonged to
+   * replace. Last in the group, the same width separates find from replace.
    */
   it('lays the row out in one line, in that order', () => {
     const view = open('one two');
@@ -434,12 +440,12 @@ describe('replace', () => {
 
     expect(classes).toEqual([
       'findbar__input',
+      'findbar__action',
+      'findbar__action',
+      'findbar__toggle',
+      'findbar__toggle',
+      'findbar__toggle',
       'findbar__count',
-      'findbar__action',
-      'findbar__action',
-      'findbar__toggle',
-      'findbar__toggle',
-      'findbar__toggle',
       'findbar__input findbar__replace',
       'findbar__action findbar__wide',
       'findbar__action findbar__wide',

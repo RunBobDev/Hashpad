@@ -255,13 +255,18 @@ body {
 
 /* Reserves its own width so the row does not shuffle sideways as the count
    changes from "" to "No results" to "3 of 12" on every keystroke. Narrower now
-   that it shares a line with the replace controls. */
+   that it shares a line with the replace controls.
+
+   Left-aligned, and last in the find group: the reserved width has to show up
+   somewhere, and what is left of it should trail *behind* the find controls as
+   the gap before replace, not sit in front of them pushing them away from the
+   field they act on. */
 .findbar__count {
   flex: 0 0 auto;
   min-width: 76px;
   padding: 0 4px;
   color: var(--fg-secondary);
-  text-align: right;
+  text-align: left;
   white-space: nowrap;
 }
 

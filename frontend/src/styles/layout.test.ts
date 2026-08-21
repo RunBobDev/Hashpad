@@ -180,6 +180,22 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
+   * The match count reserves width it usually does not fill, and where that
+   * slack lands is what groups the row. It sits last in the find group
+   * (`ui/findreplace.ts`), so left-aligning it keeps the number against the find
+   * controls and leaves the slack trailing as the gap before replace. Right
+   * would push the number over to the replace field and read as belonging to it
+   * -- the same misgrouping the owner reported when the count sat between the
+   * find field and its buttons.
+   */
+  it('the match count hugs the find controls', () => {
+    const count = rule('.findbar__count');
+
+    expect(count).toMatch(/min-width:\s*76px\s*;/);
+    expect(count).toMatch(/text-align:\s*left\s*;/);
+  });
+
+  /**
    * The pane is what scrolls when its content is too wide, so its own overflow
    * must stay `auto`. `hidden` here would clip the same text with no scrollbar
    * -- the symptom this whole file is about, reached by a different route.

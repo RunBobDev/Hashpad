@@ -276,6 +276,14 @@ export function buildFindPanel(view: EditorView): Panel {
   // flexible space rather than find taking it all, which is what makes them both
   // fit -- neither needs to be as wide as a whole-width find box was.
   //
+  // The count goes **last in the find group**, not next to the field. It
+  // reserves a fixed width so the row does not shuffle as the number changes,
+  // and sitting between the field and the buttons that width read as a gap
+  // splitting find from its own controls -- the owner reported the buttons
+  // looking like they belonged to replace. At the end of the group the same
+  // reserved width is the separator *between* the groups, which is where a gap
+  // belongs, and the buttons close up against the field they act on.
+  //
   // This replaced a two-row panel whose second row was revealed by an expander.
   // With replace always on screen there is nothing to reveal, so the expander
   // and the `findbar--replacing` state went with it -- and so did the SPEC §6.14
@@ -283,10 +291,10 @@ export function buildFindPanel(view: EditorView): Panel {
   // the buttons are simply always there now.
   dom.append(
     input,
-    count,
     previous,
     next,
     ...toggles.map((t) => t.button),
+    count,
     replaceInput,
     replaceOne,
     replaceEvery,
