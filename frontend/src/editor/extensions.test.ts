@@ -643,3 +643,55 @@ describe('file drops in the editor', () => {
     view.destroy();
   });
 });
+
+/**
+ * The paste handler has to be in the stack, not merely correct in its own file
+ * (SPEC §6.10). Deleting the line in extensions.ts leaves imageops.test.ts
+ * green, which is the whole reason this lives here.
+ *
+ * Asserted on the document's contents, not on `defaultPrevented`: CodeMirror's
+ * own paste handler claims *every* paste and prevents the default, so that flag
+ * is true either way and the first version of this test passed against a stack
+ * with the handler removed. What actually differs is that CodeMirror pastes the
+ * clipboard's **text** flavour -- for an image copied from Explorer, its file
+ * path -- and that is the outcome worth pinning.
+ *
+ * With no active document `pasteImage` claims the event and stops, so this needs
+ * no store, no IPC and no clipboard plumbing beyond the event itself.
+ */
+describe('pasting an image into the editor', () => {
+  function paste(view: EditorView, items: unknown[], text: string): void {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', {
+      value: { items, getData: () => text },
+    });
+    view.contentDOM.dispatchEvent(event);
+  }
+
+  const imageItem = {
+    kind: 'file',
+    type: 'image/png',
+    getAsFile: () => new File([new Uint8Array([1])], 'c.png', { type: 'image/png' }),
+  };
+
+  it('does not paste the text flavour of an image', () => {
+    store.setState((prev) => ({ ...prev, activeDocumentId: null }));
+    const view = mountView('hello');
+
+    paste(view, [imageItem], 'the text flavour');
+
+    expect(view.state.doc.toString()).toBe('hello');
+    view.destroy();
+  });
+
+  /** And an ordinary text paste still goes in. */
+  it('leaves a text paste to CodeMirror', () => {
+    store.setState((prev) => ({ ...prev, activeDocumentId: null }));
+    const view = mountView('hello');
+
+    paste(view, [], 'pasted');
+
+    expect(view.state.doc.toString()).toBe('pastedhello');
+    view.destroy();
+  });
+});

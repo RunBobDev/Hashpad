@@ -18,6 +18,8 @@ import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime';
 import { openPaths } from '../files/fileops';
+import { dropImages, isImagePath } from '../files/imageops';
+import { getEditorView } from '../state/appcontext';
 
 /**
  * SPEC §6.4's recognised extensions. Kept here and not shared with Go's
@@ -83,6 +85,20 @@ export function suppressEditorFileDrop(): Extension {
   });
 }
 
+/**
+ * Adds dropped images to the document, at the point they were dropped.
+ *
+ * `posAtCoords` is what makes the position meaningful: an image dropped halfway
+ * down the text belongs there, not wherever the caret was left. It returns null
+ * when the coordinates are outside the editor -- dropped on the preview, the
+ * outline, the status bar -- and then the caret is the only sensible answer, so
+ * `undefined` is passed on and `dropImages` replaces the selection instead.
+ */
+function insertDroppedImages(x: number, y: number, paths: readonly string[]): Promise<void> {
+  const view = getEditorView();
+  return dropImages(view, paths, view.posAtCoords({ x, y }) ?? undefined);
+}
+
 /** Wails' registrar, narrowed to what this module uses. */
 type Register = (
   callback: (x: number, y: number, paths: string[]) => void,
@@ -101,18 +117,35 @@ export function mountFileDrop(
   open: (paths: readonly string[]) => void | Promise<void> = openPaths,
   register: Register = OnFileDrop,
   unregister: () => void = OnFileDropOff,
+  insert: (
+    x: number,
+    y: number,
+    paths: readonly string[],
+  ) => void | Promise<void> = insertDroppedImages,
 ): () => void {
-  register((_x, _y, paths) => {
-    const wanted = supportedPaths(paths);
-    if (wanted.length === 0) return;
-    // Deliberately not awaited: Wails' callback is not async-aware, and there
-    // is nothing to do with the result. Failures are already reported per-path
-    // by `openPaths`; this catch is only here so a rejection cannot surface as
-    // an unhandled promise.
-    void Promise.resolve(open(wanted)).catch((error: unknown) => {
-      console.error('hashpad: failed to open dropped files', error);
-    });
+  register((x, y, paths) => {
+    // A drop may hold both. Markdown becomes tabs, images go into the document
+    // the user dropped them on -- doing one or the other would make a mixed
+    // drop silently lose half of itself.
+    const documents = supportedPaths(paths);
+    if (documents.length > 0) run(open(documents), 'open dropped files');
+
+    const images = paths.filter(isImagePath);
+    if (images.length > 0) run(insert(x, y, images), 'add dropped images');
   }, false);
 
   return unregister;
+}
+
+/**
+ * Runs one half of a drop without letting it reject into nowhere.
+ *
+ * Wails' callback is not async-aware, so a rejection has no caller to reach --
+ * it would surface as an unhandled promise, which in a packaged app is an error
+ * nobody sees and a drop that appeared to do nothing.
+ */
+function run(work: void | Promise<void>, what: string): void {
+  void Promise.resolve(work).catch((error: unknown) => {
+    console.error(`hashpad: failed to ${what}`, error);
+  });
 }

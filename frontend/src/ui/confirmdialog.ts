@@ -133,6 +133,39 @@ ${url}`,
   );
 }
 
+/**
+ * SPEC §6.10 step 1: an image needs a folder to be written into, and an
+ * untitled document has none.
+ *
+ * A prompt rather than opening Save As straight away. Ctrl+V is not a save
+ * gesture, so a file dialog appearing out of it reads as the app having lost
+ * the plot; one sentence saying why costs a click and removes the confusion.
+ *
+ * Escape declines, per `buildDialog`'s contract -- not saving is what loses
+ * nothing, since the image is still on the clipboard afterwards.
+ */
+export function buildImageSaveDialog(onChoice: (save: boolean) => void): HTMLDialogElement {
+  return buildDialog(
+    'Save this document before adding an image?\n\n' +
+      'Images are stored in a folder next to the document, so it needs a location first.',
+    [
+      { choice: true, label: 'Save', primary: true },
+      { choice: false, label: 'Cancel' },
+    ],
+    false,
+    onChoice,
+  );
+}
+
+export function confirmSaveForImage(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialog = buildImageSaveDialog(resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
+  });
+}
+
 export function confirmOpenLink(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     const dialog = buildLinkDialog(url, resolve);

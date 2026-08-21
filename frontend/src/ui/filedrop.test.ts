@@ -22,16 +22,7 @@ afterEach(() => {
 describe('which dropped files are opened', () => {
   /** SPEC §6.4's list, spelled out again here so a quiet edit to it fails. */
   it('keeps every recognised extension, in the order dropped', () => {
-    const paths = [
-      'a.md',
-      'b.markdown',
-      'c.mdown',
-      'd.mkd',
-      'e.mdx',
-      'f.qmd',
-      'g.rmd',
-      'h.txt',
-    ];
+    const paths = ['a.md', 'b.markdown', 'c.mdown', 'd.mkd', 'e.mdx', 'f.qmd', 'g.rmd', 'h.txt'];
 
     expect(supportedPaths(paths)).toEqual(paths);
   });
@@ -69,13 +60,14 @@ describe('which dropped files are opened', () => {
 describe('subscribing to drops', () => {
   interface Harness {
     open: ReturnType<typeof vi.fn>;
+    insert: ReturnType<typeof vi.fn>;
     unregister: ReturnType<typeof vi.fn>;
     useDropTarget: boolean | undefined;
-    fire: (paths: string[]) => void;
+    fire: (paths: string[], x?: number, y?: number) => void;
     teardown: () => void;
   }
 
-  function mount(open = vi.fn()): Harness {
+  function mount(open = vi.fn(), insert = vi.fn()): Harness {
     let callback: ((x: number, y: number, paths: string[]) => void) | null = null;
     let useDropTarget: boolean | undefined;
     const unregister = vi.fn();
@@ -87,15 +79,17 @@ describe('subscribing to drops', () => {
         useDropTarget = flag;
       },
       unregister,
+      insert,
     );
 
     return {
       open,
+      insert,
       unregister,
       get useDropTarget() {
         return useDropTarget;
       },
-      fire: (paths) => callback?.(0, 0, paths),
+      fire: (paths, x = 0, y = 0) => callback?.(x, y, paths),
       teardown,
     };
   }
@@ -114,7 +108,7 @@ describe('subscribing to drops', () => {
   it('opens the recognised files from a mixed drop', () => {
     const harness = mount();
 
-    harness.fire(['photo.png', 'notes.md', 'todo.txt']);
+    harness.fire(['archive.zip', 'notes.md', 'todo.txt']);
 
     expect(harness.open).toHaveBeenCalledWith(['notes.md', 'todo.txt']);
   });
@@ -123,9 +117,48 @@ describe('subscribing to drops', () => {
   it('does nothing when no dropped file is openable', () => {
     const harness = mount();
 
-    harness.fire(['photo.png', 'archive.zip']);
+    harness.fire(['archive.zip', 'setup.exe']);
 
     expect(harness.open).not.toHaveBeenCalled();
+    expect(harness.insert).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Images go into the document rather than becoming tabs, and they carry the
+   * drop coordinates so the caller can work out where in the text they landed.
+   */
+  it('adds dropped images to the document, where they were dropped', () => {
+    const harness = mount();
+
+    harness.fire(['shot.png', 'diagram.SVG'], 120, 340);
+
+    expect(harness.insert).toHaveBeenCalledWith(120, 340, ['shot.png', 'diagram.SVG']);
+    expect(harness.open).not.toHaveBeenCalled();
+  });
+
+  /**
+   * One drop can hold both. Handling only the first kind found would make a
+   * mixed drop silently lose half of itself.
+   */
+  it('handles a drop holding both documents and images', () => {
+    const harness = mount();
+
+    harness.fire(['notes.md', 'shot.png']);
+
+    expect(harness.open).toHaveBeenCalledWith(['notes.md']);
+    expect(harness.insert).toHaveBeenCalledWith(0, 0, ['shot.png']);
+  });
+
+  it('reports a failed image insert rather than rejecting into nowhere', async () => {
+    const error = new Error('nope');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const harness = mount(vi.fn(), vi.fn().mockRejectedValue(error));
+
+    harness.fire(['shot.png']);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('dropped images'), error);
   });
 
   it('unsubscribes on teardown', () => {

@@ -8,6 +8,10 @@ export function LoadSettings():Promise<app.Settings>;
 
 export function ReadFile(arg1:string):Promise<app.FileContents>;
 
+export function SaveClipboardImage(arg1:string,arg2:string):Promise<string>;
+
+export function SaveDroppedImage(arg1:string,arg2:string):Promise<string>;
+
 export function SaveSettings(arg1:app.Settings):Promise<void>;
 
 export function ShowOpenDialog():Promise<Array<string>>;

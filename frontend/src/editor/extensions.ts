@@ -16,6 +16,7 @@ import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
 import { buildFindPanel, openReplacePanel } from '../ui/findreplace';
 import { suppressEditorFileDrop } from '../ui/filedrop';
+import { pasteImage } from '../files/imageops';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
 import { statusOf } from '../state/document';
@@ -204,6 +205,14 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
     // editor's own "read the file and insert its text" default must not also
     // run. See that function for why returning true is enough.
     suppressEditorFileDrop(),
+    // Ctrl+V with an image on the clipboard writes it beside the document and
+    // inserts the markdown (SPEC §6.10). Registered as an extension handler so
+    // it runs ahead of CodeMirror's own paste, which would otherwise insert the
+    // clipboard's *text* flavour -- for a screenshot, usually nothing at all.
+    // Text pastes fall through untouched: `pasteImage` returns false when there
+    // is no image, and does so synchronously, because an await would land long
+    // after the event could still be prevented.
+    EditorView.domEventHandlers({ paste: (event, view) => pasteImage(view, event) }),
     // High precedence so these file-command shortcuts always win, regardless
     // of what defaultKeymap does or gains in a future CodeMirror version.
     Prec.high(

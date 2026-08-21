@@ -776,3 +776,47 @@ hands off; whether a drop is *received at all* is only observable here.
       File > Open does, rather than leaving an empty tab behind.
 - [ ] **Drop a file that is open in another program** (a locked file) -- it is
       skipped, and any other files in the same drop still open.
+
+## Checkpoint G.5b — pasted and dropped images
+
+SPEC §6.10 is the paste. Dropping an image into the document is an addition on
+top of it, at the owner's request -- the spec's drop bullet (§6.4) only opens
+tabs.
+
+Go does the filesystem work (`internal/app/images.go`) and its tests cover the
+naming, the collisions, the containment and the re-encode. What no test reaches
+is the clipboard itself: WebView2's clipboard, the Save As dialog, and whether
+the preview then renders what was written.
+
+- [ ] **Copy a screenshot (PrtScn or Win+Shift+S) and press Ctrl+V** in a saved
+      document. An `assets/` folder appears beside the file, the image lands in
+      it as `image-YYYYMMDD-HHMMSS.png`, and `![](assets/image-….png)` is
+      inserted at the cursor.
+- [ ] **Turn the preview on and check the image actually renders**, which is the
+      end-to-end proof: the markdown, the asset route and the file on disk all
+      have to agree.
+- [ ] **Paste twice inside the same second.** Two files, the second suffixed
+      `-2`. The names come from a whole-second timestamp, so this is easy to hit.
+- [ ] **Paste into an untitled document.** A prompt explains why it needs saving,
+      then Save As. Cancelling either one leaves the document untouched, and the
+      image is still on the clipboard to try again.
+- [ ] **Copy an image from a browser and paste it.** Browsers often put a JPEG on
+      the clipboard; the file written must still be a real PNG (open it and
+      check it is not a renamed JPEG).
+- [ ] **Paste ordinary text.** Unchanged -- the image path must not have taken
+      over Ctrl+V.
+- [ ] **Drag an image file onto the editor.** It is copied into `assets/` under
+      its own name and inserted **where the pointer was**, not at the caret.
+- [ ] **Drag the same image twice.** The second becomes `name-2.png` rather than
+      overwriting the first.
+- [ ] **Drag an image that already sits beside the document** (from the folder
+      the document was opened from). It is referenced where it is, not copied --
+      check no duplicate appears.
+- [ ] **Drag several images at once.** All of them, in order, left to right.
+- [ ] **Drag a mix of markdown and images.** The markdown opens as tabs and the
+      images go into the current document, in one gesture.
+- [ ] **Drop an image onto the preview pane rather than the editor.** It goes in
+      at the caret, since there is no text position under the pointer there.
+- [ ] **Hand-edit `files.assetFolder` in settings.json to `../evil`** and paste.
+      Nothing is written outside the document's folder. Go refuses it
+      (`filepath.IsLocal`); the paste reports a failure rather than escaping.
