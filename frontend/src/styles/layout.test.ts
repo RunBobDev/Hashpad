@@ -196,6 +196,37 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
+   * settings.editor.maxContentWidth (SPEC §6.13), which `settings/typography.ts`
+   * writes to `--max-content-width`. Both panes honour it, because it is a
+   * *measure* -- how far a line runs before wrapping -- and a side-by-side view
+   * whose halves disagree about that defeats the point.
+   *
+   * The cap goes on what holds the text, never on what scrolls: capping the
+   * scrolling element would pull its scrollbar into the middle of the window.
+   * For the preview that means its children; the editor's half lives in
+   * `editor/theme.ts` on `.cm-content`, which is not a stylesheet and so is not
+   * visible from here.
+   */
+  it('the preview caps its content width without capping the scroller', () => {
+    expect(rule('.preview-pane > *')).toMatch(/max-width:\s*var\(--max-content-width\)\s*;/);
+    expect(rule('.preview-pane')).not.toMatch(/max-width:/);
+  });
+
+  /**
+   * The compiled-in default is `none`, not `900px`. typography.ts sets the real
+   * value before the window is shown, so this only applies if that never runs --
+   * and an unwired app showing full-width text is right, where one silently
+   * capped at 900px looks like a layout bug.
+   */
+  it('defaults the content width to no limit', () => {
+    const line = read('./variables.css')
+      .split('\n')
+      .find((candidate) => candidate.trim().startsWith('--max-content-width:'));
+
+    expect(line?.trim()).toBe('--max-content-width: none;');
+  });
+
+  /**
    * The pane is what scrolls when its content is too wide, so its own overflow
    * must stay `auto`. `hidden` here would clip the same text with no scrollbar
    * -- the symptom this whole file is about, reached by a different route.

@@ -57,6 +57,20 @@
   margin-top: 0;
 }
 
+/* settings.editor.maxContentWidth, the preview's half of it. One setting covers
+   both panes on purpose: it is a measure -- how many characters a line runs to
+   before wrapping -- and having the two panes disagree about that would undo
+   the point of a side-by-side view.
+
+   Applied to the pane's *children* rather than the pane, because the pane is
+   what scrolls; capping it would pull the scrollbar into the middle of the
+   window. `margin-inline` alone, so the vertical margins every block below sets
+   for its own rhythm are left exactly as they are. */
+.preview-pane > * {
+  max-width: var(--max-content-width);
+  margin-inline: auto;
+}
+
 /* ---- Prose ------------------------------------------------------------ */
 
 .preview-pane h1,

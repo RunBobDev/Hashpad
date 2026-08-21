@@ -826,3 +826,47 @@ the preview then renders what was written.
 - [ ] **Hand-edit `files.assetFolder` in settings.json to `../evil`** and paste.
       Nothing is written outside the document's folder. Go refuses it
       (`filepath.IsLocal`); the paste reports a failure rather than escaping.
+
+## Checkpoint H.1 — typography and content width from settings
+
+SPEC §6.13's Appearance/Editor/Preview typography, wired to CSS custom
+properties (`settings/typography.ts`). There is no dialog yet -- that is H.4 --
+so these are checked by editing `settings.json` by hand and relaunching.
+
+Two places the file can live, and **the one beside the executable wins**
+(SPEC §6.13 portable mode), which is the easier one to test with:
+
+- portable: `settings.json` in the same folder as `hashpad.exe`
+- installed: `%APPDATA%\Hashpad\settings.json`
+
+A partial file is fine -- `LoadSettingsFrom` starts from the defaults and
+unmarshals over them, so only the keys you want to change need to be present.
+`version` does have to be there, or the file is treated as a bad version,
+backed up, and ignored.
+
+jsdom stores custom properties but resolves and renders nothing, so every item
+below is invisible to the test suite.
+
+- [ ] **`appearance.uiFontSize`** changes the menu bar, tabs, toolbar and status
+      bar, and **not** the editor or preview text.
+- [ ] **`editor.fontFamily` and `editor.fontSize`** change the editor only. Try a
+      face that is obviously not monospace so a silent fallback is visible.
+- [ ] **A font name that is not installed** still gives a monospace editor
+      (`Consolas`, then the generic), not a proportional one.
+- [ ] **`editor.lineHeight`** changes the editor's leading. The preview
+      deliberately shares this token, so it should move too -- scroll sync
+      interpolates between the two panes' heights and matched leading is one
+      fewer source of drift.
+- [ ] **`preview.fontFamily` and `preview.fontSize`** change the preview only.
+- [ ] **`editor.maxContentWidth`** caps the text column in **both** panes and
+      centres it. Maximise the window to see it. The scrollbars must stay at the
+      pane edges, not move inward with the text.
+- [ ] **`"maxContentWidth": 0`** means no cap -- text runs the full width again.
+- [ ] **Ctrl+scroll and Ctrl+Plus/Minus still zoom** after changing the font
+      sizes, and still leave the chrome alone. This is the one most likely to
+      break: the size tokens carry a `* var(--zoom)` factor and an override that
+      dropped it would disable zoom only for users who had set a font size.
+- [ ] **Nonsense values do not brick it.** `"fontSize": 0`, `-5`, `99999`, and
+      `"fontFamily": ""` each give a readable window.
+- [ ] **Delete `settings.json` entirely** -- the app opens on the compiled-in
+      defaults, with text running the full width rather than capped.

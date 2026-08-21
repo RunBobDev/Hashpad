@@ -83,6 +83,17 @@
   --size-preview: calc(15px * var(--zoom));
   --line-editor: 1.6;
 
+  /* How wide a line of text may get before it stops growing with the window
+     (settings.editor.maxContentWidth). Prose past about 90 characters is hard
+     to track back to the next line, and a maximised window on a wide monitor is
+     well past that.
+
+     `none` here, not 900px, and the difference matters: settings/typography.ts
+     sets the real value on :root before the window is shown, so this is only
+     what applies if that never runs. An unwired app that shows full-width text
+     is right; one that silently caps at 900px looks like a layout bug. */
+  --max-content-width: none;
+
   /* Editor padding — SPEC §6.1 asks for roughly 24px horizontal. */
   --pad-editor: 24px;
 

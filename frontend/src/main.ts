@@ -32,6 +32,7 @@ import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
+import { applyTypography } from './settings/typography';
 import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
@@ -215,6 +216,12 @@ async function bootstrap(): Promise<void> {
       applyAccent(settings.appearance.accentColor);
     }
     applyTheme(resolveIsDark(themeMode, systemIsDark));
+
+    // Fonts, sizes and the content width, straight onto :root (SPEC §6.13).
+    // Before the window is shown, like the theme and for the same reason: the
+    // alternative is the user watching the text resize itself on every launch.
+    // Every value is clamped inside -- see settings/typography.ts.
+    applyTypography(settings);
 
     toolbarVisible = settings.toolbar.visible;
     // A hand-edited settings.json naming an unknown or renamed command must
