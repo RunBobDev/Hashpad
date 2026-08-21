@@ -19,6 +19,11 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(() => () => {}),
   Quit: vi.fn(),
   WindowMinimise: vi.fn(),
+  // ui/filedrop.ts subscribes at module load. A missing export here is a hard
+  // mock error rather than a silent fallback, which is how these five files
+  // announced themselves the moment main.ts imported it.
+  OnFileDrop: vi.fn(),
+  OnFileDropOff: vi.fn(),
   WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),

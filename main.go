@@ -46,6 +46,17 @@ func main() {
 		Frameless: true,
 		MinWidth:  480,
 		MinHeight: 320,
+		// SPEC §6.4: dropping a file on the window opens it in a tab. This has
+		// to come from Wails rather than a DOM `drop` listener, because the
+		// webview hands JavaScript `File` objects with no filesystem path --
+		// browsers withhold it deliberately, and there is nothing to open
+		// without it. Wails resolves the real paths natively (on Windows via
+		// WebView2's postMessageWithAdditionalObjects) and hands them to
+		// frontend/src/ui/filedrop.ts.
+		//
+		// `DisableWebViewDrop` stays false: the webview must still receive the
+		// event, since that is how the frontend hears about it at all.
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		// Opaque white so the window does not flash a dark frame before CSS
 		// applies. Go cannot read CSS, so this is the single sanctioned
 		// exception to "colours only live in variables.css".

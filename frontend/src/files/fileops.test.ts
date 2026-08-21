@@ -13,11 +13,14 @@ import type { SaveChoice } from '../ui/confirmdialog';
 import {
   displayName,
   markSaved,
+  openFiles,
+  openPaths,
   resolveDocumentsBeforeQuit,
   saveDocumentAs,
   windowTitle,
 } from './fileops';
-import { ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
+import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
+import { openDocumentInNewTab } from './documentops';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
@@ -28,6 +31,11 @@ vi.mock('../../wailsjs/go/app/App', () => ({
   ShowSaveDialog: vi.fn(),
   WriteFile: vi.fn(),
 }));
+
+// Only the one export fileops.ts imports. Mocked so these tests are about
+// "were the right paths read and handed on", not about the tab machinery --
+// which documentops.test.ts already covers.
+vi.mock('./documentops', () => ({ openDocumentInNewTab: vi.fn() }));
 
 function docWith(overrides: Partial<Document>): Document {
   const base = createUntitledDocument(EditorState.create({ doc: 'hello' }));
@@ -373,5 +381,71 @@ describe('save-as records the new path on the document it saved', () => {
     await saveDocumentAs('a');
 
     expect(pathOf('a')).toBeNull();
+  });
+});
+
+/**
+ * `openPaths` is the one implementation of "turn these paths into tabs", shared
+ * by File > Open and by a drop on the window (ui/filedrop.ts). It was extracted
+ * from `openFiles` for that second caller, and these tests exist because the
+ * extraction created a seam nothing was watching: mutating `openFiles` to pass
+ * an empty list left the whole suite green.
+ */
+describe('opening paths as tabs', () => {
+  function contentsFor(path: string) {
+    return { path, content: 'body of ' + path, encoding: 'utf-8', lineEnding: 'lf', mixed: false };
+  }
+
+  beforeEach(() => {
+    vi.mocked(openDocumentInNewTab).mockClear();
+    vi.mocked(ReadFile).mockReset();
+    vi.mocked(ShowOpenDialog).mockReset();
+  });
+
+  it('opens a tab per path, in the order given', async () => {
+    vi.mocked(ReadFile).mockImplementation(async (path: string) => contentsFor(path) as never);
+
+    await openPaths(['a.md', 'b.md']);
+
+    expect(vi.mocked(openDocumentInNewTab).mock.calls.map(([c]) => c.path)).toEqual([
+      'a.md',
+      'b.md',
+    ]);
+  });
+
+  /**
+   * One bad file must not cost the user the rest of the drop. A multi-file drop
+   * or a multi-select can easily include something locked, deleted since, or on
+   * a disconnected drive.
+   */
+  it('skips a file it cannot read and still opens the others', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(ReadFile).mockImplementation(async (path: string) => {
+      if (path === 'gone.md') throw new Error('ENOENT');
+      return contentsFor(path) as never;
+    });
+
+    await openPaths(['gone.md', 'here.md']);
+
+    expect(vi.mocked(openDocumentInNewTab).mock.calls.map(([c]) => c.path)).toEqual(['here.md']);
+  });
+
+  it('opens what the dialog returned', async () => {
+    vi.mocked(ShowOpenDialog).mockResolvedValue(['picked.md']);
+    vi.mocked(ReadFile).mockImplementation(async (path: string) => contentsFor(path) as never);
+
+    await openFiles();
+
+    expect(vi.mocked(openDocumentInNewTab).mock.calls.map(([c]) => c.path)).toEqual(['picked.md']);
+  });
+
+  /** A cancelled or failed dialog opens nothing, rather than throwing at the caller. */
+  it('opens nothing when the dialog fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(ShowOpenDialog).mockRejectedValue(new Error('no dialog'));
+
+    await expect(openFiles()).resolves.toBeUndefined();
+
+    expect(openDocumentInNewTab).not.toHaveBeenCalled();
   });
 });

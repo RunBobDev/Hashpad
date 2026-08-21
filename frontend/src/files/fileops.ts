@@ -100,6 +100,29 @@ export function markSaved(
 }
 
 /**
+ * Reads each path and gives it a tab. One unreadable file is skipped rather
+ * than abandoning the rest -- with a multi-select or a multi-file drop, the
+ * others are still perfectly openable.
+ *
+ * Split out of `openFiles` so the dialog and the drop (`ui/filedrop.ts`) share
+ * one implementation of "turn these paths into tabs". The two differ only in
+ * where the paths come from, and that difference is the caller's business.
+ */
+export async function openPaths(paths: readonly string[]): Promise<void> {
+  for (const path of paths) {
+    let contents;
+    try {
+      contents = await ReadFile(path);
+    } catch (error) {
+      console.error(`hashpad: failed to read ${path}`, error);
+      continue;
+    }
+
+    openDocumentInNewTab(contents);
+  }
+}
+
+/**
  * File > Open. Checkpoint C: each opened file becomes its own tab via
  * `documentops.ts`'s `openDocumentInNewTab` — opening a file no longer
  * discards anything, so there is nothing to confirm first.
@@ -113,17 +136,7 @@ export async function openFiles(): Promise<void> {
     return;
   }
 
-  for (const path of paths) {
-    let contents;
-    try {
-      contents = await ReadFile(path);
-    } catch (error) {
-      console.error(`hashpad: failed to read ${path}`, error);
-      continue;
-    }
-
-    openDocumentInNewTab(contents);
-  }
+  await openPaths(paths);
 }
 
 /**

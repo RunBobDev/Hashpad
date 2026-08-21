@@ -615,3 +615,31 @@ describe('word wrap', () => {
     view.destroy();
   });
 });
+
+/**
+ * The editor's stack must swallow file drops, because `ui/filedrop.ts` turns
+ * them into tabs (SPEC §6.4). Asserted here, on `buildExtensions`, and not only
+ * in `filedrop.test.ts`: that file proves the extension works, this one proves
+ * the editor actually has it. Deleting the line in extensions.ts leaves the
+ * other file green.
+ */
+describe('file drops in the editor', () => {
+  it('does not paste a dropped file into the document', async () => {
+    const view = mountView('hello');
+
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', {
+      value: { files: [new File(['dropped text'], 'a.md')], getData: () => '' },
+    });
+    Object.defineProperty(event, 'clientX', { value: 0 });
+    Object.defineProperty(event, 'clientY', { value: 0 });
+    view.contentDOM.dispatchEvent(event);
+
+    // CodeMirror reads the file with a FileReader, so the insertion this guards
+    // against would land after the dispatch returns.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(view.state.doc.toString()).toBe('hello');
+    view.destroy();
+  });
+});

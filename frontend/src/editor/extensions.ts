@@ -15,6 +15,7 @@ import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
 import { buildFindPanel, openReplacePanel } from '../ui/findreplace';
+import { suppressEditorFileDrop } from '../ui/filedrop';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
 import { statusOf } from '../state/document';
@@ -199,6 +200,10 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
      * the chrome would have silently cost the highlights.
      */
     search({ top: true, createPanel: buildFindPanel }),
+    // A dropped file opens as a tab (SPEC §6.4, ui/filedrop.ts), so the
+    // editor's own "read the file and insert its text" default must not also
+    // run. See that function for why returning true is enough.
+    suppressEditorFileDrop(),
     // High precedence so these file-command shortcuts always win, regardless
     // of what defaultKeymap does or gains in a future CodeMirror version.
     Prec.high(

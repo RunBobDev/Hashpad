@@ -31,6 +31,7 @@ import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
 import { mountWindowEdges } from './ui/windowedges';
+import { mountFileDrop } from './ui/filedrop';
 import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
@@ -315,6 +316,11 @@ mountShortcuts(view);
 // fixed to the viewport and belong to the window, not to any row; see
 // ui/windowedges.ts for the three separate ways the edge failed without them.
 mountWindowEdges(root);
+
+// Files dropped on the window open as tabs (SPEC §6.4). Whole-window, so it is
+// mounted here rather than on any one region; see ui/filedrop.ts for why the
+// paths have to come from Wails rather than the DOM `drop` event.
+mountFileDrop();
 
 /**
  * Routes a View > Theme menu choice. `themeMode` is updated first and

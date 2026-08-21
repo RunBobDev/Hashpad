@@ -741,3 +741,38 @@ highlighting or scrolling is covered by a test.
       CodeMirror's substitution syntax, not ours, and nothing in `src/` tests it.
 - [ ] **Replace All on a large file** stays responsive, and Escape still closes.
 - [ ] **Both rows read correctly in dark mode**, and the buttons' hover states.
+
+## Checkpoint G.5a — dropping files on the window
+
+SPEC §6.4's last unbuilt bullet. The paths come from Wails' `OnFileDrop`
+(`EnableFileDrop` in `main.go`), not from a DOM `drop` listener -- a webview
+hands JavaScript `File` objects with no filesystem path, so there is nothing to
+open without the native side.
+
+None of this is reachable from Vitest: the whole mechanism is the Wails runtime
+plus WebView2's `postMessageWithAdditionalObjects`, neither of which exists
+there. The tests cover which paths get opened and that the editor keeps its
+hands off; whether a drop is *received at all* is only observable here.
+
+- [ ] **Drop a `.md` file anywhere on the window** -- editor, preview, outline,
+      tab strip, the status bar, the gap beside the menus. It opens in a new tab
+      in every one of them. `useDropTarget` is false precisely so no region has
+      to opt in; a region that does nothing is the symptom of that regressing.
+- [ ] **The file's text is *not* also pasted into the document you were
+      editing.** CodeMirror's own drop handler reads a dropped file and inserts
+      it at the cursor, so this is a real thing that happens when
+      `suppressEditorFileDrop` is missing -- and the tab opening at the same
+      time makes it easy to miss.
+- [ ] **Drop several files at once.** Each becomes its own tab, in the order
+      Explorer lists them.
+- [ ] **Drop a `.png`, a `.zip`, or a file with no extension.** Nothing happens
+      -- no tab, no error. Every file this app opens is decoded as markdown, so
+      opening one would be a tab of mojibake.
+- [ ] **Drop a mix of markdown and non-markdown.** The markdown opens; the rest
+      is ignored.
+- [ ] **Dragging a selection *within* a document still moves the text.**
+      Internal drags are not file drops and must be left alone.
+- [ ] **Drop a file on the untitled scratch tab.** It replaces it, the same way
+      File > Open does, rather than leaving an empty tab behind.
+- [ ] **Drop a file that is open in another program** (a locked file) -- it is
+      skipped, and any other files in the same drop still open.
