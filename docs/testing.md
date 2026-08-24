@@ -858,6 +858,19 @@ below is invisible to the test suite.
       interpolates between the two panes' heights and matched leading is one
       fewer source of drift.
 - [ ] **`preview.fontFamily` and `preview.fontSize`** change the preview only.
+- [ ] **An existing settings.json is migrated, not discarded.** Take a v1 file
+      with `"version": 1`, `"maxContentWidth": 900` and a non-default theme;
+      launch. The cap is gone, the theme survives, and the log says "migrating
+      settings ... from version 1 to 2". This is the one that bit: `SaveSettings`
+      writes the whole struct, so the first time any setting is changed, every
+      default in force is frozen into the file and later default changes never
+      reach it.
+- [ ] **A settings.json from a *newer* build is replaced and backed up**, not
+      migrated -- set `"version": 99`.
+- [ ] **Migration does not write to disk.** After launching on a v1 file, the
+      file itself is still v1 until something saves. That is deliberate: portable
+      mode may sit on read-only media, and loading settings must not need to
+      write. Confirm the app runs from a read-only folder.
 - [ ] **The shipped default is uncapped** (design §4.19): with no
       `maxContentWidth` in settings.json, text fills the whole editor width at
       any window size. SPEC §6.13's example block shows 900, but §6.1 calls the

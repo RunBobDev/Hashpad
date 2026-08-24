@@ -12,9 +12,40 @@ import (
 )
 
 // settingsVersion is the schema version written to disk. Bump it only alongside
-// a migration; an unrecognised version falls back to defaults rather than
-// guessing at a format we do not know.
-const settingsVersion = 1
+// a migration in `migrateSettings`; a version from the *future* still falls back
+// to defaults, because we cannot guess at a format we do not know.
+const settingsVersion = 2
+
+// migrateSettings brings an older file forward, keeping everything it does not
+// have a reason to change.
+//
+// **Why this is needed at all, and not only for the one value below.**
+// `SaveSettings` writes the whole struct, so the first time a user changes any
+// single setting -- the theme, the window size, a pinned toolbar button --
+// every default in force at that moment is frozen into their file. A later
+// change to `DefaultSettings` then never reaches them: the file has an explicit
+// value, and an explicit value wins. Without a migration step, "change the
+// default" is only ever true for a fresh install.
+//
+// That is exactly how this was found: design §4.19 turned the content-width cap
+// off by default, and the owner reported the editor still capped, because their
+// settings.json said `"maxContentWidth": 900` -- written there by a theme change
+// made weeks earlier.
+func migrateSettings(settings Settings) Settings {
+	if settings.Version < 2 {
+		// v1 shipped `maxContentWidth: 900`. Only the old default is rewritten,
+		// so someone who deliberately chose 900 does lose it -- accepted,
+		// because the alternative is leaving every v1 install with a cap they
+		// never asked for, and there is no record of which of the two it was.
+		// Any other value is a choice and is kept.
+		if settings.Editor.MaxContentWidth == 900 {
+			settings.Editor.MaxContentWidth = 0
+		}
+	}
+
+	settings.Version = settingsVersion
+	return settings
+}
 
 type AppearanceSettings struct {
 	Theme       string `json:"theme"`
@@ -168,6 +199,22 @@ func LoadSettingsFrom(path string) (Settings, error) {
 		log.Printf("hashpad: settings at %s are malformed (%v); using defaults", path, err)
 		backupBadSettings(path)
 		return DefaultSettings(), nil
+	}
+
+	// A file from an older schema is upgraded, not discarded. Throwing it away
+	// would cost the user their theme, window size and pinned toolbar to change
+	// one field, which is a worse answer than migrating -- and it would make
+	// bumping the version something to avoid rather than the routine step the
+	// constant's comment describes.
+	//
+	// A version from the *future* is still replaced: it was written by a build
+	// that knew a format this one does not, and guessing at it is how settings
+	// get silently mangled. `0` and anything negative land here too, which is
+	// right -- neither is a schema this code has ever written.
+	if settings.Version > 0 && settings.Version < settingsVersion {
+		log.Printf("hashpad: migrating settings at %s from version %d to %d",
+			path, settings.Version, settingsVersion)
+		return migrateSettings(settings), nil
 	}
 
 	if settings.Version != settingsVersion {

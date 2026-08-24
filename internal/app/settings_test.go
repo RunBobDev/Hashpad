@@ -206,7 +206,10 @@ func TestLoadSettingsFromUnknownVersionFallsBackToDefaults(t *testing.T) {
 func TestLoadSettingsFromPartialFileFillsDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
-	raw := `{"version": 1, "editor": {"fontSize": 20}}`
+	// The *current* version, so this stays a test about partial files. Written
+	// with `settingsVersion` rather than a literal: as a literal 1 it silently
+	// became a test of the v1 migration path the moment that existed.
+	raw := fmt.Sprintf(`{"version": %d, "editor": {"fontSize": 20}}`, settingsVersion)
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -285,5 +288,123 @@ func TestDefaultPinnedToolbarCommands(t *testing.T) {
 func TestDefaultContentWidthIsUnlimited(t *testing.T) {
 	if got := DefaultSettings().Editor.MaxContentWidth; got != 0 {
 		t.Errorf("default maxContentWidth = %d, want 0 (no limit)", got)
+	}
+}
+
+// write seeds a settings file. The existing tests inline os.WriteFile; the
+// migration tests below each need one, so it is worth a name.
+func write(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+}
+
+// A version-1 file is upgraded rather than discarded.
+//
+// The bug this exists for: SaveSettings writes the whole struct, so the first
+// time a user changes any single setting, every default in force at that moment
+// is frozen into their file. Design §4.19 turned the content-width cap off by
+// default and the owner reported the editor still capped, because their
+// settings.json said 900 -- put there by a theme change made much earlier.
+// Changing a default is only ever true for a fresh install without this step.
+func TestLoadMigratesAVersionOneFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	write(t, path, `{
+	  "version": 1,
+	  "appearance": {"theme": "dark", "accentColor": "#ff0000", "uiFontSize": 16},
+	  "editor": {"maxContentWidth": 900, "fontSize": 18},
+	  "window": {"previewSplitRatio": 0.42}
+	}`)
+
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if got.Editor.MaxContentWidth != 0 {
+		t.Errorf("maxContentWidth = %d, want 0 -- the v1 default should be lifted",
+			got.Editor.MaxContentWidth)
+	}
+	if got.Version != settingsVersion {
+		t.Errorf("version = %d, want %d", got.Version, settingsVersion)
+	}
+
+	// Everything else survives. Discarding the file would have been the easy
+	// answer and it costs the user their theme to change one field.
+	if got.Appearance.Theme != "dark" {
+		t.Errorf("theme = %q, want dark", got.Appearance.Theme)
+	}
+	if got.Appearance.AccentColor != "#ff0000" {
+		t.Errorf("accentColor = %q, want #ff0000", got.Appearance.AccentColor)
+	}
+	if got.Appearance.UIFontSize != 16 {
+		t.Errorf("uiFontSize = %d, want 16", got.Appearance.UIFontSize)
+	}
+	if got.Editor.FontSize != 18 {
+		t.Errorf("fontSize = %d, want 18", got.Editor.FontSize)
+	}
+	if got.Window.PreviewSplitRatio != 0.42 {
+		t.Errorf("previewSplitRatio = %v, want 0.42", got.Window.PreviewSplitRatio)
+	}
+}
+
+// Only the old *default* is lifted. A width that is not 900 was a choice, and
+// the migration has no business overriding a choice.
+func TestMigrationKeepsAChosenContentWidth(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	write(t, path, `{"version": 1, "editor": {"maxContentWidth": 700}}`)
+
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if got.Editor.MaxContentWidth != 700 {
+		t.Errorf("maxContentWidth = %d, want 700 left alone", got.Editor.MaxContentWidth)
+	}
+}
+
+// A file from a newer build is still replaced: it was written by something that
+// knew a format this code does not, and guessing at it is how settings get
+// silently mangled. Version 0 lands here too -- no build ever wrote it.
+func TestLoadReplacesAnUnknownVersion(t *testing.T) {
+	for _, version := range []int{0, -1, settingsVersion + 1} {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "settings.json")
+		write(t, path, fmt.Sprintf(`{"version": %d, "appearance": {"theme": "dark"}}`, version))
+
+		got, err := LoadSettingsFrom(path)
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if !reflect.DeepEqual(got, DefaultSettings()) {
+			t.Errorf("version %d: got %+v, want defaults", version, got)
+		}
+
+		// And the original is kept rather than overwritten (SPEC §6.13).
+		// `backupBadSettings` *renames* the file, so the directory holds one
+		// entry afterwards, not two -- an earlier version of this counted the
+		// entries and failed against a backup that had in fact been made.
+		if backups := backupFiles(t, directory); len(backups) != 1 {
+			t.Errorf("version %d: found %d backups, want 1", version, len(backups))
+		}
+	}
+}
+
+// The round trip has to stay at the current version, or every save would
+// re-trigger a migration on the next load.
+func TestSavedSettingsCarryTheCurrentVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := SaveSettingsTo(path, DefaultSettings()); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got.Version != settingsVersion {
+		t.Errorf("version = %d, want %d", got.Version, settingsVersion)
 	}
 }
