@@ -24,16 +24,20 @@ export const hashpadTheme = EditorView.theme({
     padding: 'var(--pad-editor) 0',
     lineHeight: 'var(--line-editor)',
     caretColor: 'var(--fg-primary)',
-    // settings.editor.maxContentWidth. Centred rather than left-aligned,
-    // because a capped column pinned to the left of a maximised window reads as
-    // a broken layout rather than a deliberate measure.
+    // settings.editor.maxContentWidth -- a cap on how far a line runs, and
+    // nothing more.
+    //
+    // **Left-aligned, deliberately.** The first version centred the column,
+    // which is what a prose reader does, and the owner reported the editor's
+    // text starting a third of the way across the window. Centring also
+    // contradicts SPEC §6.1, which asks for roughly 24px of horizontal padding
+    // -- at the default 900px cap on a maximised window that padding became
+    // ~500px. A maximum is a maximum; where the text *starts* is still the left
+    // edge plus `--pad-editor`.
     //
     // On `.cm-content` and not on `.cm-scroller`: the scroller is what scrolls,
     // and capping it would move the scrollbar into the middle of the window.
-    // The active-line highlight is drawn per `.cm-line`, so it ends at the
-    // column edge too -- which is right, since that is where the line ends.
     maxWidth: 'var(--max-content-width)',
-    marginInline: 'auto',
   },
   '.cm-line': {
     padding: '0 var(--pad-editor)',

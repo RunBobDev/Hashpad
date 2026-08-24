@@ -64,11 +64,15 @@
 
    Applied to the pane's *children* rather than the pane, because the pane is
    what scrolls; capping it would pull the scrollbar into the middle of the
-   window. `margin-inline` alone, so the vertical margins every block below sets
-   for its own rhythm are left exactly as they are. */
+   window.
+
+   No `margin-inline: auto`. The first version centred the column and the owner
+   reported the editor's text starting a third of the way across the window; the
+   preview is capped by the same setting and has to agree with it, or one pane
+   starts where the other does not. Nothing is set to `0` either -- the blocks
+   below own their own margins, and this rule only bounds their width. */
 .preview-pane > * {
   max-width: var(--max-content-width);
-  margin-inline: auto;
 }
 
 /* ---- Prose ------------------------------------------------------------ */

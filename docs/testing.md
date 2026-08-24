@@ -858,9 +858,12 @@ below is invisible to the test suite.
       interpolates between the two panes' heights and matched leading is one
       fewer source of drift.
 - [ ] **`preview.fontFamily` and `preview.fontSize`** change the preview only.
-- [ ] **`editor.maxContentWidth`** caps the text column in **both** panes and
-      centres it. Maximise the window to see it. The scrollbars must stay at the
-      pane edges, not move inward with the text.
+- [ ] **`editor.maxContentWidth`** caps the text column in **both** panes.
+      Maximise the window to see it. The text still **starts at the left**, one
+      `--pad-editor` in -- the cap bounds how far a line runs, it does not move
+      where it begins. An earlier version centred the column and the owner
+      reported the editor's text starting a third of the way across the window.
+      The scrollbars must stay at the pane edges, not move inward with the text.
 - [ ] **`"maxContentWidth": 0`** means no cap -- text runs the full width again.
 - [ ] **Ctrl+scroll and Ctrl+Plus/Minus still zoom** after changing the font
       sizes, and still leave the chrome alone. This is the one most likely to

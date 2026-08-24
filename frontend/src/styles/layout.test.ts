@@ -213,6 +213,23 @@ describe('flex items that must be allowed to shrink', () => {
   });
 
   /**
+   * The cap bounds the line, it does not move where the text starts.
+   *
+   * The first version of this centred the capped column, and the owner reported
+   * the editor's text beginning a third of the way across the window -- at the
+   * default 900px cap on a maximised display, the left gap is about 500px.
+   * Centring also contradicts SPEC §6.1's "roughly 24px horizontal" padding,
+   * which is what the text should actually be inset by.
+   *
+   * Asserted as the absence of `auto` rather than the presence of `0`: the
+   * blocks in the preview own their own margins for their own rhythm, and this
+   * rule has no business resetting them.
+   */
+  it('does not centre the capped column', () => {
+    expect(rule('.preview-pane > *')).not.toMatch(/margin-inline:\s*auto/);
+  });
+
+  /**
    * The compiled-in default is `none`, not `900px`. typography.ts sets the real
    * value before the window is shown, so this only applies if that never runs --
    * and an unwired app showing full-width text is right, where one silently
