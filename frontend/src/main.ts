@@ -71,7 +71,38 @@ import {
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('#app not found');
 
-mountMenuBar(root);
+// The View menu shows which of its toggles are on (owner report: with word wrap
+// enabled there was no way to tell short of resizing the window). Asked afresh
+// each time a popup opens, because the truth for these lives in four different
+// places and none of them is worth mirroring into a fifth.
+//
+// Reads `statusBarTeardown` and `outlineHandle`, both declared below. Safe, and
+// worth saying so given this file's history: the callback only ever runs from a
+// click, long after module evaluation, so neither is in its temporal dead zone
+// -- unlike bootstrap's `finally`, which does run during evaluation.
+mountMenuBar(root, (id) => {
+  switch (id) {
+    case 'theme.system':
+    case 'theme.light':
+    case 'theme.dark':
+      return id === `theme.${themeMode}`;
+    // Per *document*, not per window -- switch tabs and this legitimately
+    // changes, which is exactly why it is read at open time.
+    case 'view.preview':
+      return activeDocument(store.getState())?.viewMode === 'split';
+    // The handle doubles as the visibility flag for both of these; a separate
+    // boolean beside it is a second source of truth that can disagree with the
+    // DOM.
+    case 'view.outline':
+      return outlineHandle !== null;
+    case 'view.statusBar':
+      return statusBarTeardown !== null;
+    case 'view.wordWrap':
+      return store.getState().wordWrap;
+    default:
+      return false;
+  }
+});
 // Between the menu bar and the editor area, per SPEC §6.1's chrome layout --
 // the window is frameless, so this row is the only place a filename appears.
 mountTabBar(root);

@@ -56,7 +56,33 @@ interface MenuItem {
   shortcut?: string;
   /** Commands whose checkpoint has not landed yet render greyed rather than lying. */
   enabled: boolean;
+  /**
+   * Items that show their current state, and how.
+   *
+   * `check` is an independent on/off (Word Wrap, Preview); `radio` is one of a
+   * group where exactly one is on (the three themes). Absent means the item is
+   * an action -- it *does* something rather than *being* something -- and gets
+   * no indicator at all.
+   *
+   * The distinction is not decorative: it picks the ARIA role, and a screen
+   * reader announces "checked" for one and "selected, 1 of 3" for the other.
+   */
+  toggle?: 'check' | 'radio';
 }
+
+/**
+ * Answers whether a stateful item is currently on, asked afresh every time a
+ * popup opens.
+ *
+ * A callback rather than a field on `MenuItem` or a copy in the store, because
+ * the truth is genuinely scattered: `wordWrap` lives in the store, the outline
+ * and status bar are "is the handle non-null" in main.ts, and the preview is a
+ * property of the *active document*. Mirroring all of that into a fourth place
+ * would be a fourth thing to keep in sync. Popups are rebuilt on every open
+ * (see `openMenuAt`), so asking at build time is always current and needs no
+ * subscription.
+ */
+export type MenuItemChecked = (id: string) => boolean;
 
 interface Menu {
   label: string;
@@ -163,13 +189,25 @@ const MENUS: Menu[] = [
       // Prefixed rather than bare "System"/"Light"/"Dark": these sit directly
       // below "Go to Tab 9" in a flat list with no separators or submenus, so
       // an item reading only "System" says nothing about what it does.
-      { id: 'theme.system', label: 'Theme: Follow System', enabled: true },
-      { id: 'theme.light', label: 'Theme: Light', enabled: true },
-      { id: 'theme.dark', label: 'Theme: Dark', enabled: true },
-      { id: 'view.preview', label: 'Preview', shortcut: 'Ctrl+Shift+P', enabled: true },
-      { id: 'view.outline', label: 'Outline', shortcut: 'Ctrl+Shift+O', enabled: true },
-      { id: 'view.statusBar', label: 'Status Bar', enabled: true },
-      { id: 'view.wordWrap', label: 'Word Wrap', enabled: true },
+      { id: 'theme.system', label: 'Theme: Follow System', enabled: true, toggle: 'radio' },
+      { id: 'theme.light', label: 'Theme: Light', enabled: true, toggle: 'radio' },
+      { id: 'theme.dark', label: 'Theme: Dark', enabled: true, toggle: 'radio' },
+      {
+        id: 'view.preview',
+        label: 'Preview',
+        shortcut: 'Ctrl+Shift+P',
+        enabled: true,
+        toggle: 'check',
+      },
+      {
+        id: 'view.outline',
+        label: 'Outline',
+        shortcut: 'Ctrl+Shift+O',
+        enabled: true,
+        toggle: 'check',
+      },
+      { id: 'view.statusBar', label: 'Status Bar', enabled: true, toggle: 'check' },
+      { id: 'view.wordWrap', label: 'Word Wrap', enabled: true, toggle: 'check' },
       { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+Plus', enabled: true },
       { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+Minus', enabled: true },
       { id: 'view.zoomReset', label: 'Reset Zoom', shortcut: 'Ctrl+0', enabled: true },
@@ -189,7 +227,7 @@ function emit(id: string): void {
 /** Which end of a popup's item list should receive focus when it opens. */
 type FocusTarget = 'first' | 'last' | 'none';
 
-export function mountMenuBar(parent: HTMLElement): void {
+export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = () => false): void {
   const bar = document.createElement('div');
   bar.className = 'menubar';
 
@@ -294,11 +332,25 @@ export function mountMenuBar(parent: HTMLElement): void {
     popup.addEventListener('click', (event) => event.stopPropagation());
 
     const items: HTMLButtonElement[] = [];
+    // Decided per menu, not per item: File and Edit have no stateful items and
+    // should not carry an empty column, while every row in View reserves one so
+    // the labels align.
+    const menuHasToggles = menu.items.some((candidate) => candidate.toggle !== undefined);
 
     for (const item of menu.items) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.setAttribute('role', 'menuitem');
+      // `menuitemcheckbox`/`menuitemradio` rather than plain `menuitem` for
+      // stateful items: the role is what makes a screen reader announce the
+      // state at all, and `aria-checked` on a plain `menuitem` is ignored.
+      button.setAttribute(
+        'role',
+        item.toggle === 'check'
+          ? 'menuitemcheckbox'
+          : item.toggle === 'radio'
+            ? 'menuitemradio'
+            : 'menuitem',
+      );
       // Disabled items deliberately do NOT get the native `disabled`
       // property: that removes them from the focus order entirely, and a
       // keyboard or screen-reader user would have no way to discover that
@@ -313,7 +365,33 @@ export function mountMenuBar(parent: HTMLElement): void {
       // one — see the 'Tab' case below.
       button.tabIndex = -1;
 
+      // The indicator column. Present on *every* item in a menu that has any
+      // stateful one, empty on the others, so the labels line up instead of
+      // jumping left and right down the list -- which is how Windows draws it.
+      // `aria-hidden` because the role and `aria-checked` above already carry
+      // this to a screen reader; announcing a tick glyph as well would be a
+      // second, worse copy of the same fact.
+      if (menuHasToggles) {
+        const mark = document.createElement('span');
+        mark.className = 'menu-item__mark';
+        mark.setAttribute('aria-hidden', 'true');
+        if (item.toggle !== undefined && isChecked(item.id)) {
+          mark.textContent = item.toggle === 'radio' ? '●' : '✓';
+        }
+        button.append(mark);
+      }
+
+      if (item.toggle !== undefined) {
+        const checked = isChecked(item.id);
+        button.setAttribute('aria-checked', checked ? 'true' : 'false');
+        // Weight, not colour alone (SPEC §10) -- the same rule the outline's
+        // current section follows. The glyph carries it for everyone; this is
+        // what makes an active item findable while scanning rather than read.
+        if (checked) button.classList.add('menu-item--checked');
+      }
+
       const label = document.createElement('span');
+      label.className = 'menu-item__label';
       label.textContent = item.label;
       button.append(label);
 

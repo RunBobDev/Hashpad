@@ -890,3 +890,32 @@ below is invisible to the test suite.
       `"fontFamily": ""` each give a readable window.
 - [ ] **Delete `settings.json` entirely** -- the app opens on the compiled-in
       defaults, with text running the full width rather than capped.
+
+## Checkpoint H.2a — View menu shows which toggles are on
+
+Owner report: with word wrap enabled there was no way to tell without resizing
+the window to see whether lines wrapped. Same for Preview, Outline, Status Bar
+and which theme was active.
+
+Three carriers, deliberately: a glyph (the Windows convention, and the only one
+that survives greyscale), a bolder label (findable while scanning), and the
+accent colour. Colour is not carrying it alone -- SPEC §10.
+
+jsdom has no layout, so alignment and colour are invisible to the suite.
+
+- [ ] **Open View with word wrap on.** A tick sits left of "Word Wrap". Toggle
+      it off, reopen: the tick is gone. Repeat for Preview, Outline, Status Bar.
+- [ ] **The three Theme rows show a bullet, not a tick**, on exactly one of
+      them -- they are a one-of-three choice, not three switches.
+- [ ] **Switch tabs with the preview open in one and not the other.** The
+      Preview tick follows the *active document*, because that is where the view
+      mode lives. This is the one that would break if the state were cached.
+- [ ] **Labels line up.** Every row in View reserves the indicator column, so
+      the text does not step sideways between ticked and unticked rows.
+- [ ] **File and Edit have no empty gutter** -- neither menu has anything
+      stateful, so neither reserves the column.
+- [ ] **Both themes.** The tick uses the accent colour; check it is legible on
+      the popup background in light and dark, and against a hovered row.
+- [ ] **Narrator (Win+Ctrl+Enter) announces the state**: "Word Wrap, checked"
+      for a toggle and "Theme: Dark, selected" for the radio group. The roles
+      are what make this work; `aria-checked` on a plain menuitem is ignored.

@@ -458,7 +458,10 @@ body {
 .menu-popup button {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  /* 10px, not 24: this is now the gap after the state indicator, where 24 would
+     read as a gulf. The label-to-shortcut distance it used to set is restored
+     by the `kbd` margin below, so nothing about the two-child rows changes. */
+  gap: 10px;
   width: 100%;
   padding: 6px 10px;
   border: 0;
@@ -485,6 +488,42 @@ body {
 .menu-popup kbd {
   color: var(--fg-muted);
   font: inherit;
+  /* Keeps the ~24px between a label and its shortcut that `gap` used to set on
+     its own, before the indicator column made a single gap serve two jobs. */
+  margin-left: 14px;
+}
+
+/*
+ * The state of a toggle, in the menu that toggles it.
+ *
+ * Reported by the owner: with Word Wrap on there was no way to tell without
+ * resizing the window to see whether lines wrapped. The same was true of
+ * Preview, Outline, Status Bar and which theme was active.
+ *
+ * Three carriers, not one. The glyph is the Windows convention and the only one
+ * that survives a screenshot in greyscale; the weight is what makes an active
+ * item findable while scanning a list rather than reading it; the accent colour
+ * is the one the owner asked for. Colour is deliberately not carrying this
+ * alone -- SPEC §10, the same rule the outline's current section follows.
+ *
+ * The column is reserved on every row of a menu that has any stateful item, so
+ * labels line up instead of stepping sideways down the list.
+ */
+.menu-item__mark {
+  flex: 0 0 auto;
+  width: 1em;
+  text-align: center;
+  color: var(--accent);
+}
+
+.menu-popup .menu-item__label {
+  /* Takes the slack, which is what puts the shortcut against the right edge
+     now that there are three children rather than two. */
+  flex: 1 1 auto;
+}
+
+.menu-popup button.menu-item--checked .menu-item__label {
+  font-weight: 600;
 }
 
 /*

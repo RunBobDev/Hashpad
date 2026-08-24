@@ -324,8 +324,12 @@ describe('view.preview', () => {
     setViewModeOf(active.id, 'source');
 
     document.querySelector<HTMLButtonElement>('#menubar-trigger-view')!.click();
-    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (button) => button.textContent?.startsWith('Preview'),
+    // `[role^="menuitem"]`, not `[role="menuitem"]`: Preview is a toggle and so
+    // carries `menuitemcheckbox`, which is what makes a screen reader announce
+    // its state. Matching on the label span rather than `textContent`, because
+    // the latter now leads with the state indicator when the item is on.
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')].find(
+      (button) => button.querySelector('.menu-item__label')?.textContent === 'Preview',
     )!;
     expect(item.getAttribute('aria-disabled')).toBeNull();
 
