@@ -41,7 +41,13 @@ import { clampSplitRatio, MAX_SPLIT_RATIO, MIN_SPLIT_RATIO } from '../state/docu
 import { activeDocument } from '../state/documents';
 import { onLanguageLoaded } from './codehighlight';
 import { renderMarkdown } from './render';
-import { lineForOffset, normalizeAnchors, offsetForLine, type AnchorOffset } from './scrollsync';
+import {
+  farEndHeight,
+  lineForOffset,
+  normalizeAnchors,
+  offsetForLine,
+  type AnchorOffset,
+} from './scrollsync';
 
 export interface PreviewHandle {
   show(): void;
@@ -294,9 +300,40 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * viewport that does not exist.
    */
   function endpoints(target: HTMLElement, measured: readonly AnchorOffset[]): AnchorOffset[] {
+    const scroller = view.scrollDOM;
     const paneMax = target.scrollHeight - target.clientHeight;
-    const editorMax = view.contentHeight - view.scrollDOM.clientHeight;
+    const editorMax = scroller.scrollHeight - scroller.clientHeight;
     if (measured.length === 0 || paneMax <= 0 || editorMax <= 0) return [];
+
+    // **The document-space height the editor reaches at its last scroll
+    // position, measured the same way `syncFromEditor` measures the current
+    // one.** That sameness is the whole point, and getting it wrong was a real
+    // bug: this used to be `view.contentHeight - clientHeight`, and
+    // `contentHeight` is CodeMirror's *estimate* for lines outside the rendered
+    // viewport, while the live path uses the scroller's true geometry. The two
+    // disagreed by about a line, so the saturation anchor named a line the
+    // editor could never actually reach -- and every measured anchor past it is
+    // discarded, so whatever lived in that gap became unreachable in the pane.
+    //
+    // Reported by the owner as "scroll to the bottom and the preview stops
+    // short", with a tall image at the end of the document: the gap was one
+    // line, and that line was the image, so the pane stopped 2311px short of its
+    // end. Measured in `frontend/harness/scrollsync.html`, which is also why the
+    // symptom depended on *how* you scrolled -- a single jump to the bottom
+    // rebuilt the anchors with an estimate that happened to agree, while
+    // scrolling down gradually built them earlier, when it did not, and the
+    // cache key (`contentHeight`) never changed afterwards to force a rebuild.
+    //
+    // `height` is linear in `scrollTop` with slope 1 -- `documentTop` moves with
+    // the scroll -- so the value at the far end is today's plus what is left to
+    // scroll. No estimate anywhere in it.
+    const editorMaxHeight = farEndHeight({
+      rectTop: scroller.getBoundingClientRect().top,
+      documentTop: view.documentTop,
+      scrollHeight: scroller.scrollHeight,
+      clientHeight: scroller.clientHeight,
+      scrollTop: scroller.scrollTop,
+    });
 
     // The last line that can ever sit at the top of the editor's viewport: past
     // this the editor cannot scroll further, so every later line is unreachable
@@ -311,7 +348,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // the editor is the one that ends the pane.
     return [
       { line: 1, offset: 0 },
-      { line: sourcePosition(editorMax), offset: paneMax },
+      { line: sourcePosition(editorMaxHeight), offset: paneMax },
     ];
   }
 

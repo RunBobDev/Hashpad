@@ -894,6 +894,17 @@ describe('scroll sync', () => {
     Object.defineProperty(pane, 'scrollHeight', { value: 2400, configurable: true });
     Object.defineProperty(pane, 'clientHeight', { value: PANE_VIEWPORT, configurable: true });
     Object.defineProperty(view.scrollDOM, 'clientHeight', { value: 200, configurable: true });
+    // The scroller's own scroll range, which is what `endpoints` measures --
+    // deliberately *not* `view.contentHeight`. That was the bug: contentHeight is
+    // CodeMirror's estimate for unrendered lines, and pinning the pane's end to
+    // an estimate put the saturation anchor on a line the editor could not
+    // reach. jsdom reports scrollHeight as 0, so it has to be stubbed here, and
+    // stubbing it consistently with clientHeight is what makes this fixture
+    // model the relationship the real scroller has.
+    Object.defineProperty(view.scrollDOM, 'scrollHeight', {
+      value: view.contentHeight,
+      configurable: true,
+    });
 
     const editorMax = view.contentHeight - 200;
     expect(editorMax, 'fixture must give the editor room to scroll').toBeGreaterThan(200);
@@ -915,6 +926,75 @@ describe('scroll sync', () => {
     expect(c).toBeGreaterThan(b);
     // And the end of the editor is the end of the pane, not a screenful short.
     expect(c).toBe(2400 - PANE_VIEWPORT);
+  });
+
+  /**
+   * The saturation anchor comes from the **scroller's measured range**, not from
+   * `view.contentHeight`.
+   *
+   * `contentHeight` is CodeMirror's estimate for lines outside the rendered
+   * viewport, and when it overestimates, the anchor names a line the editor can
+   * never scroll to. Every measured anchor past that line is discarded, so
+   * whatever sits in the gap becomes unreachable in the pane -- the owner
+   * reported a tall image at the end of a document leaving the preview 2311px
+   * short of its own bottom, and only when scrolled gradually, because a single
+   * jump rebuilt the anchors at a moment the estimate happened to be right.
+   *
+   * The fixture makes the two disagree on purpose: the scroller can reach less
+   * than `contentHeight` claims. Stubbing them equal -- which the test above does
+   * -- cannot tell the two implementations apart.
+   *
+   * Verified for real in `frontend/harness/scrollsync.html`; jsdom reports every
+   * scroll dimension as 0, so all of this geometry is stubbed and only the
+   * arithmetic is under test here.
+   */
+  it('pins the pane to its end using the scroller range, not the height estimate', () => {
+    const NL = String.fromCharCode(10);
+    const paragraphs = Array.from({ length: 40 }, (_, i) => 'para ' + i).join(NL + NL);
+    const mounted = mount(paragraphs + NL);
+    mounted.handle.show();
+    const pane = paneOf(mounted.split);
+    const view = mounted.view;
+
+    giveAnchorTops(
+      pane,
+      Array.from({ length: 40 }, (_, i) => i * 50),
+    );
+
+    const PANE_VIEWPORT = 400;
+    Object.defineProperty(pane, 'scrollHeight', { value: 2400, configurable: true });
+    Object.defineProperty(pane, 'clientHeight', { value: PANE_VIEWPORT, configurable: true });
+    Object.defineProperty(view.scrollDOM, 'clientHeight', { value: 200, configurable: true });
+
+    // The editor can reach 300px *less* than `contentHeight` implies. Reading the
+    // estimate instead would put the saturation anchor 300px of document past
+    // anything the editor can show.
+    const OVERESTIMATE = 300;
+    Object.defineProperty(view.scrollDOM, 'scrollHeight', {
+      value: view.contentHeight - OVERESTIMATE,
+      configurable: true,
+    });
+
+    const editorMax = view.contentHeight - OVERESTIMATE - 200;
+    expect(editorMax, 'fixture must give the editor room to scroll').toBeGreaterThan(200);
+
+    const scrollTo = (y: number): number => {
+      const restore = placeScroller(view, y);
+      view.scrollDOM.dispatchEvent(new Event('scroll'));
+      restore();
+      return pane.scrollTop;
+    };
+
+    // Saturating *early* is the mirror of the reported bug -- the pane pins at
+    // its end while the editor still has room, which is the dead zone commit
+    // 989b954 removed. Both halves are asserted, because an anchor placed too
+    // early still satisfies "reaches the end" on its own.
+    // 50px, not 200: the fixture's scroller sits 100px down the page, so a slip
+    // that measured the far end from the wrong origin shifts saturation by that
+    // much, and a probe further back than 100px cannot see it. Deterministic --
+    // every dimension in this fixture is stubbed.
+    expect(scrollTo(editorMax - 50)).toBeLessThan(2400 - PANE_VIEWPORT);
+    expect(scrollTo(editorMax)).toBe(2400 - PANE_VIEWPORT);
   });
 
   /**

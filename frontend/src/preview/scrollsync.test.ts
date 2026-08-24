@@ -5,7 +5,13 @@
  * no layout engine, could never produce for real.
  */
 import { describe, expect, it } from 'vitest';
-import { lineForOffset, normalizeAnchors, offsetForLine, type AnchorOffset } from './scrollsync';
+import {
+  farEndHeight,
+  lineForOffset,
+  normalizeAnchors,
+  offsetForLine,
+  type AnchorOffset,
+} from './scrollsync';
 
 /**
  * Line 10 sits only 40px down despite being 60% of the way through the source:
@@ -229,5 +235,65 @@ describe('normalizeAnchors', () => {
       { line: 2.5, offset: 60 },
       { line: 4, offset: 90 },
     ]);
+  });
+});
+
+/**
+ * The far end of the editor's scroll range, in document coordinates.
+ *
+ * `pane.ts` needs it to pin "the editor's last scroll position" to "the pane's
+ * last scroll position". It used to come from `view.contentHeight`, which is
+ * CodeMirror's *estimate* for lines outside the rendered viewport, while the
+ * live mapping uses the scroller's real geometry -- so the two disagreed by
+ * about a line and the anchor named a line the editor could never reach.
+ * Everything past that anchor is discarded, so whatever sat in the gap was
+ * unreachable in the preview. Owner report: a tall image at the end of a
+ * document left the pane 2311px short of its own bottom.
+ *
+ * Measured in `frontend/harness/scrollsync.html` -- jsdom reports every scroll
+ * dimension as 0, so `endpoints` returns nothing there and the clamp cannot be
+ * exercised in place. This is the arithmetic lifted out so it can be.
+ */
+describe('farEndHeight', () => {
+  /** A scroller 3000px of content in a 800px window, sitting 100px down the page. */
+  function geometryAt(scrollTop: number) {
+    return {
+      // Both move with the scroll, and by the same amount, which is why the
+      // difference between them is the scroll position in document space.
+      rectTop: 100,
+      documentTop: 100 - scrollTop,
+      scrollHeight: 3000,
+      clientHeight: 800,
+      scrollTop,
+    };
+  }
+
+  /**
+   * **The invariant the bug broke.** The far end of the range does not depend on
+   * where the editor currently is, so every scroll position must give the same
+   * answer -- and the old version's did not, because it mixed an estimate of the
+   * total height with a live measurement of the position.
+   */
+  it('answers the same wherever the editor currently sits', () => {
+    const answers = [0, 250, 1000, 2199, 2200].map((top) => farEndHeight(geometryAt(top)));
+
+    expect(new Set(answers).size).toBe(1);
+  });
+
+  /**
+   * And the answer is the position the editor actually reaches: at the last
+   * scroll position, "the far end" and "where I am" are the same place. This is
+   * the half that makes the anchor land on a reachable line.
+   */
+  it('agrees with the live measurement once the editor is at the end', () => {
+    const max = 3000 - 800;
+    const atEnd = geometryAt(max);
+
+    expect(farEndHeight(atEnd)).toBe(atEnd.rectTop - atEnd.documentTop);
+  });
+
+  /** A document shorter than its window cannot scroll, so the far end is the top. */
+  it('is the top of an unscrollable document', () => {
+    expect(farEndHeight({ ...geometryAt(0), scrollHeight: 400, clientHeight: 800 })).toBe(-400);
   });
 });

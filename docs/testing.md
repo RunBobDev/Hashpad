@@ -964,3 +964,38 @@ routes below are part of the feature rather than a nicety.
 - [ ] **Open a new tab after changing the settings** -- it picks up the same
       line numbers, width and indent behaviour as the first one. New tabs build
       their own `EditorState`, so this is a separate path from the live view.
+
+## Scroll sync — the editor's end is the preview's end
+
+Owner report: with a very tall image at the end of a document, scrolling the
+editor all the way down left the preview short of its own bottom -- **and only
+when scrolling gradually**. A single jump to the end worked, which is what made
+it look intermittent.
+
+Cause: `endpoints()` derived the saturation line from `view.contentHeight`,
+CodeMirror's *estimate* for lines outside the rendered viewport, while the live
+mapping uses the scroller's real geometry. An overestimate put the anchor on a
+line the editor could never reach, and every measured anchor past it is
+discarded -- so whatever sat in the gap was unreachable. Measured at 2311px of
+a 2400px image. The jump case rebuilt the anchors at a moment the estimate
+happened to agree.
+
+`frontend/harness/scrollsync.html` reproduces it: jsdom reports every scroll
+dimension as 0, so `endpoints` returns nothing there and none of this is
+reachable in the unit tests without stubbing the geometry.
+
+- [ ] **Put a tall image at the end of a document** and scroll the editor to the
+      bottom **with the wheel, gradually**. The preview ends at its own bottom.
+      Then do it again with Ctrl+End, and by dragging the scrollbar.
+- [ ] **The same with the image in the middle** -- both panes still line up on
+      the text after it.
+- [ ] **Scroll the preview to its bottom instead.** The editor follows to its
+      own end. The reverse direction saturates earlier by nature: the image is
+      one editor line and half the preview, so the last stretch of preview maps
+      to no editor movement at all.
+- [ ] **Jumpiness through a tall image is expected**, not a defect: one source
+      line is hundreds of rendered pixels, so the editor has only one line of
+      scroll to spend there. The owner has accepted this; what must not happen is
+      content that cannot be reached at all.
+- [ ] **A document with no images** still tracks smoothly end to end, in both
+      directions -- the fix must not have cost the middle its interpolation.

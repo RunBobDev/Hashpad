@@ -149,3 +149,37 @@ export function lineForOffset(anchors: readonly AnchorOffset[], offset: number):
     (a) => a.line,
   );
 }
+
+/** The scroller geometry `farEndHeight` needs, named so a test can supply it. */
+export interface ScrollerGeometry {
+  /** `getBoundingClientRect().top` of the editor's scroller. */
+  rectTop: number;
+  /** `EditorView.documentTop` -- the document origin's screen position. */
+  documentTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  scrollTop: number;
+}
+
+/**
+ * The document-space height the editor will report once it is scrolled as far
+ * as it goes.
+ *
+ * `pane.ts` needs this to place the anchor that pins "the editor's last scroll
+ * position" to "the pane's last scroll position". It used to derive that from
+ * `view.contentHeight`, which is CodeMirror's **estimate** for lines outside the
+ * rendered viewport, while the live mapping uses the scroller's real geometry.
+ * The two disagreed by about a line, so the anchor named a line the editor could
+ * never reach -- and anything in that gap became unreachable in the preview. A
+ * tall image at the end of a document put 2311px there.
+ *
+ * Everything below is measured, not estimated: `height` is linear in `scrollTop`
+ * with slope 1, because `documentTop` moves with the scroll, so the value at the
+ * far end is the current one plus whatever is left to scroll. The invariant that
+ * makes this correct -- and that the tests below pin -- is that the answer does
+ * not depend on where the editor currently happens to be.
+ */
+export function farEndHeight(geometry: ScrollerGeometry): number {
+  const remaining = geometry.scrollHeight - geometry.clientHeight - geometry.scrollTop;
+  return geometry.rectTop - geometry.documentTop + remaining;
+}
