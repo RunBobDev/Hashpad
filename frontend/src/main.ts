@@ -107,6 +107,8 @@ mountMenuBar(root, (id) => {
       return statusBarTeardown !== null;
     case 'view.wordWrap':
       return store.getState().wordWrap;
+    case 'view.lineNumbers':
+      return store.getState().editorBehaviour.showLineNumbers;
     case 'view.fullscreen':
       return isFullscreen();
     default:
@@ -588,6 +590,29 @@ function setOutline(visible: boolean): void {
  * write logged rather than thrown -- the same ordering and error handling as
  * `setWordWrapSetting` and `setStatusBarSetting`.
  */
+/**
+ * View > Line Numbers, shaped exactly like `setWordWrapSetting` above.
+ *
+ * The whole `editorBehaviour` object is replaced rather than one field mutated:
+ * the store's `isEqual` compares one level of own keys, so a new object is what
+ * makes a selector over it notice -- and `documentops.ts` reads the same object
+ * when it builds a new tab's state, so a mutation in place would leave the two
+ * agreeing by luck.
+ */
+async function setLineNumbersSetting(showLineNumbers: boolean): Promise<void> {
+  const behaviour = { ...store.getState().editorBehaviour, showLineNumbers };
+  store.setState((prev) => ({ ...prev, editorBehaviour: behaviour }));
+  setEditorBehaviour(getEditorView(), behaviour);
+
+  try {
+    const settings = await LoadSettings();
+    settings.editor.showLineNumbers = showLineNumbers;
+    await SaveSettings(settings);
+  } catch (err) {
+    console.error('hashpad: failed to persist the line-numbers setting', err);
+  }
+}
+
 async function setOutlineSetting(visible: boolean): Promise<void> {
   setOutline(visible);
 
@@ -825,6 +850,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'view.wordWrap':
       void setWordWrapSetting(!store.getState().wordWrap);
+      break;
+    case 'view.lineNumbers':
+      void setLineNumbersSetting(!store.getState().editorBehaviour.showLineNumbers);
       break;
     case 'view.statusBar':
       void setStatusBarSetting(statusBarTeardown === null);

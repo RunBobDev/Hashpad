@@ -935,8 +935,18 @@ routes below are part of the feature rather than a nicety.
       entry is no longer greyed out, and carries a tick while full screen.
 - [ ] **The chrome behaves in full screen** -- menus open, the window edges still
       resize after leaving, and the tab bar is where it should be.
-- [ ] **`showLineNumbers: true`** puts a gutter on the editor. Check it in both
-      themes, and that the preview is unaffected.
+- [ ] **View > Line Numbers** turns the gutter on and off, and carries a tick
+      while on. The owner set `showLineNumbers` in settings.json and asked "what
+      line numbers?" -- the feature worked, but nothing in the app switched it
+      on, so the only route was hand-editing a file.
+- [ ] **`showLineNumbers: true`** in settings.json has the same effect at
+      startup, and the menu tick agrees with it.
+- [ ] **The gutter's colours are CodeMirror's, not ours** -- `#f5f5f5`/`#6c6c6c`
+      light, `#333338`/`#ccc` dark, hard-coded in its base theme and not derived
+      from `variables.css`. Measured in `frontend/harness/gutter.html`. Judge
+      whether they sit right against the editor in both themes; if not, they need
+      the same treatment `editor/theme.ts` already gives the active-line
+      highlight for exactly this reason.
 - [ ] **`insertSpaces: true` with `tabSize: 4`** -- Tab inserts four spaces.
       Arrow back over them: four presses, not one.
 - [ ] **`insertSpaces: false`** -- Tab inserts one tab character, and `tabSize`

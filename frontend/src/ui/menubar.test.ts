@@ -159,6 +159,24 @@ describe('the state of a toggle in the menu that toggles it', () => {
     expect(mark(popup, 'Full Screen')).toBe('✓');
   });
 
+  /**
+   * The owner turned line numbers on through settings.json and asked "what line
+   * numbers?" -- the feature worked, but nothing in the app could switch it on,
+   * so the only route was hand-editing a file. Word Wrap sits right beside it
+   * and has had a menu entry all along.
+   */
+  it('offers Line Numbers as a toggle beside Word Wrap', () => {
+    mountMenuBar(root, (id) => id === 'view.lineNumbers');
+
+    const popup = open('View');
+    const labels = [...popup.querySelectorAll('.menu-item__label')].map((el) => el.textContent);
+
+    expect(labels).toContain('Line Numbers');
+    expect(labels.indexOf('Line Numbers')).toBe(labels.indexOf('Word Wrap') + 1);
+    expect(mark(popup, 'Line Numbers')).toBe('✓');
+    expect(item(popup, 'Line Numbers').getAttribute('role')).toBe('menuitemcheckbox');
+  });
+
   /** Mounting without a callback must not mark everything, or nothing, wrongly. */
   it('shows nothing checked when no state is supplied', () => {
     mountMenuBar(root);

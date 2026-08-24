@@ -13,7 +13,11 @@
  * a local boolean is exact; it is not a second copy of a truth someone else
  * owns, it *is* where that truth is recorded on this side of the IPC.
  */
-import { WindowFullscreen, WindowIsFullscreen, WindowUnfullscreen } from '../../wailsjs/runtime/runtime';
+import {
+  WindowFullscreen,
+  WindowIsFullscreen,
+  WindowUnfullscreen,
+} from '../../wailsjs/runtime/runtime';
 
 let fullscreen = false;
 

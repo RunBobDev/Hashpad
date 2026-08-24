@@ -208,10 +208,22 @@ const MENUS: Menu[] = [
       },
       { id: 'view.statusBar', label: 'Status Bar', enabled: true, toggle: 'check' },
       { id: 'view.wordWrap', label: 'Word Wrap', enabled: true, toggle: 'check' },
+      // Beside Word Wrap because it is the same kind of thing: a display
+      // toggle backed by a setting. SPEC §6.13 puts `showLineNumbers` in the
+      // settings dialog, and it will be there too -- but wordWrap is in both
+      // already, and a setting whose only switch is a JSON file is a setting
+      // nobody finds. The owner found exactly that.
+      { id: 'view.lineNumbers', label: 'Line Numbers', enabled: true, toggle: 'check' },
       { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+Plus', enabled: true },
       { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+Minus', enabled: true },
       { id: 'view.zoomReset', label: 'Reset Zoom', shortcut: 'Ctrl+0', enabled: true },
-      { id: 'view.fullscreen', label: 'Full Screen', shortcut: 'F11', enabled: true, toggle: 'check' },
+      {
+        id: 'view.fullscreen',
+        label: 'Full Screen',
+        shortcut: 'F11',
+        enabled: true,
+        toggle: 'check',
+      },
     ],
   },
   {
