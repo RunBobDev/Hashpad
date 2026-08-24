@@ -92,7 +92,14 @@ func DefaultSettings() Settings {
 		},
 		Editor: EditorSettings{
 			FontFamily: "Cascadia Mono", FontSize: 14, LineHeight: 1.6,
-			WordWrap: true, MaxContentWidth: 900, ShowLineNumbers: false,
+			// MaxContentWidth 0 means "no limit", and that is the default
+			// despite SPEC §6.13's example block showing 900 (design §4.15).
+			// §6.1's prose calls it an "*optional* max content width", and the
+			// owner reported the capped column as a defect twice: text stopped
+			// growing partway across the window and left a wide empty gap. A
+			// measure is a preference, not a default. The setting still works;
+			// it is off until asked for.
+			WordWrap: true, MaxContentWidth: 0, ShowLineNumbers: false,
 			TabSize: 2, InsertSpaces: true, DefaultViewMode: "source",
 		},
 		Preview: PreviewSettings{

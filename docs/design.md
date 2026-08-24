@@ -516,6 +516,38 @@ repeats `invalid`: neither pair co-occurs in a way a reader would need to tell a
 and separate token names keep them independently retunable. Both are noted in
 `variables.css` so they do not read as oversights.
 
+### 4.19 The max content width ships off, not at 900
+
+SPEC §6.13's settings block shows `"maxContentWidth": 900`. SPEC §6.1's prose, in the
+same document, describes "an **optional** max content width so long lines stay
+readable on wide monitors".
+
+**Decision: the setting exists and works; its default is `0`, meaning no limit.**
+
+Checkpoint H.1 shipped it at 900 and the owner reported the result twice, from two
+angles. First the column was centred, so the editor's text began about a third of the
+way across a maximised window -- fixed by left-aligning it. Then, left-aligned, the
+complaint was the other half of the same thing: the text "scales great until some
+point, from which it just stops scaling and it has a big gap on the right".
+
+Both reports are the cap being visible by default. A measure is a reading preference,
+and on a 1080p-or-wider display a 900px cap is off by enough to look like a layout
+bug rather than a choice. Nothing else about Hashpad's default look asks the window
+to be partly empty: SPEC §6.1's own layout sketch shows the editor filling its area,
+and its "roughly 24px horizontal" padding describes a full-width column.
+
+Kept, not removed: the setting is real, it is honoured in both panes, and Checkpoint
+H.4's dialog will expose it. `0` is the only way settings.json can spell "no limit" --
+there is no null and every positive number is a width -- and it maps to the CSS
+keyword `none`, so no stylesheet needs a special case.
+
+Rejected: keeping 900 and letting the user turn it off. That makes the first launch
+the worst one, for a feature most users will not know exists or think to look for.
+
+Pinned by `TestDefaultContentWidthIsUnlimited` (Go) and "leaves the width uncapped on
+the shipped defaults" (`settings/typography.test.ts`), because a default is exactly
+the kind of value that a round-trip test will happily carry whatever it is set to.
+
 ---
 
 ## 5. Architecture

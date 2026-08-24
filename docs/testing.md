@@ -858,6 +858,10 @@ below is invisible to the test suite.
       interpolates between the two panes' heights and matched leading is one
       fewer source of drift.
 - [ ] **`preview.fontFamily` and `preview.fontSize`** change the preview only.
+- [ ] **The shipped default is uncapped** (design §4.19): with no
+      `maxContentWidth` in settings.json, text fills the whole editor width at
+      any window size. SPEC §6.13's example block shows 900, but §6.1 calls the
+      cap optional and the owner reported it twice as a defect.
 - [ ] **`editor.maxContentWidth`** caps the text column in **both** panes.
       Maximise the window to see it. The text still **starts at the left**, one
       `--pad-editor` in -- the cap bounds how far a line runs, it does not move

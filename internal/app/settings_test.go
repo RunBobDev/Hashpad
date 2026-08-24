@@ -273,3 +273,17 @@ func TestDefaultPinnedToolbarCommands(t *testing.T) {
 		t.Errorf("default pinned = %v, want %v", got, want)
 	}
 }
+
+// The content width is off by default, which is a deliberate departure from
+// SPEC §6.13's example block (design §4.15). SPEC §6.1 calls it an "optional
+// max content width"; the owner reported the capped column as a defect twice --
+// text that stops growing partway across the window and leaves a wide gap.
+//
+// Pinned as its own test rather than left to the round-trip comparisons, which
+// only check that a value survives being written and read and would be just as
+// green with any default at all.
+func TestDefaultContentWidthIsUnlimited(t *testing.T) {
+	if got := DefaultSettings().Editor.MaxContentWidth; got != 0 {
+		t.Errorf("default maxContentWidth = %d, want 0 (no limit)", got)
+	}
+}

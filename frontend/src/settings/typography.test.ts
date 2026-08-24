@@ -22,7 +22,9 @@ function defaults(): app.Settings {
       fontSize: 14,
       lineHeight: 1.6,
       wordWrap: true,
-      maxContentWidth: 900,
+      // 0, matching Go's default -- the cap is off unless asked for
+      // (design §4.15). Tests that care about a real width set one.
+      maxContentWidth: 0,
       showLineNumbers: false,
       tabSize: 2,
       insertSpaces: true,
@@ -61,13 +63,28 @@ function token(name: string): string {
 
 describe('applying the typography settings', () => {
   it('writes every token the stylesheets read', () => {
-    applyTypography(defaults(), root);
+    const settings = defaults();
+    settings.editor.maxContentWidth = 900;
+
+    applyTypography(settings, root);
 
     expect(token('--size-ui')).toBe('14px');
     expect(token('--line-editor')).toBe('1.6');
     expect(token('--font-editor')).toContain("'Cascadia Mono'");
     expect(token('--font-preview')).toContain("'Segoe UI'");
     expect(token('--max-content-width')).toBe('900px');
+  });
+
+  /**
+   * The shipped default, which is *off* (design §4.15). SPEC §6.13's example
+   * block shows 900, but §6.1 calls the cap optional and the owner reported it
+   * twice as a defect: text stops growing partway across the window and leaves
+   * a wide gap on the right.
+   */
+  it('leaves the width uncapped on the shipped defaults', () => {
+    applyTypography(defaults(), root);
+
+    expect(token('--max-content-width')).toBe('none');
   });
 
   /**
