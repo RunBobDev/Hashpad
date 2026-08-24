@@ -8,6 +8,7 @@ import {
   createUntitledDocument,
   isDirty,
   type Document,
+  DEFAULT_BEHAVIOUR,
 } from '../state/document';
 import type { SaveChoice } from '../ui/confirmdialog';
 import {
@@ -343,6 +344,7 @@ describe('save-as records the new path on the document it saved', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));

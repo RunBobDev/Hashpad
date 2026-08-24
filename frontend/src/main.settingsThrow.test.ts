@@ -36,6 +36,11 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   // announced themselves the moment main.ts imported it.
   OnFileDrop: vi.fn(),
   OnFileDropOff: vi.fn(),
+  // ui/fullscreen.ts reads this at startup. It returns a promise, so a bare
+  // vi.fn() would make `await` yield undefined and set the flag to that.
+  WindowIsFullscreen: vi.fn(async () => false),
+  WindowFullscreen: vi.fn(),
+  WindowUnfullscreen: vi.fn(),
   WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),

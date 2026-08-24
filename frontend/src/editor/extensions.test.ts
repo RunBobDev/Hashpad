@@ -8,6 +8,8 @@ import {
   EMPTY_STATUS,
   createUntitledDocument,
   isDirty,
+  DEFAULT_BEHAVIOUR,
+  type EditorBehaviour,
 } from '../state/document';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { COMMANDS, toEditorCommand } from './commands';
@@ -32,6 +34,7 @@ function resetStore(): void {
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    editorBehaviour: DEFAULT_BEHAVIOUR,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
@@ -242,6 +245,24 @@ describe('tab command keymap', () => {
     view.destroy();
   });
 
+  /**
+   * SPEC §6.14, and reported by the owner as not working: the View entry was
+   * greyed out and the shortcut did nothing. F11 has no modifier, so unlike the
+   * chords around it there is nothing to consume it from the browser -- what
+   * matters is only that the binding is reached.
+   */
+  it('dispatches view.fullscreen on F11', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    press(view, 'F11');
+
+    expect(seen).toEqual(['view.fullscreen']);
+
+    stop();
+    view.destroy();
+  });
+
   it('dispatches tab.reopen on Mod-Shift-t', () => {
     const view = buildView();
     const { seen, stop } = captureCommands();
@@ -311,27 +332,190 @@ describe('tab command keymap', () => {
   });
 
   /**
-   * The regression check the task brief asks for by name: verify plain Tab
-   * (no modifiers) is untouched by adding Ctrl-Tab. It was already the case
-   * before this task that Tab did nothing special here -- buildExtensions
-   * never adds @codemirror/commands' `indentWithTab`, and `defaultKeymap`
-   * itself carries no Tab entry (checked directly against the installed
-   * @codemirror/commands package) -- so there was no indent-on-Tab behaviour
-   * to begin with, and none for this task to have broken. What matters is
-   * that our new Ctrl-Tab binding, added at high precedence, does not also
-   * swallow a bare Tab keydown.
+   * Plain Tab must not reach a *tab-switching* command -- the original point of
+   * this test, when Tab was unbound entirely and the worry was Ctrl-Tab's
+   * high-precedence binding swallowing a bare one.
+   *
+   * Tab is bound now (H.2: `insertSpaces` means nothing otherwise), so what it
+   * must not do has changed from "anything" to "anything but indent". The
+   * separate question of *what* it inserts is covered in the indentation suite
+   * below.
    */
-  it('leaves plain Tab unhandled -- no tab command fires and the key is not consumed', () => {
+  it('routes plain Tab to indentation, never to a tab command', () => {
     const view = buildView();
     const { seen, stop } = captureCommands();
 
     const notHandled = press(view, 'Tab');
 
     expect(seen).toEqual([]);
-    expect(notHandled).toBe(true);
+    // Consumed now, where it used to fall through: an editor that indents on
+    // Tab has to claim the key.
+    expect(notHandled).toBe(false);
 
     stop();
     view.destroy();
+  });
+});
+
+/**
+ * SPEC §6.13's `tabSize` and `insertSpaces`, which are the two settings that
+ * cannot be observed without a Tab binding -- CodeMirror ships none by default,
+ * and `defaultKeymap` has no Tab entry, so before H.2 both settings were fields
+ * in a JSON file with nothing reading them.
+ */
+describe('indentation from settings', () => {
+  afterEach(resetStore);
+
+  function viewWith(behaviour: Partial<EditorBehaviour>, doc = ''): EditorView {
+    return new EditorView({
+      state: EditorState.create({
+        doc,
+        extensions: buildExtensions(false, true, { ...DEFAULT_BEHAVIOUR, ...behaviour }),
+      }),
+      parent: document.createElement('div'),
+    });
+  }
+
+  /**
+   * `keyCode: 9` is load-bearing, not ceremony. CodeMirror's tab-focus-mode
+   * guard tests `event.keyCode == 9` rather than `key`, and jsdom leaves
+   * `keyCode` at 0 for a synthetic event -- so without it the escape-hatch test
+   * below passes for the wrong reason, and would keep passing with the whole
+   * mechanism removed.
+   */
+  function tab(view: EditorView, modifiers: KeyboardEventInit = {}): void {
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, cancelable: true, ...modifiers }),
+    );
+  }
+
+  it('inserts spaces when insertSpaces is on', () => {
+    const view = viewWith({ insertSpaces: true, tabSize: 2 });
+
+    tab(view);
+
+    expect(view.state.doc.toString()).toBe('  ');
+    view.destroy();
+  });
+
+  it('takes the number of spaces from tabSize', () => {
+    const view = viewWith({ insertSpaces: true, tabSize: 4 });
+
+    tab(view);
+
+    expect(view.state.doc.toString()).toBe('    ');
+    view.destroy();
+  });
+
+  /**
+   * The setting's whole point, and the reason `@codemirror/commands`' own
+   * `insertTab` could not be used: it hard-codes a literal tab, so with it
+   * `insertSpaces` would have had nothing to change.
+   */
+  it('inserts a tab character when insertSpaces is off', () => {
+    const view = viewWith({ insertSpaces: false, tabSize: 4 });
+
+    tab(view);
+
+    expect(view.state.doc.toString()).toBe(String.fromCharCode(9));
+    view.destroy();
+  });
+
+  /**
+   * With something selected, Tab indents whole lines rather than replacing the
+   * selection with two spaces -- which is what typing any other character does,
+   * and would silently delete the user's text.
+   */
+  it('indents the selected lines rather than replacing them', () => {
+    const view = viewWith({ insertSpaces: true, tabSize: 2 }, 'one\ntwo');
+    view.dispatch({ selection: { anchor: 0, head: 7 } });
+
+    tab(view);
+
+    expect(view.state.doc.toString()).toBe('  one\n  two');
+    view.destroy();
+  });
+
+  it('outdents on Shift+Tab', () => {
+    const view = viewWith({ insertSpaces: true, tabSize: 2 }, '    one');
+    view.dispatch({ selection: { anchor: 0, head: 7 } });
+
+    tab(view, { shiftKey: true });
+
+    expect(view.state.doc.toString()).toBe('  one');
+    view.destroy();
+  });
+
+  /**
+   * Binding Tab takes away the keyboard's way out of the editor, which
+   * CodeMirror's own docs warn about. Two ways back, and both are the package's
+   * own rather than anything invented here.
+   *
+   * Asserted as "the document is unchanged", because that is the user-visible
+   * half. Whether focus then moves is the browser's business, and jsdom does not
+   * model it.
+   */
+  it('stops indenting after Ctrl+M turns tab-focus mode on', () => {
+    const view = viewWith({ insertSpaces: true, tabSize: 2 });
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'm', keyCode: 77, ctrlKey: true, cancelable: true }),
+    );
+    tab(view);
+
+    expect(view.state.doc.toString()).toBe('');
+    view.destroy();
+  });
+
+  /**
+   * The discoverable one, and it needed no binding at all: CodeMirror turns
+   * tab-focus mode on for two seconds after Escape. Worth a test because it is
+   * the route a user will actually find, and because nothing in this codebase
+   * would otherwise record that it exists.
+   */
+  it('stops indenting for a moment after Escape', () => {
+    const view = viewWith({ insertSpaces: true, tabSize: 2 });
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, cancelable: true }),
+    );
+    tab(view);
+
+    expect(view.state.doc.toString()).toBe('');
+    view.destroy();
+  });
+
+  /** A literal tab in an opened document renders at the configured width. */
+  it('sets the tab width for tabs already in the document', () => {
+    const view = viewWith({ tabSize: 7 });
+
+    expect(view.state.tabSize).toBe(7);
+    view.destroy();
+  });
+});
+
+/** SPEC §6.13's `showLineNumbers`, off by default. */
+describe('line numbers from settings', () => {
+  afterEach(resetStore);
+
+  function gutters(behaviour: Partial<EditorBehaviour>): number {
+    const view = new EditorView({
+      state: EditorState.create({
+        extensions: buildExtensions(false, true, { ...DEFAULT_BEHAVIOUR, ...behaviour }),
+      }),
+      parent: document.createElement('div'),
+    });
+    const count = view.dom.querySelectorAll('.cm-lineNumbers').length;
+    view.destroy();
+    return count;
+  }
+
+  it('shows no gutter by default', () => {
+    expect(gutters({})).toBe(0);
+  });
+
+  it('shows one when the setting is on', () => {
+    expect(gutters({ showLineNumbers: true })).toBe(1);
   });
 });
 

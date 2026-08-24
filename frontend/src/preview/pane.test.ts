@@ -18,6 +18,7 @@ import {
   EMPTY_STATUS,
   createUntitledDocument,
   type Document,
+  DEFAULT_BEHAVIOUR,
 } from '../state/document';
 import { activateDocument } from '../state/documents';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
@@ -114,6 +115,7 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
     previewSplitRatio: ratio,
     syncScroll,
     wordWrap: true,
+    editorBehaviour: DEFAULT_BEHAVIOUR,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));

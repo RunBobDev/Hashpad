@@ -1,11 +1,20 @@
 import {
   EditorView,
+  type Command,
   type ViewUpdate,
   drawSelection,
   highlightActiveLine,
   keymap,
+  lineNumbers,
 } from '@codemirror/view';
-import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import {
+  history,
+  defaultKeymap,
+  historyKeymap,
+  indentLess,
+  indentMore,
+} from '@codemirror/commands';
+import { indentUnit } from '@codemirror/language';
 import { findNext, findPrevious, openSearchPanel, search } from '@codemirror/search';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
@@ -19,7 +28,7 @@ import { suppressEditorFileDrop } from '../ui/filedrop';
 import { pasteImage } from '../files/imageops';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
-import { statusOf } from '../state/document';
+import { DEFAULT_BEHAVIOUR, statusOf, type EditorBehaviour } from '../state/document';
 
 /**
  * Builds a CodeMirror command that dispatches the given `hashpad:command` id
@@ -167,7 +176,11 @@ export function publishStatus(state: EditorState): void {
  * moment they're created; `setEditorDark` remains the way to flip the theme
  * on a state that already exists. Both are needed — one seeds, one updates.
  */
-export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
+export function buildExtensions(
+  isDark: boolean,
+  wordWrap = true,
+  behaviour: EditorBehaviour = DEFAULT_BEHAVIOUR,
+): Extension[] {
   return [
     history(),
     drawSelection(),
@@ -194,6 +207,11 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
     // on the live view without rebuilding the state, which would throw away the
     // undo history and the selection.
     wordWrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
+    // Line numbers, tab width and what Tab inserts (SPEC §6.13). In a
+    // compartment for the same reason word wrap is: reconfiguring is the only
+    // way to change them on a live view without throwing away the undo
+    // history and the selection.
+    behaviourCompartment.of(behaviourExtensions(behaviour)),
     /**
      * SPEC §6.7 names this package. The panel is ours (`ui/findreplace.ts`):
      * the spec asks for it styled to match the app, and match highlighting is
@@ -225,6 +243,26 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
         { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },
         { key: 'Mod-Shift-p', run: dispatchCommand('view.preview') },
         { key: 'Mod-Shift-o', run: dispatchCommand('view.outline') },
+        // SPEC §6.14. Through the bus rather than called directly, because
+        // the menu triggers the same thing and one implementation should
+        // serve both -- the arrangement every other view toggle here uses.
+        { key: 'F11', run: dispatchCommand('view.fullscreen') },
+        /**
+         * Tab indents (SPEC §6.13's `tabSize`/`insertSpaces`, which mean
+         * nothing without it). CodeMirror leaves Tab unbound by default and
+         * says why: it takes away the keyboard's way out of the editor.
+         *
+         * Two ways back out, and **both already ship** -- no binding needed
+         * here, which mutation testing is what established: removing a
+         * `Mod-m` entry added here left the suite green, because
+         * `defaultKeymap` already carries `Ctrl-m` -> `toggleTabFocusMode`.
+         * And CodeMirror turns tab-focus mode on for two seconds after
+         * Escape all by itself, which is the route a user will actually
+         * find. Both are pinned in extensions.test.ts, because they are the
+         * accessibility answer to binding Tab at all and nothing else in
+         * this codebase would record that they exist.
+         */
+        { key: 'Tab', run: indentOnTab, shift: indentLess },
         // Find (SPEC §6.7, §6.14). These are `@codemirror/search`'s own
         // commands rather than `hashpad:command` ids: they act on the editor's
         // search state and nothing outside the editor has an opinion about
@@ -347,6 +385,75 @@ export function buildExtensions(isDark: boolean, wordWrap = true): Extension[] {
  * the editor is constructed before `LoadSettings` resolves, so there is a moment
  * where the compiled-in default is all there is.
  */
+/**
+ * SPEC §6.13's three editor behaviours, in one compartment.
+ *
+ * One rather than three because they arrive together -- from a single settings
+ * load, and later from a single dialog -- and reconfiguring one compartment is
+ * one transaction instead of three. They are unrelated to each other otherwise;
+ * grouping them is about how they *change*, not what they do.
+ */
+export const behaviourCompartment = new Compartment();
+
+/**
+ * What one press of Tab inserts, as a string.
+ *
+ * CodeMirror's `indentUnit` facet is a string rather than a width, which is
+ * exactly the distinction `insertSpaces` is about: spaces mean N of them, a tab
+ * means one `	` however wide `tabSize` renders it.
+ */
+/**
+ * Built from its code point rather than written as a literal. An actual tab
+ * inside quotes is invisible in a diff and survives no round trip through a
+ * formatter or a code-generating script with any confidence -- this codebase has
+ * already had one such character written into a source file by accident, and the
+ * escape sequence itself was mangled by tooling on the way in here.
+ */
+const TAB = String.fromCharCode(9);
+
+function indentString(behaviour: EditorBehaviour): string {
+  return behaviour.insertSpaces ? ' '.repeat(behaviour.tabSize) : TAB;
+}
+
+export function behaviourExtensions(behaviour: EditorBehaviour): Extension[] {
+  return [
+    behaviour.showLineNumbers ? lineNumbers() : [],
+    // How wide a *literal* tab renders. Worth having even with insertSpaces on:
+    // a document written elsewhere is full of tabs this app did not insert.
+    EditorState.tabSize.of(behaviour.tabSize),
+    indentUnit.of(indentString(behaviour)),
+  ];
+}
+
+/**
+ * Tab: indent the selection, or insert one indent at the caret.
+ *
+ * `@codemirror/commands` ships `insertTab`, and it is not usable here -- it
+ * hard-codes a literal `"	"`, so `insertSpaces` would have nothing to change.
+ * `indentMore` is right for a selection but indents *whole lines*, which is not
+ * what Tab in the middle of a word should do.
+ *
+ * So: `indentMore` when something is selected, and otherwise insert the
+ * `indentUnit` string the compartment above configured. Reading the facet rather
+ * than taking the behaviour as an argument keeps this a plain `Command`, and
+ * means the keymap does not have to be rebuilt when the setting changes.
+ */
+const indentOnTab: Command = (view) => {
+  if (view.state.selection.ranges.some((range) => !range.empty)) return indentMore(view);
+
+  view.dispatch({
+    ...view.state.replaceSelection(view.state.facet(indentUnit)),
+    scrollIntoView: true,
+    userEvent: 'input',
+  });
+  return true;
+};
+
+/** Applies a behaviour change to a live view, without rebuilding its state. */
+export function setEditorBehaviour(view: EditorView, behaviour: EditorBehaviour): void {
+  view.dispatch({ effects: behaviourCompartment.reconfigure(behaviourExtensions(behaviour)) });
+}
+
 export const wordWrapCompartment = new Compartment();
 
 export function setWordWrap(view: EditorView, wordWrap: boolean): void {

@@ -142,6 +142,23 @@ describe('the state of a toggle in the menu that toggles it', () => {
     expect(item(open('File'), 'New').querySelector('.menu-item__mark')).toBeNull();
   });
 
+  /**
+   * Reported by the owner alongside the missing indicators: Full Screen was
+   * greyed out. An `aria-disabled` item stays focusable but `activateItem`
+   * refuses to run its command, so the attribute is what decides whether the
+   * entry does anything -- and it is a state, so it takes a tick too.
+   */
+  it('offers Full Screen as a working toggle', () => {
+    mountMenuBar(root, (id) => id === 'view.fullscreen');
+
+    const popup = open('View');
+    const fullScreen = item(popup, 'Full Screen');
+
+    expect(fullScreen.hasAttribute('aria-disabled')).toBe(false);
+    expect(fullScreen.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(mark(popup, 'Full Screen')).toBe('✓');
+  });
+
   /** Mounting without a callback must not mark everything, or nothing, wrongly. */
   it('shows nothing checked when no state is supplied', () => {
     mountMenuBar(root);

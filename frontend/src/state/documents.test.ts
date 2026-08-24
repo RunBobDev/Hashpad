@@ -6,6 +6,7 @@ import {
   EMPTY_STATUS,
   type AppState,
   type Document,
+  DEFAULT_BEHAVIOUR,
 } from './document';
 import {
   activateDocument,
@@ -41,6 +42,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    editorBehaviour: DEFAULT_BEHAVIOUR,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };

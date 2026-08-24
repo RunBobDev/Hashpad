@@ -28,6 +28,7 @@ import {
   createUntitledDocument,
   isDirty,
   type Document,
+  DEFAULT_BEHAVIOUR,
 } from '../state/document';
 import { activeDocument } from '../state/documents';
 import {
@@ -81,6 +82,7 @@ beforeEach(() => {
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    editorBehaviour: DEFAULT_BEHAVIOUR,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
@@ -184,6 +186,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -207,6 +210,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -230,6 +234,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -256,6 +261,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -285,6 +291,7 @@ describe('switchToDocument', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -364,6 +371,7 @@ describe('openDocumentInNewTab', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -403,6 +411,7 @@ describe('openDocumentInNewTab', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -436,6 +445,7 @@ describe('opening a document over the startup tab', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -487,6 +497,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -511,6 +522,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -534,6 +546,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -560,6 +573,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -585,6 +599,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -615,6 +630,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -649,6 +665,7 @@ describe('closeDocumentWithPrompt', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -680,6 +697,7 @@ describe('reopenLastClosed', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -703,6 +721,7 @@ describe('reopenLastClosed', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -734,6 +753,7 @@ describe('reopenLastClosed', () => {
       previewSplitRatio: 0.5,
       syncScroll: true,
       wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));

@@ -211,7 +211,7 @@ const MENUS: Menu[] = [
       { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+Plus', enabled: true },
       { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+Minus', enabled: true },
       { id: 'view.zoomReset', label: 'Reset Zoom', shortcut: 'Ctrl+0', enabled: true },
-      { id: 'view.fullscreen', label: 'Full Screen', shortcut: 'F11', enabled: false },
+      { id: 'view.fullscreen', label: 'Full Screen', shortcut: 'F11', enabled: true, toggle: 'check' },
     ],
   },
   {

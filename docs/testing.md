@@ -919,3 +919,38 @@ jsdom has no layout, so alignment and colour are invisible to the suite.
 - [ ] **Narrator (Win+Ctrl+Enter) announces the state**: "Word Wrap, checked"
       for a toggle and "Theme: Dark, selected" for the radio group. The roles
       are what make this work; `aria-checked` on a plain menuitem is ignored.
+
+## Checkpoint H.2 — line numbers, tab width, tabs vs spaces (and F11)
+
+SPEC §6.13's three editor behaviours, plus the Full Screen entry the owner
+reported as greyed out with a dead shortcut.
+
+**`tabSize` and `insertSpaces` needed a Tab binding to mean anything.**
+CodeMirror binds no Tab by default and `defaultKeymap` has no Tab entry, so
+before this both settings were fields in a JSON file that nothing read. Binding
+Tab takes away the keyboard's way out of the editor, which is why the two escape
+routes below are part of the feature rather than a nicety.
+
+- [ ] **F11 enters and leaves full screen**, and so does View > Full Screen. The
+      entry is no longer greyed out, and carries a tick while full screen.
+- [ ] **The chrome behaves in full screen** -- menus open, the window edges still
+      resize after leaving, and the tab bar is where it should be.
+- [ ] **`showLineNumbers: true`** puts a gutter on the editor. Check it in both
+      themes, and that the preview is unaffected.
+- [ ] **`insertSpaces: true` with `tabSize: 4`** -- Tab inserts four spaces.
+      Arrow back over them: four presses, not one.
+- [ ] **`insertSpaces: false`** -- Tab inserts one tab character, and `tabSize`
+      changes how wide it looks without changing the file's bytes. Save and
+      reopen in another editor to confirm what is actually on disk.
+- [ ] **Select several lines and press Tab** -- all of them indent, rather than
+      the selection being replaced by an indent. Shift+Tab outdents.
+- [ ] **Tab still escapes the editor after Escape.** Press Escape, then Tab:
+      focus leaves the editor instead of indenting. CodeMirror enables this for
+      two seconds after Escape, by itself.
+- [ ] **Ctrl+M is the sticky version** -- press it and Tab moves focus until it
+      is pressed again. This comes from `defaultKeymap`, not from us.
+- [ ] **A hand-edited `"tabSize": 0`** does not make Tab insert nothing; the
+      value is clamped to 1. `999` clamps to 16.
+- [ ] **Open a new tab after changing the settings** -- it picks up the same
+      line numbers, width and indent behaviour as the first one. New tabs build
+      their own `EditorState`, so this is a separate path from the live view.

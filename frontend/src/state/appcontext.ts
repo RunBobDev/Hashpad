@@ -5,6 +5,7 @@ import {
   DEFAULT_SPLIT_RATIO,
   EMPTY_STATUS,
   type AppState,
+  DEFAULT_BEHAVIOUR,
 } from './document';
 
 /**
@@ -42,6 +43,7 @@ export const store: Store<AppState> = createStore<AppState>({
   // what a settings file that has never been edited carries.
   syncScroll: true,
   wordWrap: true,
+  editorBehaviour: DEFAULT_BEHAVIOUR,
   // Also the value bootstrap republishes, as it happens: the startup document
   // is empty and `statusOf` of an empty document is exactly this. It stops
   // being a placeholder the first time the user types or a file is opened.

@@ -75,7 +75,11 @@ export function makeUntitledDocument(): Document {
   return createUntitledDocument(
     EditorState.create({
       doc: '',
-      extensions: buildExtensions(store.getState().isDark, store.getState().wordWrap),
+      extensions: buildExtensions(
+        store.getState().isDark,
+        store.getState().wordWrap,
+        store.getState().editorBehaviour,
+      ),
     }),
   );
 }
@@ -158,7 +162,11 @@ export function switchToDocument(id: string): void {
 export function openDocumentInNewTab(contents: FileContentsLike): void {
   const editorState = EditorState.create({
     doc: contents.content,
-    extensions: buildExtensions(store.getState().isDark, store.getState().wordWrap),
+    extensions: buildExtensions(
+      store.getState().isDark,
+      store.getState().wordWrap,
+      store.getState().editorBehaviour,
+    ),
   });
 
   const doc: Document = {

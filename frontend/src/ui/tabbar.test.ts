@@ -7,6 +7,7 @@ import {
   createUntitledDocument,
   type AppState,
   type Document,
+  DEFAULT_BEHAVIOUR,
 } from '../state/document';
 import { reorderDocument } from '../state/documents';
 import { COMMAND_EVENT } from './menubar';
@@ -123,6 +124,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    editorBehaviour: DEFAULT_BEHAVIOUR,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };

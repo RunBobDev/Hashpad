@@ -8,6 +8,8 @@ import {
   MAX_SPLIT_RATIO,
   MIN_SPLIT_RATIO,
   statusOf,
+  clampTabSize,
+  DEFAULT_BEHAVIOUR,
 } from './document';
 
 describe('isDirty', () => {
@@ -162,4 +164,44 @@ describe('statusOf', () => {
     expect(statusOf(stateOf('one two three four', 4, 4)).selection).toBe(false);
     expect(statusOf(stateOf('one two three four', 4, 4)).words).toBe(4);
   });
+});
+
+/**
+ * SPEC §6.13's `tabSize`, from a hand-editable file. `LoadSettingsFrom` only
+ * guarantees the JSON parsed -- never that the numbers in it make sense.
+ */
+describe('clampTabSize', () => {
+  it.each([
+    [2, 2],
+    [4, 4],
+    [16, 16],
+  ])('keeps a sensible %s', (value, expected) => {
+    expect(clampTabSize(value)).toBe(expected);
+  });
+
+  /** 0 would make Tab insert nothing at all; a huge one pushes text off-screen. */
+  it.each([
+    [0, 1],
+    [-4, 1],
+    [999, 16],
+  ])('clamps %s to %s', (value, expected) => {
+    expect(clampTabSize(value)).toBe(expected);
+  });
+
+  /** Half a column is not a thing. */
+  it('floors a fractional width', () => {
+    expect(clampTabSize(3.7)).toBe(3);
+  });
+
+  /**
+   * JSON `null` and a hand-typed string both arrive as non-numbers, and NaN
+   * fails every comparison silently -- `Math.min`/`Math.max` alone would carry
+   * it straight into the editor's configuration.
+   */
+  it.each([[NaN], [Infinity], [null as unknown as number], [undefined as unknown as number]])(
+    'falls back for %s',
+    (value) => {
+      expect(clampTabSize(value)).toBe(DEFAULT_BEHAVIOUR.tabSize);
+    },
+  );
 });

@@ -11,7 +11,12 @@ import {
 } from '../wailsjs/go/app/App';
 import { createEditor } from './editor/editor';
 import { COMMANDS, toEditorCommand, type CommandId } from './editor/commands';
-import { publishActiveFormats, publishStatus, setWordWrap } from './editor/extensions';
+import {
+  publishActiveFormats,
+  publishStatus,
+  setEditorBehaviour,
+  setWordWrap,
+} from './editor/extensions';
 import {
   openFiles,
   resolveDocumentsBeforeQuit,
@@ -32,6 +37,7 @@ import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
+import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
 import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
@@ -49,6 +55,8 @@ import {
 import {
   clampOutlineWidth,
   clampSplitRatio,
+  clampTabSize,
+  DEFAULT_BEHAVIOUR,
   createUntitledDocument,
   DEFAULT_OUTLINE_WIDTH,
   DEFAULT_SPLIT_RATIO,
@@ -99,6 +107,8 @@ mountMenuBar(root, (id) => {
       return statusBarTeardown !== null;
     case 'view.wordWrap':
       return store.getState().wordWrap;
+    case 'view.fullscreen':
+      return isFullscreen();
     default:
       return false;
   }
@@ -223,6 +233,7 @@ async function bootstrap(): Promise<void> {
   // SPEC §6.9's sidebar is hidden by default, which is Go's default too.
   let outlineVisible = false;
   let outlineWidth = DEFAULT_OUTLINE_WIDTH;
+  let editorBehaviour = DEFAULT_BEHAVIOUR;
 
   try {
     const settings = await LoadSettings();
@@ -279,6 +290,16 @@ async function bootstrap(): Promise<void> {
     // Validated rather than trusted, the same as the split ratio: this is a
     // hand-editable file and the value goes straight into a CSS length.
     outlineWidth = clampOutlineWidth(settings.window.outlineWidth);
+    // SPEC §6.13's editor behaviours. `tabSize` is clamped for the same reason
+    // the widths above are -- it comes from a hand-editable file and a 0 would
+    // make Tab insert nothing. The two booleans are taken as-is, like
+    // `toolbar.visible`: Go unmarshals them into `bool`, and a file that fails
+    // to unmarshal is replaced with defaults before it reaches here.
+    editorBehaviour = {
+      showLineNumbers: settings.editor.showLineNumbers,
+      tabSize: clampTabSize(settings.editor.tabSize),
+      insertSpaces: settings.editor.insertSpaces,
+    };
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -289,11 +310,13 @@ async function bootstrap(): Promise<void> {
       previewSplitRatio: splitRatio,
       syncScroll,
       wordWrap,
+      editorBehaviour,
       outlineWidth,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
-    // with Checkpoint H's settings dialog, and MenuItem has no checkmark
-    // support to render its state honestly in the meantime.
+    // with Checkpoint H's settings dialog. (The checkmark support that comment
+    // also cited now exists -- see `mountMenuBar`'s `isChecked` above -- but the
+    // reason to keep it out of View stands: it is a settings-dialog concern.)
     // Guarded independently of the try above. This whole block exists to
     // guarantee ShowWindow runs, and main.go's StartHidden means a throw
     // between here and it leaves the window permanently invisible -- the
@@ -319,6 +342,10 @@ async function bootstrap(): Promise<void> {
     // the compiled-in default until here -- same reason the theme is applied in
     // this block rather than at construction.
     setWordWrap(view, wordWrap);
+    // Same reasoning, and the same seam: the store alone would be a half-wired
+    // setting, because the view already exists and only a reconfigure reaches
+    // it. New tabs pick this up from the store instead (documentops.ts).
+    setEditorBehaviour(view, editorBehaviour);
     // The window is about to be shown, and an editor nobody has clicked in yet
     // takes no typing at all -- focus sits on `<body>`. Notepad opens with a
     // caret in the document and so should this. `ui/shortcuts.ts` covers the
@@ -359,6 +386,12 @@ mountWindowEdges(root);
 // mounted here rather than on any one region; see ui/filedrop.ts for why the
 // paths have to come from Wails rather than the DOM `drop` event.
 mountFileDrop();
+
+// F11's state, read once from the window rather than assumed (ui/fullscreen.ts).
+// Fire-and-forget with its own error handling inside: nothing downstream waits
+// on it, and the flag it sets is already correct for every path that reaches
+// here today.
+void syncFullscreen();
 
 /**
  * Routes a View > Theme menu choice. `themeMode` is updated first and
@@ -804,6 +837,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'view.outline':
       void setOutlineSetting(outlineHandle === null);
+      break;
+    case 'view.fullscreen':
+      toggleFullscreen();
       break;
     case 'view.zoomIn':
       zoomIn();

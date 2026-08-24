@@ -103,6 +103,39 @@ export interface EditorStatus {
   selection: boolean;
 }
 
+/**
+ * The editor behaviours SPEC §6.13 makes configurable, as opposed to the
+ * typography ones -- those are CSS custom properties (settings/typography.ts),
+ * these are CodeMirror extensions and have to be reconfigured on the view.
+ */
+export interface EditorBehaviour {
+  showLineNumbers: boolean;
+  /** How wide a literal tab renders, and how many spaces one indent inserts. */
+  tabSize: number;
+  /** Whether Tab inserts spaces or a tab character. */
+  insertSpaces: boolean;
+}
+
+/** Matches internal/app/settings.go's `DefaultSettings`. */
+export const DEFAULT_BEHAVIOUR: EditorBehaviour = {
+  showLineNumbers: false,
+  tabSize: 2,
+  insertSpaces: true,
+};
+
+/**
+ * A tab width that will not wreck the editor.
+ *
+ * settings.json is hand-editable, and `LoadSettingsFrom` only guarantees that
+ * it parsed. `0` would make an indent insert nothing, and a huge value would
+ * push the first character of an indented line off the right of the window.
+ * Non-integers are floored: half a column is not a thing.
+ */
+export function clampTabSize(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_BEHAVIOUR.tabSize;
+  return Math.min(Math.max(Math.floor(value), 1), 16);
+}
+
 export interface AppState {
   documents: Document[];
   activeDocumentId: string | null;
@@ -171,6 +204,17 @@ export interface AppState {
    * store field nobody reads is a field that goes stale.
    */
   wordWrap: boolean;
+  /**
+   * SPEC §6.13's `showLineNumbers`, `tabSize` and `insertSpaces`.
+   *
+   * In the store rather than read from settings at each use, because
+   * `documentops.ts` needs it when it builds the `EditorState` for a *new* tab
+   * -- the same reason `wordWrap` above lives here. One object rather than
+   * three fields: they arrive together, are applied together through a single
+   * compartment, and store.ts's `isEqual` compares one level of own keys, so a
+   * selector over this notifies only when one of them actually changes.
+   */
+  editorBehaviour: EditorBehaviour;
   /**
    * The caret and the counts, published by editor/extensions.ts's `syncStatus`
    * on every document or selection change. Here rather than read from the view

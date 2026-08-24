@@ -34,6 +34,7 @@ import {
   EMPTY_STATUS,
   isDirty,
   type Document,
+  DEFAULT_BEHAVIOUR,
 } from './state/document';
 import { getEditorView, store } from './state/appcontext';
 import { COMMAND_EVENT } from './ui/menubar';
@@ -55,6 +56,11 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
   // announced themselves the moment main.ts imported it.
   OnFileDrop: vi.fn(),
   OnFileDropOff: vi.fn(),
+  // ui/fullscreen.ts reads this at startup. It returns a promise, so a bare
+  // vi.fn() would make `await` yield undefined and set the flag to that.
+  WindowIsFullscreen: vi.fn(async () => false),
+  WindowFullscreen: vi.fn(),
+  WindowUnfullscreen: vi.fn(),
   WindowSetBackgroundColour: vi.fn(),
   WindowSetTitle: vi.fn(),
   WindowShow: vi.fn(),
@@ -148,6 +154,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     previewSplitRatio: 0.5,
     syncScroll: true,
     wordWrap: true,
+    editorBehaviour: DEFAULT_BEHAVIOUR,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
