@@ -1027,6 +1027,15 @@ Measured in `frontend/harness/scrollsync.html`: alignment was exact (699/699,
       moves the other pane.
 - [ ] **Switch to a tab that is not in split view and move the caret there.**
       Nothing moves in the pane belonging to the other document.
+- [ ] **At the very bottom, with the image filling the preview, click a line in
+      the editor.** The preview jumps to put that line at the same height --
+      leaving the image behind if the line is near the top of the editor's
+      viewport. It must not nudge slightly *upward* from the end and land on the
+      wrong text: that was the owner's report, and it happened because the caret
+      was reading the *scroll* mapping, which answers "the bottom" for any line
+      in the last screenful by design.
+- [ ] **Click the last few lines before the image.** Each lands at its own
+      height, not at the pane's end.
 - [ ] **The end still clamps.** Scroll to the bottom after clicking around --
       this is the sequence that reintroduced the bug in the harness, because the
       caret path gives the anchor cache another chance to be built at an awkward

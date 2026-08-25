@@ -926,6 +926,15 @@ describe('scroll sync', () => {
     expect(c).toBeGreaterThan(b);
     // And the end of the editor is the end of the pane, not a screenful short.
     expect(c).toBe(2400 - PANE_VIEWPORT);
+
+    // **No test distinguishes which of the two anchor lists the scroll path
+    // uses**, and that is measured: swapping `anchorOffsets` for `lineOffsets`
+    // here leaves the suite green. In this fixture the two answer within about
+    // 20px of each other just before the end, and forcing them apart means a
+    // fixture built around the difference rather than around the behaviour.
+    // Left as it is: the names and their doc comments are what keep the two
+    // apart, the reported bug (the *caret* using the scroll list) is pinned, and
+    // the end itself is clamped live regardless of either list.
   });
 
   /**
@@ -1146,6 +1155,42 @@ describe('scroll sync', () => {
       caretToLine(view, 1);
 
       expect(pane.scrollTop).toBe(0);
+    });
+
+    /**
+     * **A line in the last screenful is where it is, not at the bottom.**
+     *
+     * The scroll mapping deliberately discards every anchor past the last line
+     * that can sit at the top of the editor and substitutes one saying
+     * `paneMax` -- that is what makes the two ends agree. Asking that list
+     * "where is line 15?" therefore answers "the very bottom", which is right
+     * for a scroll and wrong for a caret.
+     *
+     * Reported by the owner: with a tall image at the end, clicking a line near
+     * the bottom nudged the preview slightly *upward* from the end and landed on
+     * the wrong text -- `paneMax` minus the caret's height in the viewport. The
+     * caret reads its own list of raw measured positions now.
+     *
+     * The editor's scroll range is deliberately tiny, so the last line it can
+     * put at the top of its viewport is well before the end of the document and
+     * the two lists genuinely disagree about line 15. A first version left the
+     * range large, `endLine` landed past the last anchor, both lists agreed, and
+     * the test could not fail -- which mutation testing said before this comment
+     * did.
+     */
+    it('aligns to where a line really is, past the scroll mapping’s end', () => {
+      const { view, pane } = mountWithCaret();
+      Object.defineProperty(view.scrollDOM, 'clientHeight', { value: 200, configurable: true });
+      Object.defineProperty(view.scrollDOM, 'scrollHeight', { value: 300, configurable: true });
+      // Pins `documentTop` against the stubbed rect, so the far-end height is
+      // arithmetic rather than whatever jsdom left on the view.
+      placeScroller(view, 0);
+
+      // Line 15 is the eighth paragraph -- the last anchor, measured at 700 --
+      // and it is past anything the editor can scroll to the top.
+      caretToLine(view, 15);
+
+      expect(pane.scrollTop).toBe(700 - CARET_WITHIN_VIEWPORT);
     });
 
     /** It is scroll sync, so the setting that turns scroll sync off turns it off. */

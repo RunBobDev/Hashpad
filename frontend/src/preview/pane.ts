@@ -88,6 +88,23 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    */
   let anchors: AnchorOffset[] | null = null;
   /**
+   * Where each source line *actually* is in the pane, with none of the
+   * saturation `anchors` above carries.
+   *
+   * The two lists answer different questions and cannot be one list. Scrolling
+   * asks "the top of the editor is at line N, where should the pane be?", and
+   * for that the last reachable line must map to the pane's end -- so
+   * `anchorOffsets` discards every anchor past it and substitutes one that says
+   * `paneMax`. The caret asks "where is line N?", which for a line in the last
+   * screenful is a real measured offset and emphatically not the bottom.
+   *
+   * Sharing the scroll list is what the owner reported: clicking a line near the
+   * end of a document answered `paneMax`, so the alignment scrolled *up* from
+   * the bottom by the caret's height in the viewport -- a small move in the
+   * wrong direction, landing on the wrong text.
+   */
+  let lineAnchors: AnchorOffset[] | null = null;
+  /**
    * `view.contentHeight` when `anchors` was measured, and the reason the cache
    * cannot be keyed on renders alone.
    *
@@ -146,7 +163,10 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     clearRenderTimer();
     // Unconditional, and before the early returns: every render moves every
     // element, and a render that bails still leaves the cache describing
-    // content that may no longer be on screen.
+    // content that may no longer be on screen. Clearing `anchors` clears both
+    // lists -- `measureAnchors` guards on this one and rebuilds the pair
+    // together, so a second assignment here would be a line no test can
+    // distinguish. Measured: adding one changes nothing.
     anchors = null;
     if (pane === null) return;
 
@@ -266,8 +286,14 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * `normalizeAnchors` drops a line that is not a positive integer, next to the
    * sort that depends on it.
    */
-  function anchorOffsets(target: HTMLElement): AnchorOffset[] {
-    if (anchors !== null && view.contentHeight === anchoredHeight) return anchors;
+  /**
+   * Measures once and derives both lists. `anchors` alone is the cache flag:
+   * the two are always produced together, so whatever clears it clears both,
+   * and a second null assignment beside it would be undistinguishable dead
+   * code.
+   */
+  function measureAnchors(target: HTMLElement): void {
+    if (anchors !== null && view.contentHeight === anchoredHeight) return;
     anchoredHeight = view.contentHeight;
     const contentTop = target.getBoundingClientRect().top - target.scrollTop;
     const measured = [...target.querySelectorAll<HTMLElement>('[data-source-line]')].map(
@@ -276,6 +302,13 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
         offset: element.getBoundingClientRect().top - contentTop,
       }),
     );
+
+    // Where the lines are, untouched. One measurement pass feeds both lists --
+    // `getBoundingClientRect` forces a synchronous layout, and doing it twice
+    // for two views of the same geometry would be the expensive way to get the
+    // same answer.
+    lineAnchors = normalizeAnchors(measured);
+
     // Anchors past the editor's last reachable scroll position are dropped, not
     // merged: no scroll position can put those lines at the top of the editor,
     // and keeping them would make the endpoint below the out-of-order one and
@@ -283,7 +316,18 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     const bounds = endpoints(target, measured);
     const endLine = bounds.length > 1 ? bounds[1]!.line : Infinity;
     anchors = normalizeAnchors([...measured.filter((a) => a.line < endLine), ...bounds]);
-    return anchors;
+  }
+
+  /** The mapping scrolling uses: saturating at both ends. */
+  function anchorOffsets(target: HTMLElement): AnchorOffset[] {
+    measureAnchors(target);
+    return anchors ?? [];
+  }
+
+  /** The mapping the caret uses: where a line actually is. */
+  function lineOffsets(target: HTMLElement): AnchorOffset[] {
+    measureAnchors(target);
+    return lineAnchors ?? [];
   }
 
   /**
@@ -397,7 +441,9 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // background document must not move a pane nobody is looking at.
     if (activeDocument(store.getState())?.viewMode !== 'split') return;
 
-    const list = anchorOffsets(target);
+    // `lineOffsets`, not `anchorOffsets`: see `lineAnchors` for why sharing the
+    // scroll list sent the pane the wrong way near the end of a document.
+    const list = lineOffsets(target);
     if (list.length === 0) return;
 
     const head = view.state.selection.main.head;

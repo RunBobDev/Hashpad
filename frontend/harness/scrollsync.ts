@@ -104,7 +104,7 @@ declare global {
       toBottom: () => Promise<Report>;
       alignmentOf: (line: number) => { editor: number | null; preview: number | null };
       putCaretOn: (line: number, scrollIntoView?: boolean) => void;
-      lineAtViewportY: (y: number) => number | null;
+      lineAtViewportY: (y: number) => number;
     };
   }
 }
@@ -158,11 +158,17 @@ window.sync = {
     view.dispatch({ selection: { anchor: view.state.doc.line(line).from }, scrollIntoView });
   },
   lineAtViewportY: (y: number) => {
-    const position = view.posAtCoords({
-      x: view.scrollDOM.getBoundingClientRect().left + 50,
-      y: view.scrollDOM.getBoundingClientRect().top + y,
-    });
-    return position === null ? null : view.state.doc.lineAt(position).number;
+    // `false` = nearest position rather than exact hit-testing. Precise mode
+    // returns null for a point that is not inside a text box, which at the
+    // bottom of this document is most of the viewport.
+    const position = view.posAtCoords(
+      {
+        x: view.scrollDOM.getBoundingClientRect().left + 50,
+        y: view.scrollDOM.getBoundingClientRect().top + y,
+      },
+      false,
+    );
+    return view.state.doc.lineAt(position).number;
   },
   toBottom: async () => {
     const scroller = view.scrollDOM;
