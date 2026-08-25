@@ -126,6 +126,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    defaultEncoding: 'utf-8',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };

@@ -84,6 +84,7 @@ beforeEach(() => {
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    defaultEncoding: 'utf-8',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
@@ -126,6 +127,22 @@ describe('makeUntitledDocument', () => {
     // Derived, not copied: toggling the preview off on a tab that opened
     // straight into split has to land somewhere, and that somewhere is source.
     expect(doc.previousViewMode).toBe('source');
+  });
+
+  /**
+   * SPEC §6.13's `files.defaultEncoding`. Untitled documents are the only ones
+   * it reaches -- there is no file to have detected an encoding from yet, so
+   * this is simply what Save As will write.
+   */
+  it('opens in the store’s default encoding, and opens clean', () => {
+    store.setState((prev) => ({ ...prev, defaultEncoding: 'utf-16le' }));
+
+    const doc = makeUntitledDocument();
+
+    expect(doc.encoding).toBe('utf-16le');
+    // `savedEncoding` too, or `isDirty` reports a document nobody has touched.
+    expect(doc.savedEncoding).toBe('utf-16le');
+    expect(isDirty(doc)).toBe(false);
   });
 });
 
@@ -210,6 +227,7 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -235,6 +253,7 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -260,6 +279,7 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -288,6 +308,7 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -319,6 +340,7 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -386,6 +408,29 @@ describe('openDocumentInNewTab', () => {
   });
 
   /**
+   * The counterpart to `makeUntitledDocument`'s encoding case, and the reason
+   * the two are worth stating separately: an *opened* file must keep the
+   * encoding Go detected. A default that won here would silently transcode the
+   * user's file the first time they pressed Ctrl+S, which is the one outcome
+   * `files.defaultEncoding` must never produce.
+   */
+  it('keeps the detected encoding, ignoring the default', () => {
+    store.setState((prev) => ({ ...prev, defaultEncoding: 'utf-16le' }));
+
+    openDocumentInNewTab({
+      path: 'C:/notes/plain.md',
+      content: 'hello',
+      encoding: 'utf-8',
+      lineEnding: 'lf',
+    });
+
+    const doc = activeDocument(store.getState())!;
+    expect(doc.encoding).toBe('utf-8');
+    expect(doc.savedEncoding).toBe('utf-8');
+    expect(isDirty(doc)).toBe(false);
+  });
+
+  /**
    * Go reports `mixed` because saving flattens the whole file to one convention.
    * It has to survive the trip into the model or the status bar cannot warn.
    */
@@ -426,6 +471,7 @@ describe('openDocumentInNewTab', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -467,6 +513,7 @@ describe('openDocumentInNewTab', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -502,6 +549,7 @@ describe('opening a document over the startup tab', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -555,6 +603,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -581,6 +630,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -606,6 +656,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -634,6 +685,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -661,6 +713,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -693,6 +746,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -729,6 +783,7 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -762,6 +817,7 @@ describe('reopenLastClosed', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -787,6 +843,7 @@ describe('reopenLastClosed', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -820,6 +877,7 @@ describe('reopenLastClosed', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));

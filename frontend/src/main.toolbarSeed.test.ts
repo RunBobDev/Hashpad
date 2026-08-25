@@ -64,6 +64,11 @@ vi.mock('../wailsjs/go/app/App', () => ({
     // added to the read and not to the mock, and no test noticed.
     preview: { syncScroll: true },
     editor: { wordWrap: true },
+    // Go always sends this block, so a mock without it makes bootstrap throw
+    // where the real app never can -- and a bootstrap that throws runs its
+    // catch path, seeding every setting from the compiled-in defaults instead
+    // of from this mock. See main.toolbarSeed.test.ts for the time that bit.
+    files: { defaultEncoding: 'utf-8' },
     // Neither of these is in DEFAULT_PINNED (bold, italic, strikethrough,
     // inlineCode, heading, bulletList, numberedList, taskList, link, table).
     toolbar: { visible: true, pinned: ['blockquote', 'footnote'] },

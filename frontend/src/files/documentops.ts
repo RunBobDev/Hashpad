@@ -89,6 +89,11 @@ export function makeUntitledDocument(): Document {
     // Read from the store rather than defaulted, the same as the three above:
     // File > New in a window where the preview is open should keep it open.
     store.getState().defaultViewMode,
+    // SPEC §6.13's `files.defaultEncoding`. Only untitled documents get it --
+    // `openDocumentInNewTab` below takes the encoding Go detected, because
+    // overriding a detected encoding with a default would transcode the file
+    // the first time the user saved it.
+    store.getState().defaultEncoding,
   );
 }
 

@@ -346,6 +346,7 @@ describe('save-as records the new path on the document it saved', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));

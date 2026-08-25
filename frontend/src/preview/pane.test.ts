@@ -117,6 +117,7 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    defaultEncoding: 'utf-8',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));

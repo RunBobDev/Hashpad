@@ -1075,3 +1075,36 @@ the preview, not before.
 - [ ] **Hand-edit `defaultViewMode` to nonsense** (`"preview"`, `""`) and
       launch. Hashpad opens in source mode rather than in a mode that renders
       nothing. It is a hand-editable file, so this is a trust boundary.
+
+## Checkpoint H.3 — the encoding a new document is written as
+
+`files.defaultEncoding` reaches **untitled** documents only. An opened file
+keeps the encoding Go detected on read (SPEC §3.1) and is written back the same
+way — a default that overrode detection would transcode your file the first
+time you saved it.
+
+There is no UI for this until H.4's settings dialog, so these checks need
+`%APPDATA%\Hashpad\settings.json` edited by hand and the app restarted.
+
+- [ ] **Default (`"utf-8"`).** The status bar reads UTF-8 on the startup tab and
+      on File > New. Nothing has changed from before.
+- [ ] **Set `files.defaultEncoding` to `"utf-16le"` and relaunch.** The startup
+      tab's status bar reads UTF-16 LE, and so does a File > New tab.
+- [ ] **The startup tab is not dirty.** No dot on the tab, and closing the app
+      asks nothing. This is the one worth looking at twice: the encoding is
+      compared against the *saved* encoding to decide dirtiness, so a half-
+      applied default shows up as a document you never touched refusing to
+      close quietly.
+- [ ] **Save that new tab** (Ctrl+S → pick a name). Reopen it: still UTF-16 LE,
+      and the bytes on disk are UTF-16 (the file is roughly twice the size of
+      the equivalent ASCII, and starts with `FF FE`).
+- [ ] **Open an existing UTF-8 file while the default says `"utf-16le"`.** The
+      status bar reads UTF-8, not UTF-16 LE. Edit and save it — still UTF-8 on
+      disk. The default must not touch a file that was read from disk.
+- [ ] **Change one document's encoding from the status bar.** It affects that
+      document only: the tab goes dirty (the change reaches disk on the next
+      Ctrl+S, like any edit), and a new tab still opens on the settings value.
+      Picking an encoding for one file is not a preference change.
+- [ ] **Hand-edit it to nonsense** (`"utf8"`, `"UTF-8"`, `"utf-16be"`, `""`) and
+      relaunch. Everything opens UTF-8. Near-misses matter more than obvious
+      garbage here — `"utf8"` is what a person actually types.

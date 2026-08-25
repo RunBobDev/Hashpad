@@ -48,6 +48,10 @@ export const store: Store<AppState> = createStore<AppState>({
   // bootstrap leaves in place when the settings load throws, so a fresh install
   // and a broken settings file both open in source mode.
   defaultViewMode: 'source',
+  // Go's `DefaultSettings()` again, and the encoding a new file gets when
+  // settings cannot be read -- the safe answer, since UTF-8 without a BOM is
+  // what the rest of the toolchain assumes.
+  defaultEncoding: 'utf-8',
   // Also the value bootstrap republishes, as it happens: the startup document
   // is empty and `statusOf` of an empty document is exactly this. It stops
   // being a placeholder the first time the user types or a file is opened.

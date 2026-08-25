@@ -61,9 +61,11 @@ import {
   DEFAULT_OUTLINE_WIDTH,
   DEFAULT_SPLIT_RATIO,
   isDirty,
+  isEncoding,
   isViewMode,
   previousViewModeFor,
   type Document,
+  type Encoding,
 } from './state/document';
 // Type-only, so this does not pull preview/pane.ts (and with it markdown-it
 // and DOMPurify) into the entry bundle -- `import type` is erased at compile
@@ -241,6 +243,10 @@ async function bootstrap(): Promise<void> {
   // Go's default is `"source"`, so a failed settings load opens in source mode
   // -- the same behaviour a fresh install has, like every local above.
   let defaultViewMode: Document['viewMode'] = 'source';
+  // Go's default again. Worth being the fallback on its own merits and not only
+  // for symmetry: UTF-8 with no BOM is what a document nobody has configured
+  // should be written as.
+  let defaultEncoding: Encoding = 'utf-8';
 
   try {
     const settings = await LoadSettings();
@@ -313,6 +319,12 @@ async function bootstrap(): Promise<void> {
     if (isViewMode(settings.editor.defaultViewMode)) {
       defaultViewMode = settings.editor.defaultViewMode;
     }
+    // Checked for the same reason, and it matters more: this is what an
+    // untitled document gets *written* as, so an unrecognised value would reach
+    // Go's `WriteFile` the first time the user saved.
+    if (isEncoding(settings.files.defaultEncoding)) {
+      defaultEncoding = settings.files.defaultEncoding;
+    }
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -325,6 +337,7 @@ async function bootstrap(): Promise<void> {
       wordWrap,
       editorBehaviour,
       defaultViewMode,
+      defaultEncoding,
       outlineWidth,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
@@ -376,6 +389,10 @@ async function bootstrap(): Promise<void> {
     publishStatus(view.state);
     setStatusBar(statusBarVisible);
     setOutline(outlineVisible);
+    // Same catching-up as `restoreViewMode` below, for the other document
+    // default -- and unguarded because it is a plain store write with nothing
+    // to throw, where that one awaits a dynamic import.
+    applyDefaultEncoding(defaultEncoding);
 
     // The startup document was minted at module scope, before `LoadSettings`
     // resolved, so it is holding the compiled-in `'source'` -- the same
@@ -621,6 +638,35 @@ async function restoreViewMode(mode: Document['viewMode']): Promise<void> {
     return;
   }
   store.setState((prev) => setViewMode(prev, active.id, mode, previousViewModeFor(mode)));
+}
+
+/**
+ * Puts the startup document on the saved `files.defaultEncoding`.
+ *
+ * Needed for the same reason `restoreViewMode` is: the document is minted at
+ * module scope, before `LoadSettings` resolves, so it is always holding the
+ * compiled-in `'utf-8'` when it is created. Without this, the tab the app opens
+ * with would be written as UTF-8 while every tab opened a second later used the
+ * configured encoding -- the two disagreeing over nothing but timing.
+ *
+ * `savedEncoding` moves with `encoding`, and that pairing is the trap here.
+ * `isDirty` compares the two, so writing only the first would put a dirty dot
+ * on an untouched document and prompt to save it on close.
+ *
+ * Only the untitled startup document is ever in `documents` at this point, so
+ * there is no "is this a real file?" guard: an opened file's encoding is
+ * detected and must never be overridden, but no opened file can exist yet.
+ */
+function applyDefaultEncoding(encoding: Encoding): void {
+  const active = activeDocument(store.getState());
+  if (active === null || active.encoding === encoding) return;
+
+  store.setState((prev) => ({
+    ...prev,
+    documents: prev.documents.map((doc) =>
+      doc.id === active.id ? { ...doc, encoding, savedEncoding: encoding } : doc,
+    ),
+  }));
 }
 
 /**

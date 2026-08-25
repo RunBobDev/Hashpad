@@ -161,6 +161,24 @@ export function previousViewModeFor(mode: Document['viewMode']): Document['previ
   return mode === 'split' ? 'source' : mode;
 }
 
+/**
+ * `settings.files.defaultEncoding`, checked for the same reason `isViewMode`
+ * above checks its value: Go declares the field as a `string`, so unmarshalling
+ * cannot reject a hand-edited one.
+ *
+ * The consequence of letting a bad value through is worse here than for a view
+ * mode. This is what an untitled document is *written* as, so a nonsense value
+ * would reach Go's `WriteFile` at the moment the user first saves -- the point
+ * at which being wrong costs them something.
+ *
+ * Deliberately not shared with `parseStatusCommand`'s check in ui/statusbar.ts,
+ * which narrows against the label map it renders from. Same predicate, two
+ * different jobs, and a UI module is the wrong direction for `state/` to import.
+ */
+export function isEncoding(value: string): value is Encoding {
+  return value === 'utf-8' || value === 'utf-8-bom' || value === 'utf-16le';
+}
+
 export interface AppState {
   documents: Document[];
   activeDocumentId: string | null;
@@ -255,6 +273,20 @@ export interface AppState {
    * bridge (see .superpowers/sdd/progress.md's dead-field list).
    */
   defaultViewMode: Document['viewMode'];
+  /**
+   * SPEC §6.13's `files.defaultEncoding` — what a document that has never been
+   * read from disk is written as.
+   *
+   * Only ever reaches *untitled* documents. An opened file's encoding is
+   * detected (SPEC §3.1) and preserved on save, and a default that overrode
+   * detection would silently transcode the user's files, so the two never meet.
+   *
+   * Nothing writes it back, unlike `defaultViewMode` beside it. The status
+   * bar's encoding menu is a per-file choice -- picking UTF-16 for one document
+   * must not change what every future document gets -- so this stays a settings
+   * value until H.4's dialog gives it a control.
+   */
+  defaultEncoding: Encoding;
   /**
    * The caret and the counts, published by editor/extensions.ts's `syncStatus`
    * on every document or selection change. Here rather than read from the view
@@ -432,16 +464,20 @@ export const EMPTY_STATUS: EditorStatus = {
 /**
  * A never-saved, empty document — what the app opens with.
  *
- * `viewMode` defaults to `'source'` rather than being required: every test that
- * mints a document is indifferent to it, and `'source'` is both Go's
- * `DefaultSettings` value and what the app falls back to when settings cannot
- * be read. The two production callers -- main.ts's startup document and
- * documentops.ts's `makeUntitledDocument` -- pass `defaultViewMode` from the
- * store.
+ * Both defaults are optional rather than required: every test that mints a
+ * document is indifferent to them, and `'source'`/`'utf-8'` are Go's
+ * `DefaultSettings` values as well as what the app falls back to when settings
+ * cannot be read. The two production callers -- main.ts's startup document and
+ * documentops.ts's `makeUntitledDocument` -- pass the store's.
+ *
+ * `encoding` and `savedEncoding` are set together and must stay that way.
+ * `isDirty` compares them, so a document minted with the two disagreeing would
+ * open with a dirty dot and prompt on close, having been edited by nobody.
  */
 export function createUntitledDocument(
   editorState: EditorState,
   viewMode: Document['viewMode'] = 'source',
+  encoding: Encoding = 'utf-8',
 ): Document {
   return {
     id: crypto.randomUUID(),
@@ -450,9 +486,9 @@ export function createUntitledDocument(
     savedDoc: editorState.doc,
     viewMode,
     previousViewMode: previousViewModeFor(viewMode),
-    encoding: 'utf-8',
+    encoding,
     lineEnding: 'crlf',
-    savedEncoding: 'utf-8',
+    savedEncoding: encoding,
     savedLineEnding: 'crlf',
     mixedLineEndings: false,
     scrollSnapshot: null,

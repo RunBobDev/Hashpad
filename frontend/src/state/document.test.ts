@@ -10,6 +10,7 @@ import {
   statusOf,
   clampTabSize,
   DEFAULT_BEHAVIOUR,
+  isEncoding,
   isViewMode,
   previousViewModeFor,
 } from './document';
@@ -288,5 +289,77 @@ describe('createUntitledDocument opens in the mode it is given', () => {
 
     expect(doc.viewMode).toBe('live');
     expect(doc.previousViewMode).toBe('live');
+  });
+});
+
+/**
+ * `settings.files.defaultEncoding`, from the same hand-editable file as
+ * `defaultViewMode` -- and with more at stake. This value is what an untitled
+ * document is *written* as, so an unrecognised one reaches Go's `WriteFile` at
+ * the moment the user first saves.
+ */
+describe('isEncoding', () => {
+  it.each([['utf-8'], ['utf-8-bom'], ['utf-16le']])('accepts %s', (value) => {
+    expect(isEncoding(value)).toBe(true);
+  });
+
+  /**
+   * The near-misses are the point. `"utf8"` and `"UTF-8"` are what someone
+   * editing the file by hand actually types, and `"utf-16"` and `"utf-16be"`
+   * are real encodings that this app does not write -- accepting either would
+   * mean claiming a byte order the writer never produces.
+   */
+  it.each([[''], ['utf8'], ['UTF-8'], ['utf-16'], ['utf-16be'], ['ascii'], ['utf-8 ']])(
+    'rejects %s',
+    (value) => {
+      expect(isEncoding(value)).toBe(false);
+    },
+  );
+
+  it('rejects a missing value', () => {
+    expect(isEncoding(undefined as unknown as string)).toBe(false);
+  });
+});
+
+describe('createUntitledDocument opens in the encoding it is given', () => {
+  it('defaults to utf-8, saved and current agreeing', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }));
+
+    expect(doc.encoding).toBe('utf-8');
+    expect(doc.savedEncoding).toBe('utf-8');
+  });
+
+  /**
+   * Both fields, or the document opens dirty. `isDirty` compares them, so a
+   * version that set only `encoding` would put a dot on an untouched document
+   * and prompt to save it on close -- which is why this asserts `isDirty`
+   * rather than only reading the two fields back.
+   */
+  it('carries the encoding onto both fields, leaving the document clean', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }), 'source', 'utf-16le');
+
+    expect(doc.encoding).toBe('utf-16le');
+    expect(doc.savedEncoding).toBe('utf-16le');
+    expect(isDirty(doc)).toBe(false);
+  });
+
+  /** The two defaults are independent; neither may quietly reset the other. */
+  it('takes a view mode and an encoding together', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }), 'split', 'utf-8-bom');
+
+    expect(doc.viewMode).toBe('split');
+    expect(doc.encoding).toBe('utf-8-bom');
+  });
+
+  /**
+   * There is no `defaultLineEnding` in SPEC §6.13's block, so a new document
+   * stays on CRLF whatever the encoding says. Pinned so that wiring one later
+   * is a deliberate act.
+   */
+  it('leaves the line ending on crlf', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }), 'source', 'utf-16le');
+
+    expect(doc.lineEnding).toBe('crlf');
+    expect(doc.savedLineEnding).toBe('crlf');
   });
 });

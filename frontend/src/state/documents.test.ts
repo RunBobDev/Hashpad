@@ -44,6 +44,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    defaultEncoding: 'utf-8',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };
