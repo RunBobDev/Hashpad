@@ -102,6 +102,9 @@ declare global {
     sync: {
       report: () => Report;
       toBottom: () => Promise<Report>;
+      alignmentOf: (line: number) => { editor: number | null; preview: number | null };
+      putCaretOn: (line: number, scrollIntoView?: boolean) => void;
+      lineAtViewportY: (y: number) => number | null;
     };
   }
 }
@@ -124,8 +127,43 @@ function measure(): Report {
   };
 }
 
+/**
+ * Where a source line sits inside each pane's viewport, in pixels from the top.
+ * The caret hybrid's whole claim is that these two agree for the caret's line.
+ */
+function alignmentOf(line: number): { editor: number | null; preview: number | null } {
+  const scroller = view.scrollDOM;
+  const paneElement = document.querySelector<HTMLElement>('.preview-pane')!;
+  const coords = view.coordsAtPos(view.state.doc.line(line).from);
+  const element = paneElement.querySelector(`[data-source-line="${line}"]`);
+  return {
+    editor: coords === null ? null : Math.round(coords.top - scroller.getBoundingClientRect().top),
+    preview:
+      element === null
+        ? null
+        : Math.round(element.getBoundingClientRect().top - paneElement.getBoundingClientRect().top),
+  };
+}
+
 window.sync = {
   report: measure,
+  alignmentOf,
+  /**
+   * `scrollIntoView` models the difference between the two real gestures:
+   * arrowing or jumping to a line scrolls the editor to it, while clicking a
+   * line that is already on screen does not. Only the second leaves `within`
+   * meaning "where the user is looking", so both are worth measuring.
+   */
+  putCaretOn: (line: number, scrollIntoView = false) => {
+    view.dispatch({ selection: { anchor: view.state.doc.line(line).from }, scrollIntoView });
+  },
+  lineAtViewportY: (y: number) => {
+    const position = view.posAtCoords({
+      x: view.scrollDOM.getBoundingClientRect().left + 50,
+      y: view.scrollDOM.getBoundingClientRect().top + y,
+    });
+    return position === null ? null : view.state.doc.lineAt(position).number;
+  },
   toBottom: async () => {
     const scroller = view.scrollDOM;
     scroller.scrollTop = scroller.scrollHeight;

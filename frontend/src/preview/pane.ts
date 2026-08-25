@@ -225,6 +225,22 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
   );
 
   /**
+   * The caret's line, which `editor/extensions.ts` already publishes for the
+   * status bar on exactly the right trigger -- `docChanged || selectionSet`, and
+   * nothing else. Scrolling changes neither, so this cannot fire for a scroll,
+   * which is what keeps the two mappings from fighting.
+   *
+   * Selecting `.line` and not the whole `status` is deliberate: moving along a
+   * line changes `col` and the counts, and re-aligning for that would be work
+   * with no visible result. The store compares the selected value, so a column
+   * move simply does not notify.
+   */
+  const unsubscribeCaret = store.subscribe(
+    (state) => state.status.line,
+    () => alignToCaret(),
+  );
+
+  /**
    * A grammar chunk arriving (codehighlight.ts) is the one render trigger with
    * no user action behind it, and the fence it repaints is already on screen
    * unhighlighted -- so it renders immediately rather than joining the typing
@@ -353,6 +369,63 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
   }
 
   /**
+   * Caret -> preview: put the caret's line at the same height in the pane as it
+   * sits at in the editor.
+   *
+   * **An addition to scroll sync, not a replacement.** Design §4.17 rejected
+   * driving the whole mapping from the caret, and that reasoning still holds:
+   * the caret does not move when you use the wheel or the scrollbar, so a
+   * caret-only sync would leave the other pane frozen during ordinary
+   * scrolling. What it *is* good for is the other gesture -- clicking or arrowing
+   * to a place in the text is a statement about where you want to be, and the
+   * preview following it is what the owner asked for.
+   *
+   * So the two gestures keep their own mappings and the last one wins, which is
+   * the right answer either way round: scroll and the top line leads, move the
+   * caret and the caret leads.
+   *
+   * Positioned rather than merely scrolled into view. "The same line rendered in
+   * the same position in both panes" was the request, and it is also the more
+   * useful behaviour -- a line that is already visible still moves to match, so
+   * the two panes stay readable side by side instead of only agreeing when the
+   * caret happens to leave the viewport.
+   */
+  function alignToCaret(): void {
+    const target = pane;
+    if (target === null || !store.getState().syncScroll) return;
+    // Same reasoning as `render`: the handle outlives a `hide()`, and a
+    // background document must not move a pane nobody is looking at.
+    if (activeDocument(store.getState())?.viewMode !== 'split') return;
+
+    const list = anchorOffsets(target);
+    if (list.length === 0) return;
+
+    const head = view.state.selection.main.head;
+    const coords = view.coordsAtPos(head);
+    // Null when the caret is outside the rendered viewport, which happens right
+    // after a jump. Standing aside is correct: the next scroll maps it anyway,
+    // and guessing a position here would fight that.
+    if (coords === null) return;
+
+    // How far down the editor's own viewport the caret sits. Subtracting it is
+    // what turns "where the line is in the pane" into "where the pane must
+    // scroll for the line to be at that same height".
+    const within = coords.top - view.scrollDOM.getBoundingClientRect().top;
+    const line = view.state.doc.lineAt(head).number;
+
+    // Clamped here rather than left to the browser. `writeTo` skips an
+    // assignment that changes nothing by comparing against `scrollTop`, and an
+    // out-of-range value never equals the clamped `scrollTop` it produces -- so
+    // an unclamped write would arm the echo guard for an echo that never
+    // arrives, and eat the user's next real scroll on that side.
+    const paneMax = target.scrollHeight - target.clientHeight;
+    const to = Math.max(0, Math.min(offsetForLine(list, line) - within, paneMax));
+
+    trace({ dir: 'caret->preview', line, within: Math.round(within), to: Math.round(to) });
+    writeTo(target, to);
+  }
+
+  /**
    * Scrolling one pane scrolls the other, whose own scroll event would scroll
    * the first one back. What suppresses that echo is a token naming **the
    * scroller we just wrote to**, consumed by the first event that arrives on it.
@@ -459,6 +532,35 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // a document that is one block of raw HTML scrolls and has no anchors.
     if (list.length === 0) return;
     if (isEcho(view.scrollDOM)) return;
+
+    // **The end, decided live rather than looked up.**
+    //
+    // `endpoints` already places an anchor meant to pin these two together, and
+    // that anchor is only as good as the moment it was measured: it comes from
+    // `sourcePosition`, which reads CodeMirror's height map, and the height map
+    // is refined as more of the document renders. The cache key is
+    // `view.contentHeight`, which does not change when the *distribution* of
+    // that height does -- so an anchor list built while the map was still coarse
+    // stays in use, and the saturation line it names can be one the editor never
+    // reaches. Anything in that gap is then unreachable in the pane.
+    //
+    // That is the bug the owner reported (a tall image at the end, 2311px of it
+    // unreachable) and it came back the moment `alignToCaret` gave the cache a
+    // second chance to be built at an awkward moment. Fixing the anchor's
+    // *input* was necessary but not sufficient; this makes the end unconditional.
+    //
+    // Two measured numbers, read now, no interpolation in between: if the editor
+    // cannot scroll further, neither can the pane. The 1px tolerance is for
+    // fractional device pixels, where `scrollTop` never exactly equals the
+    // maximum.
+    const scroller = view.scrollDOM;
+    const editorMax = scroller.scrollHeight - scroller.clientHeight;
+    if (editorMax > 0 && scroller.scrollTop >= editorMax - 1) {
+      const paneEnd = target.scrollHeight - target.clientHeight;
+      trace({ dir: 'editor->preview', saturated: true, to: paneEnd });
+      writeTo(target, paneEnd);
+      return;
+    }
 
     const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
     const at = sourcePosition(height);
@@ -811,6 +913,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
       saveTimer = null;
     }
     unsubscribeStore();
+    unsubscribeCaret();
     unsubscribeLanguage();
   }
 

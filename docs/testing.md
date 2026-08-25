@@ -999,3 +999,35 @@ reachable in the unit tests without stubbing the geometry.
       content that cannot be reached at all.
 - [ ] **A document with no images** still tracks smoothly end to end, in both
       directions -- the fix must not have cost the middle its interpolation.
+
+## Scroll sync — the caret hybrid
+
+Agreed with the owner after the end-clamp fix: **an addition to scroll sync, not
+a replacement.** Design §4.17 still rejects driving the whole mapping from the
+caret, because the caret does not move when you use the wheel, so the other pane
+would freeze during ordinary scrolling. The two gestures keep separate mappings
+and the last one wins.
+
+Measured in `frontend/harness/scrollsync.html`: alignment was exact (699/699,
+133/133, 312/312 pixels from each pane's top).
+
+- [ ] **Click a line in the editor.** That line moves to the same height in the
+      preview. It works for a line already on screen -- the point is that the two
+      panes line up, not merely that the line becomes visible.
+- [ ] **Arrow or Ctrl+End to a distant line.** Same thing, after the editor
+      scrolls to it.
+- [ ] **Now scroll with the wheel without touching the caret.** The preview
+      follows the *top line* as before. The caret must not be holding it in
+      place.
+- [ ] **Near the top of a document**, the preview may not be able to match --
+      matching would mean scrolling above its own top, so it stops at 0. Expected.
+- [ ] **Type at the end of a long document.** The preview keeps up rather than
+      lagging behind the caret.
+- [ ] **Turn sync scroll off** (settings `preview.syncScroll`). Neither gesture
+      moves the other pane.
+- [ ] **Switch to a tab that is not in split view and move the caret there.**
+      Nothing moves in the pane belonging to the other document.
+- [ ] **The end still clamps.** Scroll to the bottom after clicking around --
+      this is the sequence that reintroduced the bug in the harness, because the
+      caret path gives the anchor cache another chance to be built at an awkward
+      moment.

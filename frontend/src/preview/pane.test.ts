@@ -998,6 +998,223 @@ describe('scroll sync', () => {
   });
 
   /**
+   * **The editor's end is the pane's end, decided live rather than looked up.**
+   *
+   * `endpoints` places an anchor meant to do this, and it is only as good as the
+   * moment it was measured. The anchor list is cached on `view.contentHeight`,
+   * which says nothing about the *pane* -- so a pane that grows without firing
+   * `load` or `resize` leaves the cached endpoint pointing at a `paneMax` that no
+   * longer exists, and the pane stops short of its own end.
+   *
+   * That is the owner's bug (a tall image at the end, 2311px unreachable) and it
+   * came back the moment `alignToCaret` gave the cache a second chance to be
+   * built at an awkward moment. Fixing the anchor's *input* was necessary and not
+   * sufficient; reading both maxima at the moment of the scroll is what makes the
+   * end unconditional.
+   *
+   * The fixture grows the pane behind the cache's back on purpose. An earlier
+   * version simply scrolled to the end with consistent numbers, and could not
+   * fail: the cached endpoint anchor reached `paneMax` on its own, so deleting
+   * the live clamp changed nothing.
+   */
+  it('puts the pane at its end even when the cached anchors disagree', () => {
+    const NL = String.fromCharCode(10);
+    const mounted = mount(Array.from({ length: 8 }, (_, i) => 'para ' + i).join(NL + NL) + NL);
+    mounted.handle.show();
+    const pane = paneOf(mounted.split);
+    const view = mounted.view;
+
+    giveAnchorTops(
+      pane,
+      Array.from({ length: 8 }, (_, i) => i * 20),
+    );
+    Object.defineProperty(view.scrollDOM, 'clientHeight', { value: 200, configurable: true });
+    Object.defineProperty(view.scrollDOM, 'scrollHeight', { value: 1200, configurable: true });
+    Object.defineProperty(pane, 'clientHeight', { value: 400, configurable: true });
+
+    // Measured while the pane is short -- the state a list built before a tall
+    // image decoded is in.
+    Object.defineProperty(pane, 'scrollHeight', { value: 2000, configurable: true });
+    const settle = placeScroller(view, 500);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    settle();
+
+    // The image arrives. No `load` here, and `contentHeight` is unchanged, so
+    // nothing invalidates the cache: the endpoint anchor still says 1600.
+    Object.defineProperty(pane, 'scrollHeight', { value: 5000, configurable: true });
+
+    const restore = placeScroller(view, 1000);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    restore();
+
+    expect(pane.scrollTop).toBe(5000 - 400);
+  });
+
+  /**
+   * Caret -> preview, the hybrid the owner asked for: the caret's line lands at
+   * the same height in the pane as it occupies in the editor.
+   *
+   * An *addition* to scroll sync, never a replacement -- design §4.17 rejected
+   * driving the whole mapping from the caret, because the caret does not move
+   * when you use the wheel, so the other pane would freeze during ordinary
+   * scrolling. The two gestures keep separate mappings and the last one wins.
+   *
+   * The store update is explicit here because `mount` builds its view from a
+   * plain `EditorState`, without the update listener that publishes the caret
+   * line in the real app (`editor/extensions.ts`'s `publishStatus`). Dispatching
+   * the selection alone would move the caret and notify nobody.
+   */
+  describe('caret alignment', () => {
+    const CARET_WITHIN_VIEWPORT = 120;
+
+    /**
+     * The view is built with the real `buildExtensions`, so its update listener
+     * publishes the caret line to the store exactly as the app does -- moving the
+     * selection is the whole trigger, and nothing needs to be published by hand.
+     * The first version of this suite did publish by hand, and got a false
+     * failure for it: the dispatch had already run the alignment, before the
+     * geometry stubs were in place.
+     */
+    function mountWithCaret(syncScroll = true) {
+      const NL = String.fromCharCode(10);
+      const mounted = mount(
+        Array.from({ length: 8 }, (_, i) => 'para ' + i).join(NL + NL) + NL,
+        null,
+        0.5,
+        syncScroll,
+      );
+      mounted.handle.show();
+      const pane = paneOf(mounted.split);
+      // Anchors 100px apart, so the expected position is arithmetic rather than
+      // whatever jsdom's zero-height layout would report.
+      giveAnchorTops(
+        pane,
+        Array.from({ length: 8 }, (_, i) => i * 100),
+      );
+      Object.defineProperty(pane, 'scrollHeight', { value: 5000, configurable: true });
+      Object.defineProperty(pane, 'clientHeight', { value: 400, configurable: true });
+
+      // Where the caret sits inside the editor's viewport. jsdom reports every
+      // rect as zero, so both ends of that subtraction are stubbed -- and before
+      // any dispatch, because the dispatch is what runs the alignment.
+      mounted.view.coordsAtPos = () => rectAt(SCROLLER_TOP + CARET_WITHIN_VIEWPORT);
+      mounted.view.scrollDOM.getBoundingClientRect = () => rectAt(SCROLLER_TOP);
+
+      return { ...mounted, pane };
+    }
+
+    function caretToLine(view: EditorView, line: number): void {
+      view.dispatch({ selection: { anchor: view.state.doc.line(line).from } });
+    }
+
+    it('puts the caret’s line at the same height in the pane', () => {
+      const { view, pane } = mountWithCaret();
+
+      // Line 5 is the third paragraph -- blank lines between -- so the third
+      // anchor, at 200.
+      caretToLine(view, 5);
+
+      expect(pane.scrollTop).toBe(200 - CARET_WITHIN_VIEWPORT);
+    });
+
+    /**
+     * Near the top of a document the caret can sit lower in the editor's
+     * viewport than its line sits in the pane -- matching the two would mean
+     * scrolling the pane above its own top, which is not a place. Seen in the
+     * harness: with the caret on line 21 the pane wanted -51 and correctly
+     * stayed at 0.
+     *
+     * The clamp is not cosmetic. `writeTo` skips an assignment that changes
+     * nothing by comparing against `scrollTop`, and an out-of-range value never
+     * equals the clamped `scrollTop` a browser produces -- so writing one arms
+     * the echo guard for an echo that never arrives, and the guard then eats the
+     * user's next real scroll.
+     *
+     * **No test distinguishes the clamp**, and that is measured rather than
+     * assumed: removing it leaves this suite green. jsdom clamps `scrollTop`
+     * itself, so the position lands at 0 either way, and its scroll-event
+     * behaviour on a clamped assignment does not reproduce the echo-guard
+     * consequence either -- an assertion on that was tried and was equally
+     * green. The clamp stays because the reasoning above is about a real
+     * browser; this test pins the intent, not the mechanism.
+     */
+    it('does not try to scroll the pane above its top', () => {
+      const { view, pane } = mountWithCaret();
+
+      // Line 1 is the first anchor, at 0, while the caret sits 120px down the
+      // editor's viewport -- so matching them would need a scroll of -120.
+      caretToLine(view, 1);
+
+      expect(pane.scrollTop).toBe(0);
+    });
+
+    /** It is scroll sync, so the setting that turns scroll sync off turns it off. */
+    it('does nothing when sync scroll is off', () => {
+      const { view, pane } = mountWithCaret(false);
+      pane.scrollTop = 0;
+
+      caretToLine(view, 5);
+
+      expect(pane.scrollTop).toBe(0);
+    });
+
+    /**
+     * Moving along a line changes the column and the counts, never the line, and
+     * re-aligning for that would be work with no visible result. The store
+     * compares the selected value, so this must not even notify.
+     */
+    it('ignores a move within the same line', () => {
+      const { view, pane } = mountWithCaret();
+      caretToLine(view, 5);
+      const settled = pane.scrollTop;
+      pane.scrollTop = settled + 37;
+
+      const line = view.state.doc.line(5);
+      view.dispatch({ selection: { anchor: line.from + 2 } });
+
+      expect(pane.scrollTop).toBe(settled + 37);
+    });
+
+    /**
+     * A background document must not move a pane nobody is looking at. The pane
+     * outlives a tab switch, so "the pane exists" is not the same question as
+     * "this document is the one being previewed".
+     */
+    it('does nothing for a document that is not in split view', () => {
+      const { view, pane } = mountWithCaret();
+      caretToLine(view, 5);
+      const settled = pane.scrollTop;
+
+      store.setState((prev) => ({
+        ...prev,
+        documents: prev.documents.map((doc) => ({ ...doc, viewMode: 'source' as const })),
+      }));
+      caretToLine(view, 7);
+
+      expect(pane.scrollTop).toBe(settled);
+    });
+
+    /**
+     * The caret is an *addition* to scroll sync, so it must not have taken the
+     * wheel's job: a scroll changes neither the document nor the selection, so
+     * the caret subscription cannot fire for one, and the top-line mapping is
+     * what answers.
+     */
+    it('leaves plain scrolling to the top-line mapping', () => {
+      const { view, pane } = mountWithCaret();
+      caretToLine(view, 5);
+
+      const restore = placeScroller(view, 0);
+      view.scrollDOM.dispatchEvent(new Event('scroll'));
+      restore();
+
+      // Line 1 sits at anchor 0, and scrolling put the editor at its top -- so
+      // the pane follows the *top line*, not the caret still sitting on line 5.
+      expect(pane.scrollTop).toBe(0);
+    });
+  });
+
+  /**
    * A height that lands outside the block CodeMirror hands back must still map
    * to a position *inside* that block.
    *
@@ -1302,7 +1519,10 @@ describe('destroy', () => {
 
     handle.destroy();
 
-    expect(released).toHaveBeenCalledTimes(1);
+    // Two: the render subscription and the caret one added for the hybrid. The
+    // count is the assertion -- releasing one of two would otherwise look
+    // exactly like releasing both.
+    expect(released).toHaveBeenCalledTimes(2);
   });
 
   /** Same hole, same reasoning: the mocked `onLanguageLoaded` is the witness. */
