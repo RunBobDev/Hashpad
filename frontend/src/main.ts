@@ -61,6 +61,8 @@ import {
   DEFAULT_OUTLINE_WIDTH,
   DEFAULT_SPLIT_RATIO,
   isDirty,
+  isViewMode,
+  previousViewModeFor,
   type Document,
 } from './state/document';
 // Type-only, so this does not pull preview/pane.ts (and with it markdown-it
@@ -236,6 +238,9 @@ async function bootstrap(): Promise<void> {
   let outlineVisible = false;
   let outlineWidth = DEFAULT_OUTLINE_WIDTH;
   let editorBehaviour = DEFAULT_BEHAVIOUR;
+  // Go's default is `"source"`, so a failed settings load opens in source mode
+  // -- the same behaviour a fresh install has, like every local above.
+  let defaultViewMode: Document['viewMode'] = 'source';
 
   try {
     const settings = await LoadSettings();
@@ -302,6 +307,12 @@ async function bootstrap(): Promise<void> {
       tabSize: clampTabSize(settings.editor.tabSize),
       insertSpaces: settings.editor.insertSpaces,
     };
+    // Checked rather than taken as-is, unlike the booleans above: Go declares
+    // this one as a `string`, so unmarshalling does not reject a hand-edited
+    // value the way it rejects a non-boolean. See `isViewMode`.
+    if (isViewMode(settings.editor.defaultViewMode)) {
+      defaultViewMode = settings.editor.defaultViewMode;
+    }
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -313,6 +324,7 @@ async function bootstrap(): Promise<void> {
       syncScroll,
       wordWrap,
       editorBehaviour,
+      defaultViewMode,
       outlineWidth,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
@@ -364,6 +376,29 @@ async function bootstrap(): Promise<void> {
     publishStatus(view.state);
     setStatusBar(statusBarVisible);
     setOutline(outlineVisible);
+
+    // The startup document was minted at module scope, before `LoadSettings`
+    // resolved, so it is holding the compiled-in `'source'` -- the same
+    // situation as the theme, the fonts and `editorBehaviour` above, and fixed
+    // here for the same reason: applying it *before* the window appears is what
+    // stops the user watching the pane slide in on every launch.
+    //
+    // Its own try/catch, like the toolbar mount above and for the same reason.
+    // This one awaits a dynamic `import()`, and main.go's StartHidden means an
+    // unguarded throw between here and `ShowWindow` leaves the window
+    // permanently invisible -- the failure Checkpoint D had to add a Go-side
+    // backstop for.
+    try {
+      await restoreViewMode(defaultViewMode);
+    } catch (err) {
+      // The store keeps the mode it was seeded with unless this failed, and a
+      // `'split'` left in place with no pane mounted is worse than losing the
+      // setting for one session: `openDocumentInNewTab` would mint split
+      // documents the subscription cannot show, and View > Preview would sit
+      // checked over an empty column.
+      store.setState((prev) => ({ ...prev, defaultViewMode: 'source' }));
+      console.error('hashpad: failed to restore the saved view mode; opening in source mode', err);
+    }
     ShowWindow();
   }
 }
@@ -506,21 +541,24 @@ store.subscribe(
 );
 
 /**
- * Ctrl+Shift+P / View > Preview.
+ * Puts the active document into split mode, mounting the pane if this is the
+ * first time.
+ *
+ * Split out of `togglePreview` so that bootstrap can reuse it *without* the
+ * persistence: restoring the saved mode is reading the setting back, not the
+ * user choosing it, and routing startup through the toggle would mean a
+ * `LoadSettings`/`SaveSettings` round trip on every launch to write down the
+ * value it had just read.
  *
  * `setViewMode` runs *before* `show()`, which is not arbitrary: it is the
  * store write above that opens the pane and renders it, and the explicit
  * `show()` that follows is then a no-op. Doing it the other way round would
  * show an empty pane -- the pane skips rendering a document that is not yet
  * in split mode -- until the user's next keystroke.
- *
- * The outgoing mode is handed to `setViewMode` as `remember` only on the way
- * in, so toggling off restores `'live'` for a document that was in live mode
- * rather than downgrading it to source.
  */
-async function togglePreview(): Promise<void> {
+async function showPreview(): Promise<void> {
   const active = activeDocument(store.getState());
-  if (active === null) return;
+  if (active === null || active.viewMode === 'split') return;
 
   // Copied into a local before the await below: TypeScript discards a
   // narrowing of `active.viewMode` across it, and this also pins the mode to
@@ -528,23 +566,90 @@ async function togglePreview(): Promise<void> {
   // time the dynamic import resolves.
   const mode = active.viewMode;
 
-  // Neither branch calls `show()`/`hide()` itself. The subscription above is
-  // registered at module load and reacts to exactly this `viewMode` write, so
-  // it has already done it by the time `setState` returns -- and it is also
-  // what handles the tab switches this function never sees. Calling it here as
-  // well would be two paths owning the same effect, with the second a silent
-  // no-op that reads as if it were doing the work.
-  if (mode === 'split') {
-    store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
-    return;
-  }
-
   // Imported before the state write, so the subscription has a handle to call
   // `show()` on when it fires.
   if (!previewHandle) {
     previewHandle = (await import('./preview/pane')).mountPreview(editorSplit, view);
   }
   store.setState((prev) => setViewMode(prev, active.id, 'split', mode));
+}
+
+/**
+ * Ctrl+Shift+P / View > Preview.
+ *
+ * Neither branch calls `show()`/`hide()` itself. The subscription above is
+ * registered at module load and reacts to exactly the `viewMode` write, so it
+ * has already done it by the time `setState` returns -- and it is also what
+ * handles the tab switches this function never sees. Calling it here as well
+ * would be two paths owning the same effect, with the second a silent no-op
+ * that reads as if it were doing the work.
+ *
+ * The outgoing mode is handed to `setViewMode` as `remember` only on the way in
+ * (inside `showPreview`), so toggling off restores `'live'` for a document that
+ * was in live mode rather than downgrading it to source.
+ */
+async function togglePreview(): Promise<void> {
+  const active = activeDocument(store.getState());
+  if (active === null) return;
+
+  if (active.viewMode === 'split') {
+    store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
+    void setDefaultViewMode(active.previousViewMode);
+    return;
+  }
+
+  await showPreview();
+  void setDefaultViewMode('split');
+}
+
+/**
+ * Puts a document into the mode a previous session left the preview in.
+ *
+ * The `'split'` branch is the whole point, but the other modes go through here
+ * too rather than being special-cased away: the startup document is minted
+ * before settings load, so whatever `defaultViewMode` turns out to be, this is
+ * the one place that catches it up with a new tab opened a second later.
+ *
+ * Deliberately not persisting -- see `showPreview`.
+ */
+async function restoreViewMode(mode: Document['viewMode']): Promise<void> {
+  const active = activeDocument(store.getState());
+  if (active === null || active.viewMode === mode) return;
+
+  if (mode === 'split') {
+    await showPreview();
+    return;
+  }
+  store.setState((prev) => setViewMode(prev, active.id, mode, previousViewModeFor(mode)));
+}
+
+/**
+ * View > Preview is sticky, like every other View toggle -- word wrap, line
+ * numbers, the status bar and the outline all write their setting the moment
+ * they are clicked, and the preview was the one that did not. The owner
+ * reported the consequence: open the preview, then open a file or restart, and
+ * it was gone.
+ *
+ * Two destinations, both needed. The store field is what the *next tab in this
+ * session* reads (documentops.ts), and `settings.editor.defaultViewMode` is
+ * what the next launch reads. Applied first, persisted after, a failed disk
+ * write logged rather than thrown -- the same ordering and error handling as
+ * `setWordWrapSetting` below.
+ *
+ * The whole `Document['viewMode']` union is stored, `'split'` included: SPEC
+ * §6.13 lists this key under the Editor group, so Checkpoint H's settings
+ * dialog will offer the same three choices this writes.
+ */
+async function setDefaultViewMode(mode: Document['viewMode']): Promise<void> {
+  store.setState((prev) => ({ ...prev, defaultViewMode: mode }));
+
+  try {
+    const settings = await LoadSettings();
+    settings.editor.defaultViewMode = mode;
+    await SaveSettings(settings);
+  } catch (err) {
+    console.error('hashpad: failed to persist the view mode', err);
+  }
 }
 
 /**

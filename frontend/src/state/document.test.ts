@@ -10,6 +10,8 @@ import {
   statusOf,
   clampTabSize,
   DEFAULT_BEHAVIOUR,
+  isViewMode,
+  previousViewModeFor,
 } from './document';
 
 describe('isDirty', () => {
@@ -204,4 +206,87 @@ describe('clampTabSize', () => {
       expect(clampTabSize(value)).toBe(DEFAULT_BEHAVIOUR.tabSize);
     },
   );
+});
+
+/**
+ * `settings.editor.defaultViewMode` is the one view-mode value that arrives
+ * from outside the type system: Go declares it as a `string`, so unmarshalling
+ * cannot reject a hand-edited value the way it rejects a non-boolean, and
+ * `wailsjs/go/models.ts` widens it to `string` on this side too.
+ */
+describe('isViewMode', () => {
+  it.each([['source'], ['live'], ['split']])('accepts %s', (value) => {
+    expect(isViewMode(value)).toBe(true);
+  });
+
+  /**
+   * `''` and the near-misses matter more than the obvious garbage: a settings
+   * file written by hand is far likelier to say "preview" or "Split" than
+   * something no one would type. Any of them reaching the store would put a
+   * mode nothing renders on every document the app opens.
+   */
+  it.each([[''], ['preview'], ['Split'], ['SOURCE'], ['source '], ['null']])(
+    'rejects %s',
+    (value) => {
+      expect(isViewMode(value)).toBe(false);
+    },
+  );
+
+  /** A key missing from a hand-edited file reads as `undefined`, not as ''. */
+  it('rejects a missing value', () => {
+    expect(isViewMode(undefined as unknown as string)).toBe(false);
+  });
+});
+
+describe('previousViewModeFor', () => {
+  /**
+   * Split has no earlier mode to remember, so a document that opened straight
+   * into it falls back to source when the preview is toggled off.
+   */
+  it('sends split back to source', () => {
+    expect(previousViewModeFor('split')).toBe('source');
+  });
+
+  /**
+   * The reason `previousViewMode` exists: a document opened under
+   * `defaultViewMode: "live"` must come back as `'live'`, not be silently
+   * downgraded. Returning a hard-coded `'source'` for everything would pass the
+   * split case above and fail exactly here.
+   */
+  it.each([['source'], ['live']] as const)('leaves %s alone', (mode) => {
+    expect(previousViewModeFor(mode)).toBe(mode);
+  });
+});
+
+describe('createUntitledDocument opens in the mode it is given', () => {
+  /**
+   * The default is what 29 existing call sites rely on, and it is also what
+   * bootstrap falls back to when settings cannot be read.
+   */
+  it('defaults to source', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }));
+
+    expect(doc.viewMode).toBe('source');
+    expect(doc.previousViewMode).toBe('source');
+  });
+
+  /**
+   * The owner's report, at its smallest: with the preview showing, File > New
+   * gave a tab with no preview, because this function spelled `'source'` into
+   * every document it made.
+   */
+  it('carries a split default onto the document, remembering source', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }), 'split');
+
+    expect(doc.viewMode).toBe('split');
+    expect(doc.previousViewMode).toBe('source');
+  });
+
+  /** `previousViewMode` is derived, not copied -- live is its own answer. */
+  it('carries a live default onto both fields', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: '' }), 'live');
+
+    expect(doc.viewMode).toBe('live');
+    expect(doc.previousViewMode).toBe('live');
+  });
 });

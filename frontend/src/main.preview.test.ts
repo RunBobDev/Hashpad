@@ -124,9 +124,17 @@ beforeAll(async () => {
  * handle and the document's `viewMode` come back to rest too.
  */
 afterEach(async () => {
-  if (document.querySelector('.preview-pane') === null) return;
-  emit('view.preview');
-  await waitForPane(false);
+  if (document.querySelector('.preview-pane') !== null) {
+    emit('view.preview');
+    await waitForPane(false);
+  }
+  // The toggle is sticky now, so it leaves `defaultViewMode` behind in the
+  // shared store -- and the early return above means a case that ended in
+  // source mode never even ran the toggle that would have reset it. Under
+  // `--sequence.shuffle` the next test to open a tab would inherit whatever
+  // this one happened to leave, so it is reset explicitly rather than by
+  // side effect.
+  store.setState((prev) => ({ ...prev, defaultViewMode: 'source' }));
 });
 
 describe('bootstrap', () => {
@@ -311,7 +319,13 @@ describe('view.preview', () => {
     emit('view.preview');
     await waitForPane(true);
 
+    // Put back into source mode by hand. A new tab *inherits* the split now
+    // -- that is what `defaultViewMode` is for, and it is asserted below --
+    // so `file.new` alone no longer produces the source tab this test needs.
+    // What is being tested here is the pane following the tab, not what mode a
+    // new tab starts in.
     emit('file.new');
+    setViewModeOf(activeDocument(store.getState())!.id, 'source');
     expect(document.querySelector('.preview-pane')).toBeNull();
 
     emit('tab.previous');
@@ -319,6 +333,79 @@ describe('view.preview', () => {
     const pane = document.querySelector<HTMLElement>('.preview-pane')!;
     expect(pane).not.toBeNull();
     expect(pane.querySelector('h1')?.textContent).toBe('Split tab');
+  });
+
+  /**
+   * **View > Preview is sticky, like every other View toggle.**
+   *
+   * Reported by the owner: open the preview, then open a document or close the
+   * app, and it was gone. Word wrap, line numbers, the status bar and the
+   * outline all write their setting the moment they are clicked; the preview
+   * was the one that did not, and `editor.defaultViewMode` sat unread on both
+   * sides of the bridge.
+   *
+   * Both destinations are asserted because they answer different questions.
+   * The store field is what the *next tab in this session* reads
+   * (documentops.ts); `settings.editor.defaultViewMode` is what the next launch
+   * reads. An implementation that wrote only the store would fix "open another
+   * document" and leave "close the app" broken -- which is half the report.
+   */
+  it('persists an opened preview to settings and to the store', async () => {
+    setViewModeOf(activeDocument(store.getState())!.id, 'source');
+    vi.mocked(SaveSettings).mockClear();
+
+    emit('view.preview');
+    await waitForPane(true);
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.defaultViewMode).toBe('split');
+    });
+    expect(store.getState().defaultViewMode).toBe('split');
+  });
+
+  /**
+   * The other direction, and not symmetric with the one above: toggling *off*
+   * writes the mode it restored, not a hard-coded `'source'`. A live document
+   * that had the preview opened over it must persist `'live'`, or the next
+   * launch quietly downgrades it -- the same failure `previousViewMode` exists
+   * to prevent, one layer out.
+   */
+  it('persists the restored mode when the preview is closed', async () => {
+    setViewModeOf(activeDocument(store.getState())!.id, 'live');
+    emit('view.preview');
+    await waitForPane(true);
+
+    vi.mocked(SaveSettings).mockClear();
+    emit('view.preview');
+    await waitForPane(false);
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.defaultViewMode).toBe('live');
+    });
+    expect(store.getState().defaultViewMode).toBe('live');
+  });
+
+  /**
+   * The report's own words: "if I ... open another document the preview
+   * disappears". Through the real command, not by calling
+   * `makeUntitledDocument` directly -- documentops.test.ts covers the unit, and
+   * what this adds is that the store field the toggle wrote is the one the new
+   * tab reads, with the pane still on screen at the end of it.
+   */
+  it('keeps the preview on a tab opened while it is showing', async () => {
+    setViewModeOf(activeDocument(store.getState())!.id, 'source');
+    emit('view.preview');
+    await waitForPane(true);
+    // The toggle writes the store field after the pane is mounted, so waiting
+    // on the pane alone would race it.
+    await vi.waitFor(() => {
+      expect(store.getState().defaultViewMode).toBe('split');
+    });
+
+    emit('file.new');
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('split');
+    expect(document.querySelector('.preview-pane')).not.toBeNull();
   });
 
   // The menu item shipped disabled and was flipped by this task. An

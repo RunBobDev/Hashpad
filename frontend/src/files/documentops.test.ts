@@ -83,6 +83,7 @@ beforeEach(() => {
     syncScroll: true,
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
+    defaultViewMode: 'source',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
@@ -104,6 +105,27 @@ describe('makeUntitledDocument', () => {
 
   it('mints a fresh id every call', () => {
     expect(makeUntitledDocument().id).not.toBe(makeUntitledDocument().id);
+  });
+
+  /**
+   * Half of what the owner reported: with the preview open, File > New gave a
+   * tab with no preview. `viewMode` is per document, so a new one has to be
+   * *given* the window's mode -- and the value that was being given was a
+   * hard-coded `'source'`.
+   *
+   * Read from the store rather than passed in, for the same reason `wordWrap`
+   * and `editorBehaviour` are: this is called from a command handler that
+   * cannot await an IPC round trip to the settings file.
+   */
+  it('opens in the store’s default view mode', () => {
+    store.setState((prev) => ({ ...prev, defaultViewMode: 'split' }));
+
+    const doc = makeUntitledDocument();
+
+    expect(doc.viewMode).toBe('split');
+    // Derived, not copied: toggling the preview off on a tab that opened
+    // straight into split has to land somewhere, and that somewhere is source.
+    expect(doc.previousViewMode).toBe('source');
   });
 });
 
@@ -187,6 +209,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -211,6 +234,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -235,6 +259,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -262,6 +287,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -292,6 +318,7 @@ describe('switchToDocument', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -330,6 +357,32 @@ describe('openDocumentInNewTab', () => {
     expect(doc.savedEncoding).toBe('utf-16le');
     expect(doc.savedLineEnding).toBe('lf');
     expect(isDirty(doc)).toBe(false);
+  });
+
+  /**
+   * The other half of the owner's report: opening a file with the preview
+   * showing closed it. This is the site that spelled `'source'` into every tab
+   * it built, regardless of the window it was opening into.
+   *
+   * Separate from the `makeUntitledDocument` case above rather than folded into
+   * it: the two mint their `Document` in different files by different routes --
+   * one through `createUntitledDocument`, one from an object literal here --
+   * and fixing only the route the report happened to name is exactly the bug
+   * coming back through the other door.
+   */
+  it('opens in the store’s default view mode', () => {
+    store.setState((prev) => ({ ...prev, defaultViewMode: 'split' }));
+
+    openDocumentInNewTab({
+      path: 'C:/notes/opened.md',
+      content: 'hello',
+      encoding: 'utf-8',
+      lineEnding: 'crlf',
+    });
+
+    const doc = activeDocument(store.getState())!;
+    expect(doc.viewMode).toBe('split');
+    expect(doc.previousViewMode).toBe('source');
   });
 
   /**
@@ -372,6 +425,7 @@ describe('openDocumentInNewTab', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -412,6 +466,7 @@ describe('openDocumentInNewTab', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -446,6 +501,7 @@ describe('opening a document over the startup tab', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -498,6 +554,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -523,6 +580,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -547,6 +605,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -574,6 +633,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -600,6 +660,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -631,6 +692,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -666,6 +728,7 @@ describe('closeDocumentWithPrompt', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -698,6 +761,7 @@ describe('reopenLastClosed', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -722,6 +786,7 @@ describe('reopenLastClosed', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -754,6 +819,7 @@ describe('reopenLastClosed', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));

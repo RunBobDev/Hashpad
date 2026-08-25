@@ -35,6 +35,7 @@ function resetStore(): void {
     syncScroll: true,
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
+    defaultViewMode: 'source',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));

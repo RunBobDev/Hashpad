@@ -44,6 +44,10 @@ export const store: Store<AppState> = createStore<AppState>({
   syncScroll: true,
   wordWrap: true,
   editorBehaviour: DEFAULT_BEHAVIOUR,
+  // Go's `DefaultSettings()` value, like `syncScroll` above -- and also what
+  // bootstrap leaves in place when the settings load throws, so a fresh install
+  // and a broken settings file both open in source mode.
+  defaultViewMode: 'source',
   // Also the value bootstrap republishes, as it happens: the startup document
   // is empty and `statusOf` of an empty document is exactly this. It stops
   // being a placeholder the first time the user types or a file is opened.

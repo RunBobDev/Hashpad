@@ -15,7 +15,12 @@ import { EditorState } from '@codemirror/state';
 import { ReadFile } from '../../wailsjs/go/app/App';
 import { buildExtensions, publishActiveFormats, publishStatus } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
-import { createUntitledDocument, isDirty, type Document } from '../state/document';
+import {
+  createUntitledDocument,
+  isDirty,
+  previousViewModeFor,
+  type Document,
+} from '../state/document';
 import {
   activateDocument,
   addDocument,
@@ -81,6 +86,9 @@ export function makeUntitledDocument(): Document {
         store.getState().editorBehaviour,
       ),
     }),
+    // Read from the store rather than defaulted, the same as the three above:
+    // File > New in a window where the preview is open should keep it open.
+    store.getState().defaultViewMode,
   );
 }
 
@@ -169,13 +177,18 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
     ),
   });
 
+  // Not spelled `'source'` any more, which is what the owner reported: opening
+  // a file with the preview showing closed it, because every tab was minted in
+  // source mode regardless of the window it was opening into.
+  const viewMode = store.getState().defaultViewMode;
+
   const doc: Document = {
     id: crypto.randomUUID(),
     filePath: contents.path,
     editorState,
     savedDoc: editorState.doc,
-    viewMode: 'source',
-    previousViewMode: 'source',
+    viewMode,
+    previousViewMode: previousViewModeFor(viewMode),
     // FileContentsLike widens Go's Encoding/LineEnding enums to plain
     // `string` (mirrors wailsjs/go/models.ts's widening of app.FileContents),
     // but Go only ever sends one of Document's literal members — the cast

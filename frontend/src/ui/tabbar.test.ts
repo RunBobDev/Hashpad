@@ -125,6 +125,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     syncScroll: true,
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
+    defaultViewMode: 'source',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };

@@ -1040,3 +1040,38 @@ Measured in `frontend/harness/scrollsync.html`: alignment was exact (699/699,
       this is the sequence that reintroduced the bug in the harness, because the
       caret path gives the anchor cache another chance to be built at an awkward
       moment.
+
+## The preview sticks (H.3, `editor.defaultViewMode`)
+
+Reported by the owner: *"if I open the preview and I close the app or open
+another document the preview disappears and I need to enable it again."*
+
+`viewMode` is per document by design (Checkpoint F), and all three places that
+mint a `Document` wrote a literal `'source'` into it — so nothing could carry
+the mode from one document to the next, and `editor.defaultViewMode` was read
+by nobody. View > Preview now writes the setting, the same way word wrap, line
+numbers, the status bar and the outline always have.
+
+**A note on what to expect from the first launch after this build.** Your
+settings.json already says `"defaultViewMode": "source"`, so Hashpad opens in
+source mode exactly as before. It becomes sticky from the first time you open
+the preview, not before.
+
+- [ ] **Open the preview, then File > New.** The new tab has the preview too.
+- [ ] **Open the preview, then open a file** (Ctrl+O, or drop one on the
+      window). Same — the pane stays, showing the file you just opened.
+- [ ] **Close the preview, then open a document.** It stays closed. Sticky runs
+      in both directions; it is not "preview always on".
+- [ ] **Open the preview, close Hashpad, start it again.** It comes back with
+      the preview already showing, and no visible flicker of a source-only
+      window first — the pane is mounted before the window appears, the same as
+      the theme and the fonts.
+- [ ] **Check settings.json** (`%APPDATA%\Hashpad\settings.json`) after each
+      toggle: `editor.defaultViewMode` reads `"split"` or `"source"` to match.
+- [ ] **Tabs still keep their own modes.** With the preview open on one tab,
+      switch to another and turn it off there; switch back and the first tab
+      still has it. The setting is the mode a *new* document opens in, not a
+      window-wide override.
+- [ ] **Hand-edit `defaultViewMode` to nonsense** (`"preview"`, `""`) and
+      launch. Hashpad opens in source mode rather than in a mode that renders
+      nothing. It is a hand-editable file, so this is a trust boundary.

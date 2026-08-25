@@ -43,6 +43,7 @@ function stateWith(documents: Document[], activeId: string | null = null): AppSt
     syncScroll: true,
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
+    defaultViewMode: 'source',
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };

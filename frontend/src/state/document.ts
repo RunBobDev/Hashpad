@@ -136,6 +136,31 @@ export function clampTabSize(value: number): number {
   return Math.min(Math.max(Math.floor(value), 1), 16);
 }
 
+/**
+ * `settings.editor.defaultViewMode` arrives as a plain `string` -- Go declares
+ * it as one, and the generated binding widens it the same way it widens the
+ * encoding enums. Checked rather than cast, for the same reason the widths are
+ * clamped: settings.json is hand-editable, and an unrecognised value would put
+ * a mode nothing renders into every document the app opens.
+ */
+export function isViewMode(value: string): value is Document['viewMode'] {
+  return value === 'source' || value === 'live' || value === 'split';
+}
+
+/**
+ * What toggling the preview off should return to, for a document that opened
+ * in `mode`.
+ *
+ * `'split'` is the one that needs saying: a document that opened straight into
+ * split has no earlier mode to go back to, so it falls back to source. The
+ * other two are their own answer -- a document opened under
+ * `defaultViewMode: "live"` must come back as `'live'`, not be silently
+ * downgraded (see `previousViewMode`).
+ */
+export function previousViewModeFor(mode: Document['viewMode']): Document['previousViewMode'] {
+  return mode === 'split' ? 'source' : mode;
+}
+
 export interface AppState {
   documents: Document[];
   activeDocumentId: string | null;
@@ -215,6 +240,21 @@ export interface AppState {
    * selector over this notifies only when one of them actually changes.
    */
   editorBehaviour: EditorBehaviour;
+  /**
+   * The mode a document opens in -- SPEC §6.13's `editor.defaultViewMode`.
+   *
+   * Seed-then-persist like `wordWrap` above, and in the store rather than read
+   * from settings at the moment it is needed for the same reason:
+   * `documentops.ts` needs it while building the `Document` for a new tab, and
+   * cannot await an IPC round trip there.
+   *
+   * View > Preview writes it, which is what makes the pane stick. The owner
+   * reported the opposite -- open the preview, then open a file or restart the
+   * app, and it was gone. Both creation sites minted documents with a
+   * hard-coded `'source'`, and this setting was dead on both sides of the
+   * bridge (see .superpowers/sdd/progress.md's dead-field list).
+   */
+  defaultViewMode: Document['viewMode'];
   /**
    * The caret and the counts, published by editor/extensions.ts's `syncStatus`
    * on every document or selection change. Here rather than read from the view
@@ -389,15 +429,27 @@ export const EMPTY_STATUS: EditorStatus = {
   selection: false,
 };
 
-/** A never-saved, empty document — what the app opens with. */
-export function createUntitledDocument(editorState: EditorState): Document {
+/**
+ * A never-saved, empty document — what the app opens with.
+ *
+ * `viewMode` defaults to `'source'` rather than being required: every test that
+ * mints a document is indifferent to it, and `'source'` is both Go's
+ * `DefaultSettings` value and what the app falls back to when settings cannot
+ * be read. The two production callers -- main.ts's startup document and
+ * documentops.ts's `makeUntitledDocument` -- pass `defaultViewMode` from the
+ * store.
+ */
+export function createUntitledDocument(
+  editorState: EditorState,
+  viewMode: Document['viewMode'] = 'source',
+): Document {
   return {
     id: crypto.randomUUID(),
     filePath: null,
     editorState,
     savedDoc: editorState.doc,
-    viewMode: 'source',
-    previousViewMode: 'source',
+    viewMode,
+    previousViewMode: previousViewModeFor(viewMode),
     encoding: 'utf-8',
     lineEnding: 'crlf',
     savedEncoding: 'utf-8',

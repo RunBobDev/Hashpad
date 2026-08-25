@@ -345,6 +345,7 @@ describe('save-as records the new path on the document it saved', () => {
       syncScroll: true,
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
