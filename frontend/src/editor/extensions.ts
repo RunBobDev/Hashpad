@@ -243,6 +243,9 @@ export function buildExtensions(
         { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },
         { key: 'Mod-Shift-p', run: dispatchCommand('view.preview') },
         { key: 'Mod-Shift-o', run: dispatchCommand('view.outline') },
+        // SPEC §6.14's Ctrl+, . Through the bus like the rest, so File >
+        // Settings and the chord are one implementation.
+        { key: 'Mod-,', run: dispatchCommand('settings.open') },
         // SPEC §6.14. Through the bus rather than called directly, because
         // the menu triggers the same thing and one implementation should
         // serve both -- the arrangement every other view toggle here uses.

@@ -850,3 +850,47 @@ describe('the status bar toggle', () => {
     emit('view.statusBar');
   });
 });
+
+/**
+ * SPEC §6.13's dialog reached through the bus, which is what makes File >
+ * Settings and Ctrl+, one implementation rather than two.
+ *
+ * `ui/settingsdialog.test.ts` covers what the dialog *does*; this covers only
+ * that the command finds it -- a route that is easy to leave out, because both
+ * halves pass their own tests while the menu entry does nothing.
+ */
+describe('settings.open', () => {
+  afterEach(() => {
+    document.querySelector('.settings-dialog')?.remove();
+  });
+
+  it('opens the settings dialog', async () => {
+    emit('settings.open');
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.settings-dialog')).not.toBeNull();
+    });
+  });
+
+  /**
+   * Two modals in the top layer is not a state worth being able to reach, and
+   * the menu entry stays clickable behind a dialog whose backdrop has not
+   * rendered. `ui/shortcuts.ts` already refuses to forward chords while a
+   * `dialog[open]` is up, so this is the other door.
+   */
+  it('does not stack a second dialog on the first', async () => {
+    emit('settings.open');
+    await vi.waitFor(() => expect(document.querySelectorAll('.settings-dialog')).toHaveLength(1));
+
+    emit('settings.open');
+    // The second call has to be given the same chance the first had. Its guard
+    // runs synchronously, but the code it guards does not: without the guard
+    // `openSettings` awaits `LoadSettings` and only then appends, so asserting
+    // straight after the `emit` would count one dialog whether or not the guard
+    // exists. Long enough for a resolved mock promise and an append; a real
+    // stack would have happened many times over.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(document.querySelectorAll('.settings-dialog')).toHaveLength(1);
+  });
+});

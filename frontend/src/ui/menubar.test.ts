@@ -14,7 +14,7 @@
  * that matters most below is the one that changes the answer between two opens.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mountMenuBar } from './menubar';
+import { COMMAND_EVENT, mountMenuBar } from './menubar';
 
 let root: HTMLElement;
 
@@ -185,5 +185,51 @@ describe('the state of a toggle in the menu that toggles it', () => {
 
     expect(mark(popup, 'Word Wrap')).toBe('');
     expect(item(popup, 'Word Wrap').getAttribute('aria-checked')).toBe('false');
+  });
+});
+
+/**
+ * SPEC §6.14: "Every shortcut must also be reachable through a menu, with the
+ * shortcut displayed beside it." Ctrl+, is the newest one, and the keymap in
+ * `editor/extensions.ts` only fires while the editor has focus -- so the menu
+ * entry is not a convenience, it is the other half of the requirement.
+ */
+describe('File > Settings', () => {
+  // Nothing in this group is a toggle, so the checked-state callback answers
+  // `false` throughout -- the shared `beforeEach` builds `root` but leaves
+  // mounting to each group, because the callback is what the group is varying.
+  beforeEach(() => mountMenuBar(root, () => false));
+
+  it('offers Settings with its shortcut beside it', () => {
+    const popup = open('File');
+    const entry = item(popup, 'Settings…');
+
+    expect(entry.querySelector('kbd')?.textContent).toBe('Ctrl+,');
+    expect(entry.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  /**
+   * Above Exit, which is the one item every File menu keeps last. Asserted as a
+   * position rather than mere presence because "somewhere in the File menu" is
+   * satisfied by putting it after the way out.
+   */
+  it('sits above Exit', () => {
+    const popup = open('File');
+    const labels = [...popup.querySelectorAll('.menu-item__label')].map((el) => el.textContent);
+
+    expect(labels.indexOf('Settings…')).toBe(labels.indexOf('Exit') - 1);
+  });
+
+  it('emits settings.open when chosen', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('File'), 'Settings…').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['settings.open']);
   });
 });

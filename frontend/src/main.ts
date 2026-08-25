@@ -35,6 +35,7 @@ import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
+import { openSettings } from './ui/settingsdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
@@ -998,6 +999,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     }
     case 'view.preview':
       void togglePreview();
+      break;
+    case 'settings.open':
+      void openSettings();
       break;
     case 'view.wordWrap':
       void setWordWrapSetting(!store.getState().wordWrap);

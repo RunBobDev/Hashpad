@@ -1108,3 +1108,49 @@ There is no UI for this until H.4's settings dialog, so these checks need
 - [ ] **Hand-edit it to nonsense** (`"utf8"`, `"UTF-8"`, `"utf-16be"`, `""`) and
       relaunch. Everything opens UTF-8. Near-misses matter more than obvious
       garbage here — `"utf8"` is what a person actually types.
+
+## Checkpoint H.4a — the settings dialog (shell + Appearance)
+
+Ctrl+, or File > Settings. This is the **first slice**: the dialog itself and
+the Appearance group. Editor, Files and Advanced arrive in H.4b/H.4c — an empty
+group is worse than an absent one, so their legends are not there yet.
+
+Measured in `harness/settings.html` (jsdom has no `showModal()`, no top layer
+and no layout, so none of the below is visible to the test suite): the label
+column and the control column each line up across all three rows, the dialog is
+560×325 and inside the viewport, and the body is the thing that scrolls.
+Contrast, resolved through a canvas rather than parsed from the computed string
+— `--accent` is an `oklab()` and a regex silently drops its minus signs:
+
+| | light | dark |
+|---|---|---|
+| Title / labels | 17.4 | 12.2 |
+| Legend / hints | 8.9 | 6.9 |
+| Control text | 15.7 | 13.5 |
+| Close button | 4.5 | 8.2 |
+
+- [ ] **Ctrl+, opens it**, with the caret in the editor and again with focus
+      somewhere else (a tab, the toolbar, the preview).
+- [ ] **File > Settings… opens the same dialog**, and shows `Ctrl+,` beside it.
+- [ ] **Escape closes it. The Close button closes it.** There is no OK and no
+      Apply, deliberately (SPEC §6.13).
+- [ ] **The background is inert while it is up** — clicking the editor behind it
+      does nothing, and Ctrl+S does not start a save behind the prompt.
+- [ ] **Theme.** Change it in the dialog; the app retints at once, and View >
+      Theme shows the same choice when you reopen the menu. Both directions:
+      change it from the View menu, reopen the dialog, the dropdown agrees.
+- [ ] **Accent colour.** Drag around the picker — the app retints live, and the
+      file is written once you settle rather than on every movement.
+- [ ] **Interface font size.** The chrome resizes as you type. Clear the field
+      to retype it: the app must not jump to 14 and write it.
+- [ ] **Close inside the first moment after a change** (pick a colour, press
+      Escape immediately). Relaunch: the colour survived.
+- [ ] **Look at it in dark mode.** Numbers above say it is legible; whether it
+      looks right is yours to judge.
+
+### For your judgement, not fixed
+
+- **Input borders are below WCAG's 3:1 for non-text UI** — 2.17 light, 1.69
+  dark. It is `--border-strong` against `--bg-elevated`, the same pair the
+  confirm dialog's buttons already use, so it is an app-wide token question
+  rather than something this one dialog should answer on its own.

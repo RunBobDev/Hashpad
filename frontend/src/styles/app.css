@@ -944,3 +944,144 @@ body {
      to the neutral hover fill, which would make it look disabled. */
   background: color-mix(in oklab, var(--accent) 85%, var(--fg-primary));
 }
+
+/* ---------------------------------------------------------------------------
+   Settings dialog (SPEC §6.13)
+
+   Shares the confirm prompt's surface tokens deliberately: two modals that look
+   like two different apps is the kind of thing nobody files a bug about and
+   everybody notices. What differs is the shape — this one is a scrolling
+   column of groups rather than a sentence and three buttons.
+   --------------------------------------------------------------------------- */
+.settings-dialog {
+  width: min(560px, calc(100vw - 64px));
+  /* Caps the growth as groups are added rather than after: the dialog is in the
+     top layer, so an over-tall one is clipped by the viewport with no scrollbar
+     of its own — the body below is what scrolls. */
+  max-height: min(640px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  font-size: var(--size-ui);
+  box-shadow: var(--shadow-popup);
+}
+
+.settings-dialog::backdrop {
+  background: var(--bg-backdrop);
+}
+
+.settings-dialog__title {
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.15em;
+  font-weight: 600;
+}
+
+.settings-dialog__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 20px 16px;
+}
+
+/* `min-inline-size: 0` because a fieldset ships with an intrinsic minimum width
+   that ignores flex and grid, which is how it ends up wider than the dialog
+   holding it and produces a horizontal scrollbar nobody asked for. */
+.settings-dialog__group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-dialog__legend {
+  padding: 16px 0 8px;
+  color: var(--fg-secondary);
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* A grid rather than flex: the label column lines up across every row in the
+   group, which is what makes a settings list readable. The hint sits under the
+   control, in the second column, so it reads as belonging to it. */
+.settings-dialog__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-dialog__row:last-child {
+  border-bottom: 0;
+}
+
+.settings-dialog__label {
+  grid-column: 1;
+}
+
+.settings-dialog__hint {
+  grid-column: 2;
+  justify-self: end;
+  color: var(--fg-secondary);
+  font-size: 0.85em;
+}
+
+.settings-dialog__control {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 160px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  color: var(--fg-primary);
+  font: inherit;
+}
+
+.settings-dialog__control--number {
+  min-width: 0;
+  width: 88px;
+}
+
+/* Swatch, not a text box: the padding and background that suit an <input> make
+   a colour well look like a mistake. */
+.settings-dialog__control--color {
+  min-width: 0;
+  width: 48px;
+  height: 28px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.settings-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* No Apply and no OK, per SPEC §6.13: every control has already taken effect by
+   the time this is reached, so the only thing left to do is leave. */
+.settings-dialog__close {
+  min-width: 96px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  cursor: default;
+}
+
+.settings-dialog__close:hover {
+  background: color-mix(in oklab, var(--accent) 85%, var(--fg-primary));
+}

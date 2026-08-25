@@ -234,6 +234,36 @@ describe('tab command keymap', () => {
     );
   }
 
+  /**
+   * SPEC §6.14's Ctrl+, . Worth its own case rather than trusting the array:
+   * `,` is the first binding in this app whose key is punctuation, and CodeMirror
+   * matches on `KeyboardEvent.key` -- so "the string looks right" and "the chord
+   * actually fires" are genuinely different claims here.
+   */
+  it('dispatches settings.open on Mod-, and consumes the key', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = press(view, ',', { ctrlKey: true });
+
+    expect(seen).toEqual(['settings.open']);
+    expect(notHandled).toBe(false);
+    stop();
+    view.destroy();
+  });
+
+  /** A bare comma is a comma. The chord is the whole binding. */
+  it('leaves an unmodified comma alone', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    press(view, ',');
+
+    expect(seen).toEqual([]);
+    stop();
+    view.destroy();
+  });
+
   it('dispatches tab.close on Mod-w and consumes the key', () => {
     const view = buildView();
     const { seen, stop } = captureCommands();
