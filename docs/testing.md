@@ -1154,3 +1154,44 @@ Contrast, resolved through a canvas rather than parsed from the computed string
   dark. It is `--border-strong` against `--bg-elevated`, the same pair the
   confirm dialog's buttons already use, so it is an app-wide token question
   rather than something this one dialog should answer on its own.
+
+## Checkpoint H.4b — the Editor group
+
+Eight controls, in three kinds by who owns the value. That split is the thing
+to poke at, because getting it wrong makes a control that looks like it works
+and writes to the wrong place.
+
+- **Typography** (font, size, line height) — CSS custom properties only.
+- **Word wrap, line numbers, tab width, insert spaces** — a store field *and* a
+  compartment on the running editor, so the open tab changes and the next tab
+  is built the new way. Shared with the View menu through `settings/live.ts`.
+- **New documents open in** — a store field, also written by the preview toggle.
+
+Measured in `harness/settings.html`: 11 rows across two groups, every label at
+one left edge and every control at one right edge, the dialog capped at 640px
+with 113px scrolling inside the body.
+
+- [ ] **Font, size, line height.** The editor retypesets as you type in each.
+      Zoom (Ctrl+Plus) still works afterwards — the size tokens are
+      `calc(Npx * var(--zoom))`, and overwriting them with a plain value
+      disables zoom silently.
+- [ ] **Change the font size, then the line height straight after.** Close and
+      relaunch: *both* survived. Only the second used to — one pending write
+      replaced the other inside the debounce window.
+- [ ] **Word wrap and Line numbers.** The open tab changes immediately, and
+      View > Word Wrap / Line Numbers show the same state. Toggle from the
+      View menu instead, reopen the dialog: the checkboxes agree.
+- [ ] **Tab width and Insert spaces.** Press Tab in the editor after each — the
+      indent matches. Change the tab width and confirm line numbers did *not*
+      turn off with it: the three share one object, and a partial change that
+      rebuilt it instead of merging would reset its siblings.
+- [ ] **New documents open in → Editor and preview.** Ctrl+N: the new tab has
+      the preview. The tabs already open are unchanged — the mode is per
+      document, so this only decides what the *next* one opens as.
+- [ ] **Only two options in that dropdown.** There is no Live: the mode exists
+      in the type and renders exactly like Source, so offering it would be a
+      control wired to nothing.
+- [ ] **The dialog scrolls** rather than growing past the window, and the
+      Close button stays visible at the bottom while it does.
+- [ ] **Clear any number field to retype it.** Nothing jumps to a default and
+      nothing is written until you type a real value.

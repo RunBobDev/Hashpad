@@ -28,39 +28,81 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import type { app } from '../../wailsjs/go/models';
 import { applyAccent, isValidAccent } from '../theme/theme';
 import { applyTypography } from '../settings/typography';
+import {
+  setBehaviourSetting,
+  setDefaultViewModeSetting,
+  setWordWrapSetting,
+} from '../settings/live';
+import { store } from '../state/appcontext';
+import type { Document } from '../state/document';
 import { emitCommand } from './menubar';
 
-/** Mirrors `settings/typography.ts`'s `LIMITS.uiFontSize`, which does the real clamping. */
-const UI_FONT_SIZE = { min: 10, max: 24 } as const;
+/**
+ * Mirrors the ranges in `settings/typography.ts` and `state/document.ts`, which
+ * do the real clamping. These are the *input* bounds -- what the spinner will
+ * let you reach -- and duplicating them here is deliberate: a control that
+ * offers a value the app then silently clamps is worse than one that does not
+ * offer it. If they drift, the clamp still wins and nothing breaks.
+ */
+const LIMITS = {
+  uiFontSize: { min: 10, max: 24 },
+  editorFontSize: { min: 8, max: 48 },
+  lineHeight: { min: 1, max: 3 },
+  tabSize: { min: 1, max: 16 },
+} as const;
 
 /**
- * A pending write, coalesced.
+ * The pending writes, coalesced into one.
  *
  * `<input type="color">` fires `input` continuously while the user drags around
- * the OS colour picker, and a number field fires on every digit. Persisting
- * each one would be two IPC round trips and a file write per event. Applying
- * is not debounced -- that is what "takes effect immediately" means, and it is
- * only a CSS custom property.
+ * the OS colour picker, and a number field fires on every digit. Persisting each
+ * one would be two IPC round trips and a file write per event. Applying is not
+ * debounced -- that is what "takes effect immediately" means, and it is only a
+ * CSS custom property.
  *
- * `flush` exists because the dialog can be closed inside the debounce window:
- * pick a colour, hit Escape, and without it the last change is applied to a
- * live app but never written down.
+ * **A map keyed by setting, not a single pending write.** The single-write
+ * version held only the most recent one, so two controls touched inside the same
+ * window meant the first was silently dropped: change the font size, change the
+ * line height a moment later, and the size was applied on screen and never
+ * written down -- gone at the next launch. Found by a test that expected the
+ * font size in the saved object and got the value it started with. Keying by
+ * setting also bounds the map: fifty events from one slider collapse to one
+ * entry, which is the coalescing this exists for.
+ *
+ * `flush` exists because the dialog can be closed inside the window: pick a
+ * colour, hit Escape, and without it the change is applied to a live app but
+ * never saved.
  */
-function coalesce(delayMs: number): { schedule: (write: () => void) => void; flush: () => void } {
+type Mutate = (settings: app.Settings) => void;
+
+interface Coalescer {
+  schedule: (key: string, mutate: Mutate) => void;
+  flush: () => void;
+}
+
+function coalesce(delayMs: number): Coalescer {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let pending: (() => void) | null = null;
+  const pending = new Map<string, Mutate>();
 
   const run = (): void => {
     if (timer !== null) clearTimeout(timer);
     timer = null;
-    const write = pending;
-    pending = null;
-    write?.();
+    if (pending.size === 0) return;
+
+    // Drained before the write starts, so a flush that arrives while one is in
+    // flight -- or a second flush from another close event -- cannot re-issue
+    // it. One read-modify-write for all of them, rather than one each: parallel
+    // read-modify-writes against the same file lose whichever finishes first.
+    const mutators = [...pending.values()];
+    pending.clear();
+    void persist((settings) => {
+      for (const mutate of mutators) mutate(settings);
+    });
   };
 
   return {
-    schedule(write) {
-      pending = write;
+    schedule(key, mutate) {
+      pending.set(key, mutate);
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(run, delayMs);
     },
@@ -136,6 +178,93 @@ function effectiveAccent(fromSettings: string): string {
   return toSwatchHex(inForce) ?? '#000000';
 }
 
+/**
+ * A typography change: applied to the page now, written to disk shortly.
+ *
+ * The same `mutate` is used twice, against two different objects, and that is
+ * the point. Against the **display copy** so `applyTypography` -- which sets all
+ * six tokens in one pass -- sees the sibling values alongside the one that
+ * changed; and against a **freshly read** copy when the coalescer runs, so the
+ * write cannot put back a value some other writer changed meanwhile.
+ *
+ * Mutating the display copy does not contradict this file's "nothing holds a
+ * settings object": that rule is about saving. This copy is never saved.
+ */
+function liveTypography(
+  settings: app.Settings,
+  saves: Coalescer,
+  key: string,
+  mutate: Mutate,
+): void {
+  mutate(settings);
+  applyTypography(settings);
+  saves.schedule(key, mutate);
+}
+
+/** A `<select>` carrying `[value, label]` pairs, set to `value`. */
+function select(options: readonly (readonly [string, string])[], value: string): HTMLSelectElement {
+  const element = document.createElement('select');
+  element.className = 'settings-dialog__control';
+  for (const [optionValue, label] of options) {
+    const option = document.createElement('option');
+    option.value = optionValue;
+    option.textContent = label;
+    element.append(option);
+  }
+  // A value the file does not recognise leaves the browser's own fallback -- the
+  // first option -- selected, which is the safe end of every list here.
+  element.value = value;
+  return element;
+}
+
+function numberField(
+  limit: { min: number; max: number },
+  step: number,
+  value: number,
+): HTMLInputElement {
+  const element = document.createElement('input');
+  element.type = 'number';
+  element.className = 'settings-dialog__control settings-dialog__control--number';
+  element.min = String(limit.min);
+  element.max = String(limit.max);
+  element.step = String(step);
+  element.value = String(value);
+  return element;
+}
+
+function checkbox(checked: boolean): HTMLInputElement {
+  const element = document.createElement('input');
+  element.type = 'checkbox';
+  element.className = 'settings-dialog__control settings-dialog__control--check';
+  element.checked = checked;
+  return element;
+}
+
+function textField(value: string, placeholder: string): HTMLInputElement {
+  const element = document.createElement('input');
+  element.type = 'text';
+  element.className = 'settings-dialog__control';
+  element.value = value;
+  element.placeholder = placeholder;
+  return element;
+}
+
+/**
+ * Wires a number field, skipping the keystroke where it is empty.
+ *
+ * Clearing a field to retype it leaves it unparseable for a moment, and
+ * `valueAsNumber` is `NaN` then. Every clamp downstream would turn that into
+ * its fallback and write it -- saving 14 over the size the user is halfway
+ * through replacing. One guard, in one place, rather than once per field.
+ */
+function onNumber(input: HTMLInputElement, apply: (value: number) => void): void {
+  input.addEventListener('input', () => {
+    const value = input.valueAsNumber;
+    if (!Number.isFinite(value)) return;
+    apply(value);
+  });
+}
+
 /** A labelled row. The label wraps the control, so no id/for pair can drift apart. */
 function row(labelText: string, control: HTMLElement, hint?: string): HTMLElement {
   const label = document.createElement('label');
@@ -178,23 +307,15 @@ function group(legendText: string, rows: HTMLElement[]): HTMLElement {
  * would leave that local behind. The other two controls have no such owner, so
  * they apply and persist here.
  */
-function appearanceGroup(settings: app.Settings, saves: ReturnType<typeof coalesce>): HTMLElement {
-  const theme = document.createElement('select');
-  theme.className = 'settings-dialog__control';
-  for (const [value, label] of [
-    ['system', 'Follow system'],
-    ['light', 'Light'],
-    ['dark', 'Dark'],
-  ] as const) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    theme.append(option);
-  }
-  // A value the file does not recognise leaves the browser's own fallback (the
-  // first option) selected, which is 'system' -- the same answer bootstrap
-  // reaches for an unreadable theme.
-  theme.value = settings.appearance.theme;
+function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
+  const theme = select(
+    [
+      ['system', 'Follow system'],
+      ['light', 'Light'],
+      ['dark', 'Dark'],
+    ],
+    settings.appearance.theme,
+  );
   theme.addEventListener('change', () => emitCommand(`theme.${theme.value}`));
 
   const accent = document.createElement('input');
@@ -203,51 +324,117 @@ function appearanceGroup(settings: app.Settings, saves: ReturnType<typeof coales
   accent.value = effectiveAccent(settings.appearance.accentColor);
   accent.addEventListener('input', () => {
     applyAccent(accent.value);
-    saves.schedule(() => {
-      void persist((next) => {
-        next.appearance.accentColor = accent.value;
-      });
+    saves.schedule('appearance.accentColor', (next) => {
+      next.appearance.accentColor = accent.value;
     });
   });
 
-  const uiFontSize = document.createElement('input');
-  uiFontSize.type = 'number';
-  uiFontSize.className = 'settings-dialog__control settings-dialog__control--number';
-  uiFontSize.min = String(UI_FONT_SIZE.min);
-  uiFontSize.max = String(UI_FONT_SIZE.max);
-  uiFontSize.step = '1';
-  uiFontSize.value = String(settings.appearance.uiFontSize);
-  uiFontSize.addEventListener('input', () => {
-    // An emptied field parses as NaN. `applyTypography` clamps it back to the
-    // fallback, so the app stays readable mid-edit -- but it must not be
-    // *written*, or clearing the field to retype it saves 14 over the value the
-    // user is halfway through replacing.
-    const size = uiFontSize.valueAsNumber;
-    if (!Number.isFinite(size)) return;
-
-    // The loaded copy is mutated, then handed back whole. `applyTypography`
-    // sets all six tokens at once, so it needs the sibling values -- the editor
-    // and preview fonts -- alongside the one that changed, and a spread would
-    // not typecheck anyway (`app.Settings` is a generated class with a method
-    // on it, not a plain shape).
-    //
-    // Safe despite the header's "nothing holds a settings object": that rule is
-    // about *saving*, and this copy is never saved. It is the display state, and
-    // the only other writer that can run while the dialog is up -- the theme
-    // command -- touches a field `applyTypography` does not read.
-    settings.appearance.uiFontSize = size;
-    applyTypography(settings);
-    saves.schedule(() => {
-      void persist((next) => {
-        next.appearance.uiFontSize = size;
-      });
+  const uiFontSize = numberField(LIMITS.uiFontSize, 1, settings.appearance.uiFontSize);
+  onNumber(uiFontSize, (size) => {
+    liveTypography(settings, saves, 'appearance.uiFontSize', (target) => {
+      target.appearance.uiFontSize = size;
     });
   });
 
   return group('Appearance', [
     row('Theme', theme),
     row('Accent colour', accent),
-    row('Interface font size', uiFontSize, `${UI_FONT_SIZE.min}–${UI_FONT_SIZE.max} px`),
+    row('Interface font size', uiFontSize, `${LIMITS.uiFontSize.min}–${LIMITS.uiFontSize.max} px`),
+  ]);
+}
+
+/**
+ * The Editor group.
+ *
+ * Split by who owns the value, which is not obvious from the settings file:
+ *
+ * - **Typography** (font, size, line height) is nothing but CSS custom
+ *   properties. No store field, no CodeMirror reconfiguration, no other writer
+ *   -- so it applies and persists here, through `liveTypography`.
+ * - **Word wrap, line numbers, tab size, insert spaces** all have live state:
+ *   a store field *and* a compartment on the running `EditorView`, because a
+ *   new tab builds its extensions from the store while the open one needs
+ *   reconfiguring. `settings/live.ts` owns that sequence and the View menu goes
+ *   through the same functions.
+ * - **Default view mode** has a store field but no view of its own, and the
+ *   preview toggle writes it too.
+ *
+ * The controls for the second and third kinds are populated from the **store**,
+ * not from the settings file this dialog loaded. The store is the live truth:
+ * if a disk write failed earlier (logged, not thrown -- see `persistSettings`),
+ * the file and the running app disagree, and a checkbox showing the file would
+ * be reporting something the user is not looking at.
+ */
+function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
+  const state = store.getState();
+
+  const fontFamily = textField(settings.editor.fontFamily, 'Cascadia Mono');
+  fontFamily.addEventListener('input', () => {
+    liveTypography(settings, saves, 'editor.fontFamily', (target) => {
+      target.editor.fontFamily = fontFamily.value;
+    });
+  });
+
+  const fontSize = numberField(LIMITS.editorFontSize, 1, settings.editor.fontSize);
+  onNumber(fontSize, (size) => {
+    liveTypography(settings, saves, 'editor.fontSize', (target) => {
+      target.editor.fontSize = size;
+    });
+  });
+
+  const lineHeight = numberField(LIMITS.lineHeight, 0.1, settings.editor.lineHeight);
+  onNumber(lineHeight, (height) => {
+    liveTypography(settings, saves, 'editor.lineHeight', (target) => {
+      target.editor.lineHeight = height;
+    });
+  });
+
+  const wordWrap = checkbox(state.wordWrap);
+  wordWrap.addEventListener('change', () => void setWordWrapSetting(wordWrap.checked));
+
+  const lineNumbers = checkbox(state.editorBehaviour.showLineNumbers);
+  lineNumbers.addEventListener('change', () => {
+    void setBehaviourSetting({ showLineNumbers: lineNumbers.checked });
+  });
+
+  // Not debounced, unlike the typography fields. Each keystroke here
+  // reconfigures a CodeMirror compartment rather than setting a CSS property,
+  // and `setBehaviourSetting` is the same call the View menu makes -- one place
+  // deciding when to write is better than two disagreeing.
+  const tabSize = numberField(LIMITS.tabSize, 1, state.editorBehaviour.tabSize);
+  onNumber(tabSize, (size) => void setBehaviourSetting({ tabSize: size }));
+
+  const insertSpaces = checkbox(state.editorBehaviour.insertSpaces);
+  insertSpaces.addEventListener('change', () => {
+    void setBehaviourSetting({ insertSpaces: insertSpaces.checked });
+  });
+
+  // Source and Split only. `'live'` is in the `viewMode` union and the app
+  // renders it exactly like source -- there is no live-preview mode yet -- so
+  // offering it would be a control wired to nothing, which is the thing
+  // `PreviewSettings`' own comment about `loadRemoteImages` warns against. A
+  // hand-edited `"live"` therefore shows as Source here, which is what it
+  // behaves as.
+  const viewMode = select(
+    [
+      ['source', 'Editor only'],
+      ['split', 'Editor and preview'],
+    ],
+    state.defaultViewMode,
+  );
+  viewMode.addEventListener('change', () => {
+    void setDefaultViewModeSetting(viewMode.value as Document['viewMode']);
+  });
+
+  return group('Editor', [
+    row('Font', fontFamily),
+    row('Font size', fontSize, `${LIMITS.editorFontSize.min}–${LIMITS.editorFontSize.max} px`),
+    row('Line height', lineHeight, `${LIMITS.lineHeight.min}–${LIMITS.lineHeight.max}`),
+    row('Word wrap', wordWrap),
+    row('Line numbers', lineNumbers),
+    row('Tab width', tabSize, `${LIMITS.tabSize.min}–${LIMITS.tabSize.max} spaces`),
+    row('Insert spaces instead of tabs', insertSpaces),
+    row('New documents open in', viewMode),
   ]);
 }
 
@@ -275,7 +462,7 @@ export function buildSettingsDialog(settings: app.Settings): HTMLDialogElement {
   body.className = 'settings-dialog__body';
 
   const saves = coalesce(300);
-  body.append(appearanceGroup(settings, saves));
+  body.append(appearanceGroup(settings, saves), editorGroup(settings, saves));
 
   const actions = document.createElement('div');
   actions.className = 'settings-dialog__actions';

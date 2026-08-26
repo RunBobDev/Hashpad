@@ -40,6 +40,11 @@ import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
+import {
+  setBehaviourSetting,
+  setDefaultViewModeSetting,
+  setWordWrapSetting,
+} from './settings/live';
 import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
@@ -612,12 +617,12 @@ async function togglePreview(): Promise<void> {
 
   if (active.viewMode === 'split') {
     store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
-    void setDefaultViewMode(active.previousViewMode);
+    void setDefaultViewModeSetting(active.previousViewMode);
     return;
   }
 
   await showPreview();
-  void setDefaultViewMode('split');
+  void setDefaultViewModeSetting('split');
 }
 
 /**
@@ -671,57 +676,6 @@ function applyDefaultEncoding(encoding: Encoding): void {
 }
 
 /**
- * View > Preview is sticky, like every other View toggle -- word wrap, line
- * numbers, the status bar and the outline all write their setting the moment
- * they are clicked, and the preview was the one that did not. The owner
- * reported the consequence: open the preview, then open a file or restart, and
- * it was gone.
- *
- * Two destinations, both needed. The store field is what the *next tab in this
- * session* reads (documentops.ts), and `settings.editor.defaultViewMode` is
- * what the next launch reads. Applied first, persisted after, a failed disk
- * write logged rather than thrown -- the same ordering and error handling as
- * `setWordWrapSetting` below.
- *
- * The whole `Document['viewMode']` union is stored, `'split'` included: SPEC
- * §6.13 lists this key under the Editor group, so Checkpoint H's settings
- * dialog will offer the same three choices this writes.
- */
-async function setDefaultViewMode(mode: Document['viewMode']): Promise<void> {
-  store.setState((prev) => ({ ...prev, defaultViewMode: mode }));
-
-  try {
-    const settings = await LoadSettings();
-    settings.editor.defaultViewMode = mode;
-    await SaveSettings(settings);
-  } catch (err) {
-    console.error('hashpad: failed to persist the view mode', err);
-  }
-}
-
-/**
- * Word wrap: applied to the view first, then persisted -- SPEC §6.13's "every
- * setting takes effect immediately", and the same ordering and error handling
- * `setThemeMode` and `setToolbarPinned` use. A failed disk write means the
- * choice will not survive a restart, not that it silently did not apply.
- *
- * The store is written as well as the view because a *new* document builds its
- * extensions from it -- without that, wrapping would revert on the next tab.
- */
-async function setWordWrapSetting(wordWrap: boolean): Promise<void> {
-  store.setState((prev) => ({ ...prev, wordWrap }));
-  setWordWrap(getEditorView(), wordWrap);
-
-  try {
-    const settings = await LoadSettings();
-    settings.editor.wordWrap = wordWrap;
-    await SaveSettings(settings);
-  } catch (err) {
-    console.error('hashpad: failed to persist the word-wrap setting', err);
-  }
-}
-
-/**
  * Mounts or tears down the outline sidebar (SPEC §6.9). Idempotent, like
  * `setStatusBar` below, and unmounting rather than hiding for the same reason
  * plus one more: the sidebar subscribes to the active document and rescans it
@@ -742,28 +696,6 @@ function setOutline(visible: boolean): void {
  * write logged rather than thrown -- the same ordering and error handling as
  * `setWordWrapSetting` and `setStatusBarSetting`.
  */
-/**
- * View > Line Numbers, shaped exactly like `setWordWrapSetting` above.
- *
- * The whole `editorBehaviour` object is replaced rather than one field mutated:
- * the store's `isEqual` compares one level of own keys, so a new object is what
- * makes a selector over it notice -- and `documentops.ts` reads the same object
- * when it builds a new tab's state, so a mutation in place would leave the two
- * agreeing by luck.
- */
-async function setLineNumbersSetting(showLineNumbers: boolean): Promise<void> {
-  const behaviour = { ...store.getState().editorBehaviour, showLineNumbers };
-  store.setState((prev) => ({ ...prev, editorBehaviour: behaviour }));
-  setEditorBehaviour(getEditorView(), behaviour);
-
-  try {
-    const settings = await LoadSettings();
-    settings.editor.showLineNumbers = showLineNumbers;
-    await SaveSettings(settings);
-  } catch (err) {
-    console.error('hashpad: failed to persist the line-numbers setting', err);
-  }
-}
 
 async function setOutlineSetting(visible: boolean): Promise<void> {
   setOutline(visible);
@@ -1007,7 +939,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       void setWordWrapSetting(!store.getState().wordWrap);
       break;
     case 'view.lineNumbers':
-      void setLineNumbersSetting(!store.getState().editorBehaviour.showLineNumbers);
+      void setBehaviourSetting({
+        showLineNumbers: !store.getState().editorBehaviour.showLineNumbers,
+      });
       break;
     case 'view.statusBar':
       void setStatusBarSetting(statusBarTeardown === null);

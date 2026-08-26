@@ -1085,3 +1085,24 @@ body {
 .settings-dialog__close:hover {
   background: color-mix(in oklab, var(--accent) 85%, var(--fg-primary));
 }
+
+/* A checkbox has no useful intrinsic size to fill, so the shared control rule's
+   min-width would stretch its hit area across half the row. Sized as a control,
+   aligned with the column the other controls end in.
+
+   `margin: 0` is load-bearing, and only a browser shows why: Chromium's UA
+   stylesheet gives `input[type=checkbox]` a `margin: 3px 0.5ex`, which parked
+   every checkbox three pixels left of the column the other controls end at. The
+   harness measured 881 against 884 -- invisible in a screenshot, obvious in a
+   list of right edges, and completely absent from jsdom, which has no UA
+   stylesheet to disagree with. */
+.settings-dialog__control--check {
+  min-width: 0;
+  width: 16px;
+  height: 16px;
+  justify-self: end;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
