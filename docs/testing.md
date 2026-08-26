@@ -1280,3 +1280,19 @@ never shipped wired to nothing.
 - [ ] **Autosave plus Reset to default** turns it back off, immediately.
 - [ ] **Quit with autosave on and an untitled dirty tab.** You are still
       prompted — the prompt is what stands in for the save that cannot happen.
+
+## Checkpoint H.6 — Autosave in the File menu
+
+In File rather than View, where the app's other checkable toggles live: this one
+changes what *saving* does, not what is on screen, and VS Code — the closest
+analogue with the same four menus — puts it at File > Auto Save. Labelled
+"Autosave" to match the settings dialog exactly; two names for one setting is
+two things to look for.
+
+- [ ] **File > Autosave ticks and unticks**, and the editor starts and stops
+      saving on the timer to match.
+- [ ] **It agrees with the settings dialog, both ways.** Toggle it in the menu,
+      open Settings — the Files group's checkbox matches. Toggle it there,
+      reopen the File menu — the tick matches.
+- [ ] **It sits directly under Save As**, not at the bottom under Exit.
+- [ ] **Reset to default unticks it**, immediately.

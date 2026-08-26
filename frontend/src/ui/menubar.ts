@@ -147,6 +147,16 @@ const MENUS: Menu[] = [
       { id: 'tab.reopen', label: 'Reopen Closed Tab', shortcut: 'Ctrl+Shift+T', enabled: true },
       { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: true },
       { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: true },
+      // File rather than View, where the app's other checkable toggles live:
+      // this one is about *saving*, not about what is on screen, and it belongs
+      // beside the two commands it changes the behaviour of. VS Code, the
+      // closest analogue with the same four menus, puts it at File > Auto Save.
+      //
+      // Labelled to match the settings dialog's row exactly. Two names for one
+      // setting is two things to find, and a user who turned "Auto Save" on
+      // from a menu should not have to work out that "Autosave" in the dialog
+      // is the same switch.
+      { id: 'file.autosave', label: 'Autosave', enabled: true, toggle: 'check' },
       // File rather than Edit: SPEC §6.1 gives this app File/Edit/View/Help and
       // no Tools menu, and the closest thing to a convention for a Windows
       // editor of this shape is VS Code's File > Preferences > Settings. SPEC

@@ -1061,3 +1061,76 @@ describe('settings.reset', () => {
     errors.mockRestore();
   });
 });
+
+/**
+ * SPEC §3.2's autosave from the File menu (H.6).
+ *
+ * The switch exists in two places now -- here and the settings dialog -- and
+ * the point of this group is that they are one switch. Both route through
+ * `settings/live.ts`, so the store is what proves it: a menu entry with its own
+ * private copy of the logic would still reach `SaveSettings` and still look
+ * right in a test that only watched the disk.
+ */
+describe('file.autosave', () => {
+  it('turns autosave on, in the store and on disk', async () => {
+    store.setState((prev) => ({ ...prev, autosave: false }));
+
+    emit('file.autosave');
+
+    expect(store.getState().autosave).toBe(true);
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.autosave).toBe(true);
+    });
+  });
+
+  it('turns it off again', async () => {
+    store.setState((prev) => ({ ...prev, autosave: true }));
+
+    emit('file.autosave');
+
+    expect(store.getState().autosave).toBe(false);
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.autosave).toBe(false);
+    });
+  });
+
+  /**
+   * **The tick in the real menu, not one a test supplied.**
+   *
+   * `menubar.test.ts` hands `mountMenuBar` its own `isChecked`, so it can prove
+   * the *bar* renders a tick and can never prove main.ts's callback reads
+   * anything. Replacing that callback's body with `return false` left the whole
+   * suite green until this existed -- the menu would have shown Autosave off
+   * forever while it was on. Mutation testing said so.
+   */
+  it('shows the store’s value as the tick in the File menu', async () => {
+    store.setState((prev) => ({ ...prev, autosave: true }));
+
+    const file = [...document.querySelectorAll<HTMLButtonElement>('.menubar button')].find(
+      (button) => button.textContent === 'File',
+    )!;
+    // Popups are rebuilt on every open, so the state is read now rather than
+    // cached -- which is what makes opening the menu the way to observe it.
+    file.click();
+    const entry = [...document.querySelectorAll('.menu-popup [role="menuitemcheckbox"]')].find(
+      (candidate) => candidate.querySelector('.menu-item__label')?.textContent === 'Autosave',
+    )!;
+
+    expect(entry.getAttribute('aria-checked')).toBe('true');
+    file.click();
+  });
+
+  /**
+   * A toggle reads the *current* value rather than assuming one. Hard-coding
+   * `true` would work the first time and never turn it off again -- which is
+   * the failure a single "it turns on" case would miss entirely.
+   */
+  it('reflects the store rather than a value of its own', async () => {
+    store.setState((prev) => ({ ...prev, autosave: false }));
+    emit('file.autosave');
+    await vi.waitFor(() => expect(store.getState().autosave).toBe(true));
+
+    emit('file.autosave');
+    await vi.waitFor(() => expect(store.getState().autosave).toBe(false));
+  });
+});

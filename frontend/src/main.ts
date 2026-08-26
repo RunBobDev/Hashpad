@@ -44,6 +44,7 @@ import { mountFileDrop } from './ui/filedrop';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
 import {
+  setAutosaveSetting,
   setBehaviourSetting,
   setDefaultViewModeSetting,
   setWordWrapSetting,
@@ -119,6 +120,11 @@ mountMenuBar(root, (id) => {
       return outlineHandle !== null;
     case 'view.statusBar':
       return statusBarTeardown !== null;
+    // The store, not the settings file: a failed disk write is logged rather
+    // than thrown, so the two can disagree, and the tick has to say what the
+    // app is actually doing.
+    case 'file.autosave':
+      return store.getState().autosave;
     case 'view.wordWrap':
       return store.getState().wordWrap;
     case 'view.lineNumbers':
@@ -1029,6 +1035,11 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'settings.reset':
       void resetSettings();
+      break;
+    // Through the same setter the settings dialog's checkbox calls, so the
+    // menu and the dialog cannot drift into two implementations of one switch.
+    case 'file.autosave':
+      void setAutosaveSetting(!store.getState().autosave);
       break;
     case 'view.wordWrap':
       void setWordWrapSetting(!store.getState().wordWrap);

@@ -133,13 +133,20 @@ describe('the state of a toggle in the menu that toggles it', () => {
   /**
    * The column is reserved on every row of a menu that has any stateful item,
    * so labels line up rather than stepping sideways down the list -- but only
-   * in such a menu. File has nothing to show and should carry no empty gutter.
+   * in such a menu, which should carry no empty gutter.
+   *
+   * The negative example is **Edit**, and it used to be File. File stopped
+   * qualifying the moment Autosave landed there (H.6), which is the rule
+   * working rather than failing: File now has a stateful item, so File now
+   * reserves the column. Edit is the menu left with nothing to show.
    */
   it('reserves the indicator column only where something uses it', () => {
     mountMenuBar(root, () => false);
 
     expect(item(open('View'), 'Zoom In').querySelector('.menu-item__mark')).not.toBeNull();
-    expect(item(open('File'), 'New').querySelector('.menu-item__mark')).toBeNull();
+    expect(item(open('Edit'), 'Undo').querySelector('.menu-item__mark')).toBeNull();
+    // And File does reserve it now, on a row that is not the toggle itself.
+    expect(item(open('File'), 'New').querySelector('.menu-item__mark')).not.toBeNull();
   });
 
   /**
@@ -231,5 +238,58 @@ describe('File > Settings', () => {
     document.removeEventListener(COMMAND_EVENT, listen);
 
     expect(seen).toEqual(['settings.open']);
+  });
+});
+
+/**
+ * SPEC §3.2's autosave, reachable without opening the settings dialog.
+ *
+ * In File rather than View, where the app's other checkable toggles live: this
+ * one changes what *saving* does, not what is on screen, and it sits beside the
+ * two commands it modifies.
+ */
+describe('File > Autosave', () => {
+  it('is a checkable toggle, not a plain action', () => {
+    mountMenuBar(root, () => false);
+    const entry = item(open('File'), 'Autosave');
+
+    expect(entry.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(entry.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('ticks when the callback says autosave is on', () => {
+    mountMenuBar(root, (id) => id === 'file.autosave');
+    const entry = item(open('File'), 'Autosave');
+
+    expect(entry.getAttribute('aria-checked')).toBe('true');
+    expect(entry.querySelector('.menu-item__mark')?.textContent).toBe('✓');
+  });
+
+  /**
+   * Beside Save As, not at the bottom of the menu. Position is asserted because
+   * "somewhere in File" is satisfied by dropping it under Exit, where nobody
+   * relating it to saving would ever look.
+   */
+  it('sits directly after Save As', () => {
+    mountMenuBar(root, () => false);
+    const labels = [...open('File').querySelectorAll('.menu-item__label')].map(
+      (el) => el.textContent,
+    );
+
+    expect(labels.indexOf('Autosave')).toBe(labels.indexOf('Save As…') + 1);
+  });
+
+  it('emits file.autosave when chosen', () => {
+    mountMenuBar(root, () => false);
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('File'), 'Autosave').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['file.autosave']);
   });
 });
