@@ -1341,3 +1341,35 @@ changed.
 - The divider's 1.69:1 in dark is the same `--border-strong` on `--bg-elevated`
   pair as the settings dialog's input borders, still below WCAG's 3:1 for
   non-text UI. One app-wide token decision, not three local ones.
+
+## Checkpoint H.8 — pinning from the ⋯ overflow
+
+Right-click already pinned from the toolbar *row* and had since Checkpoint G.
+The owner asked for it in the `···` list, which is where the full set of
+commands is — and so where you are when you decide you want one on the row.
+
+**Left-click runs the command, right-click pins it**, on the same item. The
+first design routed right-click to a *second* popup, on the grounds that
+`PopupItem.checked` renders `role="menuitemcheckbox"` and announcing a checkbox
+while the click runs a command lies to a screen reader. The owner pushed back —
+two popups for one simple task is not intuitive — and was right: `popupmenu.ts`
+already separates the visual tick from the semantics, they were only coupled in
+one branch. A `marker` draws the tick, keeps `role="menuitem"`, and puts
+"pinned to toolbar" in the accessible name instead.
+
+- [ ] **Open ⋯.** The commands already on the toolbar are ticked and bold; the
+      rest are plain.
+- [ ] **Left-click one.** It runs, exactly as before. Nothing gets pinned.
+- [ ] **Right-click one.** It appears on the toolbar, its tick fills in, **and
+      the list stays open.** Right-click two more without reopening ⋯.
+- [ ] **Right-click a ticked one.** It leaves the toolbar and unticks.
+- [ ] **Right-click on the toolbar row still works** — that menu is unchanged.
+      Right-click now means the same thing in both places.
+- [ ] **Escape after pinning** closes the list and puts focus back on the ⋯
+      button — not nowhere. The row is rebuilt under the popup each time you
+      pin, so the button you started from no longer exists; the popup re-points
+      itself at the new one.
+- [ ] **Reopen the app.** The pins survived.
+- [ ] **Shift+F10 or the Menu key** on a focused item does the same as
+      right-click. That is how Windows context menus are reachable without a
+      mouse, and the toolbar row already relied on it.

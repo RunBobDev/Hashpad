@@ -42,12 +42,51 @@ export interface PopupItem {
    * checkbox, not fall back to looking like a plain item.
    */
   checked?: boolean;
+  /**
+   * A state the item **shows** but does not **toggle**.
+   *
+   * Distinct from `checked`, and the distinction is the item's primary action.
+   * `checked` means "activating this flips the tick", so it takes
+   * `role="menuitemcheckbox"`. A marker means "activating this does something
+   * else entirely, and by the way it is currently in this state" -- the
+   * overflow list's items *run* their command on click, while the tick beside
+   * them says whether the command is pinned to the toolbar. Announcing those as
+   * checkboxes would tell a screen reader the click toggles the tick, which is
+   * a lie about what the control does.
+   *
+   * So a marker draws the same glyph in the same column, keeps
+   * `role="menuitem"`, and puts its state in the item's accessible *name*
+   * instead -- "Blockquote, pinned to toolbar".
+   *
+   * One object rather than two coupled optional fields, so the flag and its
+   * wording cannot half-exist.
+   */
+  marker?: { on: boolean; label: string };
 }
 
 interface OpenPopupMenuOptions {
   anchor: HTMLElement;
   items: PopupItem[];
   onChoose: (id: string) => void;
+  /**
+   * Right-click (or Shift+F10, or the Menu key -- `contextmenu` fires from all
+   * three) on an item.
+   *
+   * Left-click acts, right-click configures, on the same row. The owner asked
+   * for it from HMI/SCADA practice and it is Windows' own convention too:
+   * Explorer and the taskbar both work this way.
+   */
+  onContextMenu?: (id: string) => void;
+  /**
+   * A line at the foot of the popup, outside the `role="menu"` element.
+   *
+   * Outside, because a `menu` whose children are not all menu items is invalid,
+   * and a stray text node in one is not something a screen reader can navigate
+   * to anyway. It exists for sighted discovery -- a list with ticks in it
+   * invites the question of how to change them -- while assistive tech already
+   * gets the state from every item's name.
+   */
+  hint?: string;
 }
 
 /**
@@ -116,16 +155,51 @@ function closeAndReturnFocus(): void {
   anchor?.focus();
 }
 
-function buildItem(item: PopupItem, onChoose: (id: string) => void): HTMLButtonElement {
+/**
+ * Writes a marker's glyph and its share of the accessible name.
+ *
+ * Split out because it runs twice: once when the item is built, and again when
+ * a right-click flips the state. The second path deliberately does **not**
+ * rebuild the popup -- that would close it under the user's cursor mid-task,
+ * and pinning several commands in a row is the normal case.
+ */
+function applyMarker(
+  button: HTMLButtonElement,
+  label: string,
+  marker: { on: boolean; label: string },
+): void {
+  const glyph = button.querySelector<HTMLElement>('.popup-menu__check');
+  if (glyph !== null) glyph.textContent = marker.on ? '✓' : '';
+  // The state lives in the name rather than in `aria-checked`, because this
+  // item is a `menuitem` -- see `PopupItem.marker`.
+  button.setAttribute('aria-label', marker.on ? `${label}, ${marker.label}` : label);
+  button.classList.toggle('popup-menu__item--marked', marker.on);
+}
+
+function buildItem(
+  item: PopupItem,
+  onChoose: (id: string) => void,
+  onContextMenu?: (id: string) => void,
+): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
+  button.dataset.itemId = item.id;
   // Focused only programmatically (open + arrow keys) -- see this module's
   // header comment for why that has to stay out of the sequential Tab order.
   button.tabIndex = -1;
 
   const label = document.createElement('span');
 
-  if (item.checked === undefined) {
+  if (item.marker !== undefined) {
+    // A `menuitem` that *shows* a state without owning it. The glyph column is
+    // built the same way the checkbox branch builds it, so a mixed list still
+    // lines up.
+    button.setAttribute('role', 'menuitem');
+    const check = document.createElement('span');
+    check.className = 'popup-menu__check';
+    check.setAttribute('aria-hidden', 'true');
+    label.append(check, document.createTextNode(item.label));
+  } else if (item.checked === undefined) {
     button.setAttribute('role', 'menuitem');
     label.textContent = item.label;
   } else {
@@ -142,6 +216,7 @@ function buildItem(item: PopupItem, onChoose: (id: string) => void): HTMLButtonE
   }
 
   button.append(label);
+  if (item.marker !== undefined) applyMarker(button, item.label, item.marker);
 
   if (item.shortcut !== undefined) {
     const shortcut = document.createElement('kbd');
@@ -156,6 +231,18 @@ function buildItem(item: PopupItem, onChoose: (id: string) => void): HTMLButtonE
     onChoose(item.id);
   });
 
+  if (onContextMenu !== undefined) {
+    button.addEventListener('contextmenu', (event) => {
+      // Without this, WebView2 shows its own context menu on top of ours --
+      // the same reason ui/toolbar.ts's row handler preventDefaults.
+      event.preventDefault();
+      // Deliberately *not* closing the popup. Pinning three commands in a row
+      // is the normal case, and a list that vanished after each one would make
+      // it three round trips through the `···` button.
+      onContextMenu(item.id);
+    });
+  }
+
   return button;
 }
 
@@ -164,13 +251,49 @@ function buildItem(item: PopupItem, onChoose: (id: string) => void): HTMLButtonE
  * currently open. See this module's header comment for the DOM shape and
  * `ui/menubar.ts`'s `buildPopup` for the keyboard conventions mirrored below.
  */
+/**
+ * Flips a marker on an item of the popup that is currently open.
+ *
+ * The alternative -- reopen the popup with fresh items -- closes it under the
+ * user's cursor, and pinning several commands in a row is the normal case. A
+ * no-op when nothing is open or the id is not in it, so the caller does not
+ * have to know which popup it is talking to.
+ */
+export function setPopupMarker(id: string, marker: { on: boolean; label: string }): void {
+  const button = openMenu?.querySelector<HTMLButtonElement>(`[data-item-id="${id}"]`);
+  if (button === null || button === undefined) return;
+
+  // The label without the marker's suffix. Read from the DOM rather than kept
+  // in module state: the popup owns its own rendering, and a second copy of
+  // every label here would be a second thing to keep in step.
+  const label = button.querySelector('.popup-menu__check')?.nextSibling?.textContent ?? '';
+  applyMarker(button, label, marker);
+}
+
+/**
+ * Re-points the open popup at a replacement anchor.
+ *
+ * The toolbar rebuilds its whole row whenever a pin changes, which detaches the
+ * `···` button the popup is anchored to -- and the popup stays open on purpose,
+ * because pinning two commands in a row should not mean opening the list twice.
+ * Without this the popup would be left holding a node that is no longer in the
+ * document: Escape would return focus to nowhere, and the next click on the new
+ * `···` button would not read as "close the one I have open".
+ *
+ * A no-op when nothing is open, so the caller does not have to ask first.
+ */
+export function repointPopupAnchor(anchor: HTMLElement): void {
+  if (openMenu === null) return;
+  openAnchor = anchor;
+}
+
 export function openPopupMenu(options: OpenPopupMenuOptions): void {
   // Closes the menu bar's popup, if one is open. Fired before this popup is
   // built, so the listener registered below cannot close what it just opened.
   announcePopupOpening();
   closePopupMenu();
 
-  const { anchor, items, onChoose } = options;
+  const { anchor, items, onChoose, onContextMenu, hint } = options;
 
   const menu = document.createElement('div');
   menu.className = 'popup-menu';
@@ -185,8 +308,26 @@ export function openPopupMenu(options: OpenPopupMenuOptions): void {
   // it would.
   menu.addEventListener('click', (event) => event.stopPropagation());
 
-  const buttons = items.map((item) => buildItem(item, onChoose));
+  const buttons = items.map((item) => buildItem(item, onChoose, onContextMenu));
   buttons.forEach((button) => menu.append(button));
+
+  if (hint !== undefined) {
+    const note = document.createElement('div');
+    note.className = 'popup-menu__hint';
+    note.textContent = hint;
+    // Inside the menu, but `aria-hidden` -- which takes it out of the
+    // accessibility tree entirely, so the menu's accessible children are still
+    // nothing but menu items. The first attempt put it *after* the menu
+    // element, which silently did nothing: `after()` needs a parent, and the
+    // popup is not in the document until further down this function.
+    //
+    // Hiding it costs a screen-reader user nothing here: every item in a list
+    // that carries a hint already states its own state in its accessible name,
+    // and this line exists for the sighted question "there are ticks in this
+    // list, how do I change them?".
+    note.setAttribute('aria-hidden', 'true');
+    menu.append(note);
+  }
 
   menu.addEventListener('keydown', (event) => {
     const currentIndex = buttons.findIndex((button) => button === document.activeElement);

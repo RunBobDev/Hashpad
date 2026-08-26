@@ -11,7 +11,7 @@ import {
 } from './toolbar';
 import { ICONS } from './icons';
 import { COMMANDS } from '../editor/commands';
-import { closePopupMenu } from './popupmenu';
+import { closePopupMenu, isPopupOpenFor } from './popupmenu';
 
 /** Listeners registered by captureCommands, torn down after each test. */
 const captured: ((event: Event) => void)[] = [];
@@ -703,5 +703,128 @@ describe('mountToolbar pin/unpin', () => {
     store.setState((prev) => ({ ...prev, activeFormats: 'bold' }));
 
     expect(parent.contains(document.activeElement)).toBe(false);
+  });
+});
+
+/**
+ * Pinning from the `···` list (H.8).
+ *
+ * Right-click already pinned from the toolbar *row*, and had since Checkpoint
+ * G — the owner asked for it in the overflow because that is where the full
+ * list of commands is, which is where you are when you decide you want one on
+ * the row. Left-click still runs the command; the two gestures do not collide.
+ */
+describe('pinning from the overflow list', () => {
+  function openOverflow(pinned: readonly string[]): HTMLElement {
+    const bar = buildToolbar(pinned, '');
+    document.body.append(bar);
+    bar.querySelector<HTMLButtonElement>('[data-overflow]')!.click();
+    return document.querySelector<HTMLElement>('[role="menu"]')!;
+  }
+
+  function itemFor(menu: HTMLElement, id: string): HTMLButtonElement {
+    const index = TOOLBAR_COMMANDS.findIndex((command) => command.id === id);
+    return menu.querySelectorAll<HTMLButtonElement>('button')[index]!;
+  }
+
+  it('ticks the commands that are pinned and leaves the rest plain', () => {
+    const menu = openOverflow(['bold', 'link']);
+
+    expect(itemFor(menu, 'bold').getAttribute('aria-label')).toBe('Bold, pinned to toolbar');
+    expect(itemFor(menu, 'bold').querySelector('.popup-menu__check')?.textContent).toBe('✓');
+    expect(itemFor(menu, 'italic').getAttribute('aria-label')).toBe('Italic');
+    expect(itemFor(menu, 'italic').querySelector('.popup-menu__check')?.textContent).toBe('');
+  });
+
+  /**
+   * Still menu items, every one. This is the assertion that keeps the overflow
+   * honest about what a click does: sixteen `menuitemcheckbox` roles would tell
+   * a screen reader that clicking Bold ticks a box, when it inserts `**`.
+   */
+  it('leaves every item a menuitem, not a checkbox', () => {
+    const menu = openOverflow(['bold']);
+
+    expect(menu.querySelectorAll('[role="menuitem"]')).toHaveLength(16);
+    expect(menu.querySelectorAll('[role="menuitemcheckbox"]')).toHaveLength(0);
+  });
+
+  it('emits toolbar.pin for an unpinned command', () => {
+    const menu = openOverflow([]);
+    const seen = captureCommands();
+
+    itemFor(menu, 'blockquote').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+    expect(seen).toEqual(['toolbar.pin:blockquote']);
+  });
+
+  it('emits toolbar.unpin for one that is already pinned', () => {
+    const menu = openOverflow(['blockquote']);
+    const seen = captureCommands();
+
+    itemFor(menu, 'blockquote').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+    expect(seen).toEqual(['toolbar.unpin:blockquote']);
+  });
+
+  /** Left-click is untouched by the gesture sharing the row. */
+  it('still runs the command on a left-click', () => {
+    const menu = openOverflow([]);
+    const seen = captureCommands();
+
+    itemFor(menu, 'blockquote').click();
+
+    expect(seen).toEqual(['format.blockquote']);
+  });
+
+  /**
+   * The tick flips **in place**, and the list stays up. Reopening the overflow
+   * for each command is exactly the clunkiness the owner objected to when the
+   * first design routed this through a second popup.
+   */
+  it('flips the tick and stays open', () => {
+    const menu = openOverflow([]);
+
+    itemFor(menu, 'blockquote').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    const item = itemFor(document.querySelector<HTMLElement>('[role="menu"]')!, 'blockquote');
+    expect(item.querySelector('.popup-menu__check')?.textContent).toBe('✓');
+    expect(item.getAttribute('aria-label')).toBe('Blockquote, pinned to toolbar');
+  });
+
+  it('offers the hint that explains the gesture', () => {
+    openOverflow([]);
+
+    expect(document.querySelector('.popup-menu__hint')?.textContent).toContain('Right-click');
+  });
+});
+
+/**
+ * `mountToolbar` rebuilds its whole row when a pin changes, which detaches the
+ * `···` button the popup is anchored to -- while the popup is deliberately
+ * still open. Left holding a detached anchor, Escape would return focus to a
+ * node that is not in the document.
+ */
+describe('the overflow popup survives the row rebuilding under it', () => {
+  it('re-anchors to the new overflow button', () => {
+    const parent = document.createElement('div');
+    const before = document.createElement('div');
+    parent.append(before);
+    document.body.append(parent);
+    mountToolbar(parent, ['bold'], before);
+
+    parent.querySelector<HTMLButtonElement>('[data-overflow]')!.click();
+    const index = TOOLBAR_COMMANDS.findIndex((command) => command.id === 'blockquote');
+    const entries = document.querySelectorAll<HTMLButtonElement>('[role="menu"] button');
+    entries[index]!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+    // The row really was rebuilt: blockquote is on it now.
+    expect(parent.querySelector('[data-command="blockquote"]')).not.toBeNull();
+    // And the popup is anchored to a button that is still in the document, so
+    // clicking that button reads as "close the one I have open" rather than
+    // opening a second.
+    const overflow = parent.querySelector<HTMLButtonElement>('[data-overflow]')!;
+    expect(overflow.isConnected).toBe(true);
+    expect(isPopupOpenFor(overflow)).toBe(true);
   });
 });

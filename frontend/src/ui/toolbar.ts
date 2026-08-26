@@ -26,7 +26,14 @@
 import { store } from '../state/appcontext';
 import { emitCommand } from './menubar';
 import { ICONS } from './icons';
-import { closePopupMenu, isPopupOpenFor, openPopupMenu, type PopupItem } from './popupmenu';
+import {
+  closePopupMenu,
+  isPopupOpenFor,
+  openPopupMenu,
+  repointPopupAnchor,
+  setPopupMarker,
+  type PopupItem,
+} from './popupmenu';
 import type { CommandId } from '../editor/commands';
 
 /**
@@ -299,12 +306,25 @@ function buildButton(
   return button;
 }
 
-/** All sixteen `TOOLBAR_COMMANDS`, in their fixed order, as popup items. */
-function overflowPopupItems(): PopupItem[] {
+/** What a marker in the overflow list means, in the words a screen reader reads. */
+const PINNED = 'pinned to toolbar';
+
+/**
+ * All sixteen `TOOLBAR_COMMANDS`, in their fixed order, as popup items -- each
+ * showing whether it is pinned.
+ *
+ * A `marker`, not `checked`, and the difference is what a click does. These
+ * items *run* their command; the tick beside them is state they display rather
+ * than state they own, so they stay `role="menuitem"` and put "pinned to
+ * toolbar" in their accessible name. Announcing them as checkboxes would tell a
+ * screen-reader user that clicking flips the tick, which is not what happens.
+ */
+function overflowPopupItems(pinnedIds: ReadonlySet<string>): PopupItem[] {
   return TOOLBAR_COMMANDS.map((command) => ({
     id: command.id,
     label: command.label,
     shortcut: command.shortcut,
+    marker: { on: pinnedIds.has(command.id), label: PINNED },
   }));
 }
 
@@ -323,7 +343,11 @@ function chooseOverflowItem(id: string, anchor: HTMLElement, active: string): vo
   emitCommand(`format.${id}`);
 }
 
-function buildOverflowButton(active: string): HTMLButtonElement {
+function buildOverflowButton(
+  active: string,
+  pinnedIds: ReadonlySet<string>,
+  onTogglePin?: (id: string) => void,
+): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'toolbar__button';
@@ -347,8 +371,16 @@ function buildOverflowButton(active: string): HTMLButtonElement {
     }
     openPopupMenu({
       anchor: button,
-      items: overflowPopupItems(),
+      items: overflowPopupItems(pinnedIds),
       onChoose: (id) => chooseOverflowItem(id, button, active),
+      // Left-click runs the command, right-click pins it. The list stays open
+      // and its tick flips in place, so pinning several is one visit rather
+      // than one visit each.
+      onContextMenu: (id) => {
+        choosePinItem(id, pinnedIds, onTogglePin);
+        setPopupMarker(id, { on: !pinnedIds.has(id), label: PINNED });
+      },
+      hint: 'Right-click an item to pin or unpin it',
     });
   });
 
@@ -510,7 +542,7 @@ export function buildToolbar(
   // Always present, even with nothing pinned (SPEC §6.5): it is how every
   // unpinned command stays reachable, so an empty row must still offer a way
   // in.
-  const overflowButton = buildOverflowButton(active);
+  const overflowButton = buildOverflowButton(active, pinnedIds, onTogglePin);
   bar.append(overflowButton);
   focusable.push(overflowButton);
 
@@ -589,6 +621,13 @@ export function mountToolbar(
     const next = buildToolbar(pinned, active, index, togglePin);
     current.replaceWith(next);
     current = next;
+
+    // The row this rebuilt has just detached the `···` button, and a popup
+    // anchored to it may still be open -- right-clicking an item in the
+    // overflow list pins it *and* leaves the list up. A no-op when nothing is
+    // open, which is every other path through here.
+    const overflow = next.querySelector<HTMLElement>('[data-overflow]');
+    if (overflow !== null) repointPopupAnchor(overflow);
 
     // Restores focus when the outgoing row held it. On the *command* path
     // this is invisible: `toEditorCommand` ends with `view.focus()`, which

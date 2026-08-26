@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { closePopupMenu, openPopupMenu } from './popupmenu';
+import { closePopupMenu, openPopupMenu, setPopupMarker } from './popupmenu';
 import { mountMenuBar } from './menubar';
 
 afterEach(() => {
@@ -272,5 +272,201 @@ describe('one popup at a time, across both popup owners', () => {
 
     expect(document.querySelector('.popup-menu')).toBeNull();
     expect(document.querySelector('.menu-popup')).not.toBeNull();
+  });
+});
+
+/**
+ * A `marker`: a state an item **shows** without **owning** it.
+ *
+ * The distinction is the item's primary action, and it is the whole reason this
+ * exists rather than reusing `checked`. A `checked` item's click flips its own
+ * tick, so `role="menuitemcheckbox"` is honest. A marked item's click does
+ * something else -- in the overflow list, it runs the command -- while the tick
+ * says whether that command is pinned. Announcing it as a checkbox would tell a
+ * screen-reader user the click toggles the tick, which is a lie about the
+ * control.
+ */
+describe('a marked item', () => {
+  function open(on: boolean): HTMLButtonElement {
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [{ id: 'a', label: 'Blockquote', marker: { on, label: 'pinned to toolbar' } }],
+      onChoose: () => {},
+    });
+    return document.querySelector<HTMLButtonElement>('[role="menu"] button')!;
+  }
+
+  it('stays a menuitem rather than becoming a checkbox', () => {
+    const item = open(true);
+
+    expect(item.getAttribute('role')).toBe('menuitem');
+    expect(item.hasAttribute('aria-checked')).toBe(false);
+  });
+
+  /**
+   * The state goes into the accessible *name* instead, so it is announced --
+   * "Blockquote, pinned to toolbar" -- without claiming the click will change
+   * it.
+   */
+  it('says its state in the accessible name when it is on', () => {
+    expect(open(true).getAttribute('aria-label')).toBe('Blockquote, pinned to toolbar');
+  });
+
+  it('names itself plainly when it is off', () => {
+    expect(open(false).getAttribute('aria-label')).toBe('Blockquote');
+  });
+
+  /** A tick, not colour alone, and the column is reserved either way. */
+  it('shows a tick only when it is on', () => {
+    expect(open(true).querySelector('.popup-menu__check')?.textContent).toBe('✓');
+    expect(open(false).querySelector('.popup-menu__check')?.textContent).toBe('');
+  });
+});
+
+describe('right-clicking an item', () => {
+  function openWith(onContextMenu: (id: string) => void): HTMLButtonElement {
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [
+        { id: 'a', label: 'A', marker: { on: false, label: 'pinned' } },
+        { id: 'b', label: 'B', marker: { on: true, label: 'pinned' } },
+      ],
+      onChoose: () => {},
+      onContextMenu,
+    });
+    return document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')[1]!;
+  }
+
+  it('calls onContextMenu with that item’s id', () => {
+    const onContextMenu = vi.fn();
+    openWith(onContextMenu).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+    expect(onContextMenu).toHaveBeenCalledExactlyOnceWith('b');
+  });
+
+  /**
+   * **The popup stays open**, unlike a left-click. Pinning two commands in a
+   * row should be one visit to the list, not two -- which was the whole
+   * objection to routing this through a second popup.
+   */
+  it('leaves the popup open', () => {
+    openWith(vi.fn()).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  /** Or WebView2 draws its own context menu on top of ours. */
+  it('prevents the browser’s own menu', () => {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    openWith(vi.fn()).dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  /** Nothing happens on a popup that did not ask for the gesture. */
+  it('is inert when no handler was given', () => {
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [{ id: 'a', label: 'A' }],
+      onChoose: () => {},
+    });
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.querySelector<HTMLButtonElement>('[role="menu"] button')!.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+/**
+ * Updating a marker **in place**. Rebuilding the popup instead would close it
+ * under the user's cursor, which is the thing the right-click gesture exists to
+ * avoid.
+ */
+describe('setPopupMarker', () => {
+  function openTwo(): void {
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [
+        { id: 'a', label: 'Blockquote', marker: { on: false, label: 'pinned to toolbar' } },
+        { id: 'b', label: 'Footnote', marker: { on: false, label: 'pinned to toolbar' } },
+      ],
+      onChoose: () => {},
+    });
+  }
+
+  it('flips the tick and the name without touching the other items', () => {
+    openTwo();
+
+    setPopupMarker('a', { on: true, label: 'pinned to toolbar' });
+
+    const [first, second] = document.querySelectorAll<HTMLButtonElement>('[role="menu"] button');
+    expect(first!.querySelector('.popup-menu__check')?.textContent).toBe('✓');
+    expect(first!.getAttribute('aria-label')).toBe('Blockquote, pinned to toolbar');
+    expect(second!.querySelector('.popup-menu__check')?.textContent).toBe('');
+    expect(second!.getAttribute('aria-label')).toBe('Footnote');
+  });
+
+  it('flips back off again', () => {
+    openTwo();
+
+    setPopupMarker('a', { on: true, label: 'pinned to toolbar' });
+    setPopupMarker('a', { on: false, label: 'pinned to toolbar' });
+
+    const first = document.querySelector<HTMLButtonElement>('[role="menu"] button')!;
+    expect(first.querySelector('.popup-menu__check')?.textContent).toBe('');
+    expect(first.getAttribute('aria-label')).toBe('Blockquote');
+  });
+
+  /** Called unconditionally by the toolbar, so it must tolerate both. */
+  it('does nothing for an unknown id, or with no popup open', () => {
+    openTwo();
+    expect(() => setPopupMarker('nope', { on: true, label: 'x' })).not.toThrow();
+
+    closePopupMenu();
+    expect(() => setPopupMarker('a', { on: true, label: 'x' })).not.toThrow();
+  });
+});
+
+describe('the hint line', () => {
+  function openWithHint(): void {
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [{ id: 'a', label: 'A', marker: { on: false, label: 'pinned' } }],
+      onChoose: () => {},
+      hint: 'Right-click an item to pin or unpin it',
+    });
+  }
+
+  it('renders the text it was given', () => {
+    openWithHint();
+
+    expect(document.querySelector('.popup-menu__hint')?.textContent).toBe(
+      'Right-click an item to pin or unpin it',
+    );
+  });
+
+  /**
+   * `aria-hidden`, which keeps the menu's accessible children nothing but menu
+   * items -- a `role="menu"` containing loose text is invalid, and there is
+   * nothing for a screen reader to navigate to anyway. Every item in a list
+   * that carries a hint already states its state in its own name.
+   */
+  it('is out of the accessibility tree, and not a menu item', () => {
+    openWithHint();
+    const note = document.querySelector('.popup-menu__hint')!;
+
+    expect(note.getAttribute('aria-hidden')).toBe('true');
+    expect(note.getAttribute('role')).toBeNull();
+    expect(document.querySelectorAll('[role="menu"] button')).toHaveLength(1);
+  });
+
+  it('is absent from a popup that did not ask for one', () => {
+    openPopupMenu({
+      anchor: anchorInDocument(),
+      items: [{ id: 'a', label: 'A' }],
+      onChoose: () => {},
+    });
+
+    expect(document.querySelector('.popup-menu__hint')).toBeNull();
   });
 });

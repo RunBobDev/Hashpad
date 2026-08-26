@@ -1151,3 +1151,23 @@ body {
   margin: 4px -4px;
   background: var(--border-strong);
 }
+
+/* The line at the foot of a popup that carries markers (`OpenPopupMenuOptions.
+   hint`). Separated from the items so it does not read as one of them, and
+   `aria-hidden` in the DOM — it exists for the sighted question "there are
+   ticks in this list, how do I change them?". */
+.popup-menu__hint {
+  margin: 4px -4px -4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-strong);
+  background: var(--bg-app);
+  color: var(--fg-secondary);
+  font-size: 0.85em;
+}
+
+/* A pinned command in the `···` list. Weight as well as the tick, per SPEC §10
+   — a glyph in a column is easy to miss when scanning sixteen rows, and colour
+   alone would not carry it at all. */
+.popup-menu__item--marked {
+  font-weight: 600;
+}
