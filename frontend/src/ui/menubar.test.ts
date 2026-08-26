@@ -293,3 +293,154 @@ describe('File > Autosave', () => {
     expect(seen).toEqual(['file.autosave']);
   });
 });
+
+/**
+ * The shape of the menu bar itself.
+ *
+ * There was none of this before H.7, which is how thirteen items moved from
+ * View to a new menu with the whole suite staying green. A menu's contents are
+ * exactly the kind of thing that is obvious on screen and invisible to a test
+ * that only ever asks "does this one item work".
+ */
+describe('the shape of the bar', () => {
+  beforeEach(() => mountMenuBar(root, () => false));
+
+  function labelsIn(menu: string): string[] {
+    return [...open(menu).querySelectorAll('.menu-item__label')].map((el) => el.textContent ?? '');
+  }
+
+  /**
+   * Five, and SPEC §6.1 draws four. Deliberate (design §4), so it is pinned
+   * here rather than left to drift back.
+   */
+  it('has five menus, with Tabs between View and Help', () => {
+    const tops = [...root.querySelectorAll('.menubar button')]
+      .map((button) => button.textContent ?? '')
+      .filter((label) => /^[A-Za-z]/.test(label));
+
+    expect(tops).toEqual(['File', 'Edit', 'View', 'Tabs', 'Help']);
+  });
+
+  it('puts every tab command in Tabs, in order, with its shortcut', () => {
+    const popup = open('Tabs');
+    const entries = [...popup.querySelectorAll('button')].map((button) => ({
+      label: button.querySelector('.menu-item__label')?.textContent ?? '',
+      shortcut: button.querySelector('kbd')?.textContent ?? '',
+    }));
+
+    expect(entries).toEqual([
+      { label: 'Next Tab', shortcut: 'Ctrl+Tab' },
+      { label: 'Previous Tab', shortcut: 'Ctrl+Shift+Tab' },
+      { label: 'Move Tab Left', shortcut: 'Ctrl+Shift+Left' },
+      { label: 'Move Tab Right', shortcut: 'Ctrl+Shift+Right' },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        label: `Go to Tab ${i + 1}`,
+        shortcut: `Ctrl+Alt+${i + 1}`,
+      })),
+    ]);
+  });
+
+  /** The other half of the move: they are gone from where they were. */
+  it('leaves no tab command behind in View', () => {
+    expect(labelsIn('View').filter((label) => /tab/i.test(label))).toEqual([]);
+  });
+
+  /**
+   * Close Tab and Reopen Closed Tab did *not* move. Ctrl+W under File is a
+   * strong enough Windows convention to override the consistency argument, and
+   * a later tidy-up that "finished the job" would be a regression.
+   */
+  it('keeps Close Tab and Reopen Closed Tab in File', () => {
+    const file = labelsIn('File');
+
+    expect(file).toContain('Close Tab');
+    expect(file).toContain('Reopen Closed Tab');
+    expect(labelsIn('Tabs')).not.toContain('Close Tab');
+  });
+
+  it('emits the same commands from their new home', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('Tabs'), 'Next Tab').click();
+    item(open('Tabs'), 'Go to Tab 7').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    // The ids are unchanged, so main.ts's routing and every keybinding are
+    // untouched by the move -- which is the point of asserting them here.
+    expect(seen).toEqual(['tab.next', 'tab.goto7']);
+  });
+});
+
+/**
+ * Dividers, added in H.7. `menubar.ts` carried a comment apologising for their
+ * absence for four checkpoints; four navigation items running into nine
+ * positional ones is what finally justified them.
+ */
+describe('separators', () => {
+  beforeEach(() => mountMenuBar(root, () => false));
+
+  it('divides the four navigation commands from the nine positional ones', () => {
+    const popup = open('Tabs');
+    const children = [...popup.children];
+    const divider = popup.querySelector('.menu-separator')!;
+    const gotoOne = item(popup, 'Go to Tab 1');
+
+    expect(popup.querySelectorAll('.menu-separator')).toHaveLength(1);
+    expect(children.indexOf(divider)).toBe(children.indexOf(gotoOne) - 1);
+  });
+
+  it('groups View into themes, display toggles, and zoom', () => {
+    const popup = open('View');
+    const children = [...popup.children];
+    const dividers = [...popup.querySelectorAll('.menu-separator')];
+
+    expect(dividers).toHaveLength(2);
+    expect(children.indexOf(dividers[0]!)).toBe(children.indexOf(item(popup, 'Preview')) - 1);
+    expect(children.indexOf(dividers[1]!)).toBe(children.indexOf(item(popup, 'Zoom In')) - 1);
+  });
+
+  /** A decorative line is announced as nothing; a separator is announced as one. */
+  it('marks each divider as a separator for a screen reader', () => {
+    for (const divider of open('Tabs').querySelectorAll('.menu-separator')) {
+      expect(divider.getAttribute('role')).toBe('separator');
+    }
+  });
+
+  /**
+   * **The behaviour that matters.** A separator that joined the focus ring
+   * would put Down-arrow on a horizontal line -- a dead stop the user has to
+   * press through twice, and nothing for a screen reader to read. Thirteen
+   * presses from the first item wraps exactly back to it, which it cannot do if
+   * the divider is in the ring.
+   */
+  it('is skipped by the arrow keys', () => {
+    const popup = open('Tabs');
+    const first = item(popup, 'Next Tab');
+    first.focus();
+
+    for (let i = 0; i < 13; i++) {
+      popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    }
+
+    expect(document.activeElement).toBe(first);
+  });
+
+  /** And Up from the top wraps to the last item, not onto the divider above it. */
+  it('wraps upward past a divider too', () => {
+    const popup = open('Tabs');
+    item(popup, 'Next Tab').focus();
+
+    popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+
+    expect(document.activeElement).toBe(item(popup, 'Go to Tab 9'));
+  });
+
+  /** Menus with nothing to group carry no dividers at all. */
+  it('adds none to a menu that does not ask for them', () => {
+    expect(open('Edit').querySelectorAll('.menu-separator')).toHaveLength(0);
+  });
+});

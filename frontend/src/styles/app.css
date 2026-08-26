@@ -1131,3 +1131,23 @@ body {
 .settings-dialog__reset:hover {
   background: var(--bg-hover);
 }
+
+/* A divider between groups of menu items (`MenuItem.separatorBefore`).
+
+   Margin only on the block axis and a negative inline margin, so the line runs
+   the full width of the popup rather than stopping short inside its 4px
+   padding — a rule that is inset on both sides reads as a dash, not a divide.
+
+   `--border-strong`, not `--border`, and that was measured rather than picked.
+   `--border` against `--bg-elevated` is 1.48:1 in light and **1.18:1 in dark**
+   — a hairline that faint is not a divider, it is a rendering artefact.
+   `--border-strong` gives 2.17 and 1.69. Still under WCAG 1.4.11's 3:1 for
+   non-text, which is the same app-wide question the settings dialog's input
+   borders raise (`--border-strong` on `--bg-elevated` is that exact pair), and
+   it is flagged in docs/testing.md rather than answered by inventing a token
+   here — colours live in variables.css. */
+.menu-separator {
+  height: 1px;
+  margin: 4px -4px;
+  background: var(--border-strong);
+}

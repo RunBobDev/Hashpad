@@ -837,3 +837,39 @@ and give feedback.
 | **I** | Build | Portable exe, NSIS installer, `Taskfile.yml`. GitHub Actions deferred (§4.9). |
 
 Phase 2 is planned separately after Phase 1 ships.
+
+### 4.20 The menu bar has five menus, not four
+
+SPEC §6.1 draws the bar as `File  Edit  View  Help`. Hashpad ships a fifth,
+**Tabs**, between View and Help.
+
+**Why.** Every tab command lived in View: Next Tab, Previous Tab, Move Tab Left,
+Move Tab Right, and Go to Tab 1 through 9 — thirteen entries, more than half the
+menu, sitting above the theme radios. SPEC §6.14 is what put nine of them there
+("every shortcut must also be reachable through a menu, with the shortcut
+displayed beside it"), and that requirement is not negotiable: a single summary
+line would show the chord without being invocable. So the choice was never
+"thirteen items or fewer", it was "thirteen items in View, or thirteen items
+somewhere sensible".
+
+`menubar.ts` used to carry a comment justifying the first: *"SPEC §6.1 fixes the
+bar at exactly four menus, so tab management has to live inside one of those."*
+That is reasoning from the constraint rather than from the result, and the
+result was a View menu you had to scroll past to reach the theme.
+
+**Scope of the deviation.** One extra top-level menu. No command ids changed, so
+every keybinding and every route in `main.ts` is untouched — this is purely
+which menu the items render in. §6.14 is still satisfied: all thirteen are still
+menu-reachable with their shortcuts displayed.
+
+**What did not move.** Close Tab (Ctrl+W) and Reopen Closed Tab stay in File.
+They are tab commands, so consistency argues for moving them, but Ctrl+W under
+File is a strong enough Windows convention that the tidiness is not worth it.
+
+**Named Tabs, not Macros.** The owner suggested "Macros". Tabs describes what the
+items are, and leaves that word free for recorded or scripted macros, which is
+what it means in every other editor.
+
+Menu separators were added alongside, which is the other half of why thirteen
+items in one list had been uncomfortable — `menubar.ts` had carried a comment
+apologising for their absence since Checkpoint A.

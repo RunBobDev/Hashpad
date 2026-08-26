@@ -1296,3 +1296,48 @@ two things to look for.
       reopen the File menu — the tick matches.
 - [ ] **It sits directly under Save As**, not at the bottom under Exit.
 - [ ] **Reset to default unticks it**, immediately.
+
+## Checkpoint H.7 — the Tabs menu
+
+Thirteen tab commands out of View into a new **Tabs** menu between View and
+Help: Next, Previous, Move Left, Move Right, Go to Tab 1–9. Command ids are
+unchanged, so every keybinding and every route is untouched — this is purely
+which menu they render in. Recorded as design §4.20, since SPEC §6.1 draws four
+menus and there are now five.
+
+Close Tab and Reopen Closed Tab stay in **File**: Ctrl+W there is a strong
+enough Windows convention to outweigh the consistency argument.
+
+Menu separators arrived with it. Measured in `harness/menus.html` (jsdom can
+prove a `div[role=separator]` is in the right place and nothing about whether it
+is visible): 1px, flush to the inside of the popup border, and
+
+| | light | dark |
+|---|---|---|
+| `--border` (first attempt) | 1.48 | **1.18** |
+| `--border-strong` (shipped) | 2.17 | 1.69 |
+
+1.18:1 is not a divider, it is a rendering artefact — that's why the token
+changed.
+
+- [ ] **Tabs sits between View and Help**, and everything in it works from
+      there: Next/Previous, Move Left/Right, and Go to Tab 1–9.
+- [ ] **Every shortcut still works** unchanged — Ctrl+Tab, Ctrl+Shift+Tab,
+      Ctrl+Shift+Left/Right, Ctrl+Alt+1…9. Moving the menu entry did not touch
+      the keymap.
+- [ ] **View is short again**: themes, then the display toggles, then zoom and
+      full screen, in three groups with a line between each.
+- [ ] **Close Tab and Reopen Closed Tab are still in File.**
+- [ ] **Arrow keys skip the dividers.** Open Tabs, hold Down — focus never
+      stops on a line, and it wraps from Go to Tab 9 back to Next Tab. Up from
+      Next Tab goes straight to Go to Tab 9.
+- [ ] **Left/Right still walks all five menus**, including in and out of Tabs.
+- [ ] **Look at the dividers in dark mode.** They are the faintest thing added
+      in this checkpoint; if they read as invisible to you, say so — the number
+      says 1.69 and that is a judgement call, not a pass.
+
+### For your judgement, still not fixed
+
+- The divider's 1.69:1 in dark is the same `--border-strong` on `--bg-elevated`
+  pair as the settings dialog's input borders, still below WCAG's 3:1 for
+  non-text UI. One app-wide token decision, not three local ones.

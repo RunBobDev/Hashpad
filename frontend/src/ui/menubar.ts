@@ -68,6 +68,18 @@ interface MenuItem {
    * reader announces "checked" for one and "selected, 1 of 3" for the other.
    */
   toggle?: 'check' | 'radio';
+  /**
+   * Draws a divider *above* this item.
+   *
+   * A field on the item that follows, rather than a `{ separator: true }` entry
+   * in the list, and the reason is the arrow keys. A union type would put
+   * non-items in `menu.items`, and every loop over it -- the focus array, the
+   * roving tabindex, `menuHasToggles` -- would need to filter them out. Get one
+   * of those wrong and Down-arrow lands on a horizontal line. This way there is
+   * nothing to filter: separators are drawn beside the buttons and never
+   * collected into `items`.
+   */
+  separatorBefore?: boolean;
 }
 
 /**
@@ -104,18 +116,25 @@ interface Menu {
  * `editor/extensions.ts` back them: New, Open, Save, and Save As all do real
  * work, and Ctrl+N/O/S/Shift+S already work as shortcuts.
  *
- * `tab.close`/`tab.reopen` sit in File next to New and Open rather than under
- * View or a new "Tabs" menu — SPEC §6.1 fixes the bar at exactly four menus
- * (File, Edit, View, Help), so tab management has to live inside one of
- * those, and it is fundamentally about which file is open, same as New and
- * Open. `tab.next`/`tab.previous` go under View instead: they change what is
- * *displayed*, not what documents exist, which is the same distinction that
- * already separates View's other (still-disabled) display toggles from
- * File's document operations. "Go to Tab 1".."Go to Tab 9" are listed even
- * though nine near-identical entries are more than this menu wants: SPEC §6.14
- * requires every shortcut to be reachable through a menu with its shortcut
- * displayed, and a single summary line would show the chord without being
- * invocable, which is not what that asks for.
+ * **There are five menus, and SPEC §6.1 draws four.** That is a deliberate
+ * deviation (design §4), taken in H.7 at the owner's request. The paragraph
+ * that used to be here argued the opposite -- that "tab management has to live
+ * inside one of those" -- and it was reasoning from the constraint rather than
+ * from the result: thirteen tab items in View made up more than half that menu
+ * and sat above the theme radios. Reasoning that has been overtaken should be
+ * replaced rather than left to contradict the code beside it.
+ *
+ * `tab.close`/`tab.reopen` still sit in **File** next to New and Open, and did
+ * not move to Tabs with the rest. They are tab commands, so consistency argues
+ * for it -- but Ctrl+W under File is a strong enough Windows convention that
+ * moving it costs more than the tidiness gains.
+ *
+ * "Go to Tab 1".."Go to Tab 9" are listed individually even though nine
+ * near-identical entries are a lot: SPEC §6.14 requires every shortcut to be
+ * reachable through a menu with its shortcut displayed, and a single summary
+ * line would show the chord without being invocable, which is not what that
+ * asks for. They have a divider above them now, which is most of why nine of
+ * them was uncomfortable in the first place.
  *
  * Still unavailable: Edit > Find/Replace (no search panel yet), View's
  * display toggles (no preview, outline, or word-wrap yet), and Help > About
@@ -184,27 +203,12 @@ const MENUS: Menu[] = [
   {
     label: 'View',
     items: [
-      { id: 'tab.next', label: 'Next Tab', shortcut: 'Ctrl+Tab', enabled: true },
-      { id: 'tab.previous', label: 'Previous Tab', shortcut: 'Ctrl+Shift+Tab', enabled: true },
-      // Reordering is otherwise mouse-only: SPEC §6.2 asks for drag, but the
-      // project's accessibility constraint asks for full keyboard navigability,
-      // and a capability reachable only by dragging fails it. Ctrl+Shift with
-      // the arrow keys is what Firefox and Chrome use for moving a tab.
-      { id: 'tab.moveLeft', label: 'Move Tab Left', shortcut: 'Ctrl+Shift+Left', enabled: true },
-      { id: 'tab.moveRight', label: 'Move Tab Right', shortcut: 'Ctrl+Shift+Right', enabled: true },
-      // SPEC §6.14 requires every shortcut to be reachable through a menu with
-      // its shortcut displayed. Nine entries is more than this menu wants, but
-      // the requirement is explicit and a single summary line would show the
-      // chord without actually being invocable, which is not what it asks for.
-      ...Array.from({ length: 9 }, (_, i) => ({
-        id: `tab.goto${i + 1}`,
-        label: `Go to Tab ${i + 1}`,
-        shortcut: `Ctrl+Alt+${i + 1}`,
-        enabled: true,
-      })),
-      // Prefixed rather than bare "System"/"Light"/"Dark": these sit directly
-      // below "Go to Tab 9" in a flat list with no separators or submenus, so
-      // an item reading only "System" says nothing about what it does.
+      // Prefixed rather than bare "System"/"Light"/"Dark". The original reason
+      // was that they sat directly below "Go to Tab 9" in a list with no
+      // separators; both halves of that are gone (H.7 moved the tab items to
+      // their own menu and gave this one dividers), and the prefix stays anyway
+      // -- these are now the *first* items in View, where a bare "System" would
+      // still be the least informative thing the menu could open with.
       { id: 'theme.system', label: 'Theme: Follow System', enabled: true, toggle: 'radio' },
       { id: 'theme.light', label: 'Theme: Light', enabled: true, toggle: 'radio' },
       { id: 'theme.dark', label: 'Theme: Dark', enabled: true, toggle: 'radio' },
@@ -213,6 +217,7 @@ const MENUS: Menu[] = [
         label: 'Preview',
         shortcut: 'Ctrl+Shift+P',
         enabled: true,
+        separatorBefore: true,
         toggle: 'check',
       },
       {
@@ -230,7 +235,13 @@ const MENUS: Menu[] = [
       // already, and a setting whose only switch is a JSON file is a setting
       // nobody finds. The owner found exactly that.
       { id: 'view.lineNumbers', label: 'Line Numbers', enabled: true, toggle: 'check' },
-      { id: 'view.zoomIn', label: 'Zoom In', shortcut: 'Ctrl+Plus', enabled: true },
+      {
+        id: 'view.zoomIn',
+        label: 'Zoom In',
+        shortcut: 'Ctrl+Plus',
+        enabled: true,
+        separatorBefore: true,
+      },
       { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+Minus', enabled: true },
       { id: 'view.zoomReset', label: 'Reset Zoom', shortcut: 'Ctrl+0', enabled: true },
       {
@@ -240,6 +251,51 @@ const MENUS: Menu[] = [
         enabled: true,
         toggle: 'check',
       },
+    ],
+  },
+  {
+    /**
+     * **Tabs**, and the fifth menu in a bar SPEC §6.1 draws with four.
+     *
+     * Recorded as a deviation in the design doc rather than taken quietly. The
+     * thirteen items here all lived in View, where they sat above the theme
+     * radios and made up more than half the menu -- the owner asked for them
+     * out, and the comment that used to justify keeping them there ("tab
+     * management has to live inside one of those") was reasoning from the
+     * four-menu constraint rather than from what makes the menu usable.
+     *
+     * Named "Tabs" rather than the owner's suggested "Macros": it describes
+     * what the items are, and leaves that word free for recorded or scripted
+     * macros, which is what it means everywhere else.
+     *
+     * Close Tab and Reopen Closed Tab deliberately stay in **File**. They are
+     * tab commands too, so consistency argues for moving them -- but Ctrl+W
+     * under File is a strong enough Windows convention that moving it would
+     * cost more than the tidiness gains, and the owner confirmed it.
+     */
+    label: 'Tabs',
+    items: [
+      { id: 'tab.next', label: 'Next Tab', shortcut: 'Ctrl+Tab', enabled: true },
+      { id: 'tab.previous', label: 'Previous Tab', shortcut: 'Ctrl+Shift+Tab', enabled: true },
+      // Reordering is otherwise mouse-only: SPEC §6.2 asks for drag, but the
+      // project's accessibility constraint asks for full keyboard navigability,
+      // and a capability reachable only by dragging fails it. Ctrl+Shift with
+      // the arrow keys is what Firefox and Chrome use for moving a tab.
+      { id: 'tab.moveLeft', label: 'Move Tab Left', shortcut: 'Ctrl+Shift+Left', enabled: true },
+      { id: 'tab.moveRight', label: 'Move Tab Right', shortcut: 'Ctrl+Shift+Right', enabled: true },
+      // SPEC §6.14 requires every shortcut to be reachable through a menu with
+      // its shortcut displayed. Nine entries is more than this menu wants, but
+      // the requirement is explicit and a single summary line would show the
+      // chord without actually being invocable, which is not what it asks for.
+      ...Array.from({ length: 9 }, (_, i) => ({
+        id: `tab.goto${i + 1}`,
+        label: `Go to Tab ${i + 1}`,
+        shortcut: `Ctrl+Alt+${i + 1}`,
+        enabled: true,
+        // A divider above the first of the nine, so four navigation commands do
+        // not run straight into nine positional ones.
+        ...(i === 0 ? { separatorBefore: true } : {}),
+      })),
     ],
   },
   {
@@ -366,6 +422,16 @@ export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = (
     const menuHasToggles = menu.items.some((candidate) => candidate.toggle !== undefined);
 
     for (const item of menu.items) {
+      if (item.separatorBefore === true) {
+        const divider = document.createElement('div');
+        divider.className = 'menu-separator';
+        // `role="separator"` is the one thing that makes this a divider rather
+        // than a decorative line to a screen reader. Not focusable, and not in
+        // `items`, so the arrow keys pass straight over it.
+        divider.setAttribute('role', 'separator');
+        popup.append(divider);
+      }
+
       const button = document.createElement('button');
       button.type = 'button';
       // `menuitemcheckbox`/`menuitemradio` rather than plain `menuitem` for
