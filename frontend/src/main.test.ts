@@ -165,6 +165,8 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
     defaultEncoding: 'utf-8',
+    autosave: false,
+    autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
@@ -955,6 +957,8 @@ describe('settings.reset', () => {
       defaultViewMode: 'split',
       defaultEncoding: 'utf-16le',
       syncScroll: false,
+      autosave: true,
+      autosaveDelayMs: 9000,
       previewSplitRatio: 0.2,
       outlineWidth: 400,
     }));
@@ -980,6 +984,10 @@ describe('settings.reset', () => {
     expect(state.defaultViewMode).toBe('source');
     expect(state.defaultEncoding).toBe('utf-8');
     expect(state.syncScroll).toBe(true);
+    // Autosave especially: a reset that left it on would keep writing the
+    // user's files on a timer they have just asked to be rid of.
+    expect(state.autosave).toBe(false);
+    expect(state.autosaveDelayMs).toBe(2000);
     expect(state.previewSplitRatio).toBeCloseTo(0.5);
     expect(state.outlineWidth).toBeCloseTo(240);
   });

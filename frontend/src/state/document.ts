@@ -179,6 +179,20 @@ export function isEncoding(value: string): value is Encoding {
   return value === 'utf-8' || value === 'utf-8-bom' || value === 'utf-16le';
 }
 
+/**
+ * How long autosave waits after the last edit, in milliseconds.
+ *
+ * Clamped for the reason every hand-editable number here is. `0` would write
+ * the file on every keystroke -- an IPC round trip and a disk write per
+ * character -- and the upper bound stops a mistyped value turning the feature
+ * silently off, which is worse than it being slow, because the user believes
+ * their work is being saved.
+ */
+export function clampAutosaveDelay(value: number): number {
+  if (!Number.isFinite(value)) return 2000;
+  return Math.min(Math.max(Math.round(value), 200), 60_000);
+}
+
 export interface AppState {
   documents: Document[];
   activeDocumentId: string | null;
@@ -287,6 +301,17 @@ export interface AppState {
    * value until H.4's dialog gives it a control.
    */
   defaultEncoding: Encoding;
+  /**
+   * SPEC §6.13's `files.autosave`, and §3.2's "off by default, opt-in **for
+   * saved files only** (never silently creates files)".
+   *
+   * That parenthesis is the whole design of `files/autosave.ts`: an untitled
+   * document is never written, because writing one means choosing a path, and
+   * choosing a path means a dialog nobody asked for on a timer.
+   */
+  autosave: boolean;
+  /** Milliseconds after the last edit. See `clampAutosaveDelay`. */
+  autosaveDelayMs: number;
   /**
    * The caret and the counts, published by editor/extensions.ts's `syncStatus`
    * on every document or selection change. Here rather than read from the view

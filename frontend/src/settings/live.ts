@@ -24,7 +24,12 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import type { app } from '../../wailsjs/go/models';
 import { setEditorBehaviour, setWordWrap } from '../editor/extensions';
 import { getEditorView, store } from '../state/appcontext';
-import type { Document, EditorBehaviour, Encoding } from '../state/document';
+import {
+  clampAutosaveDelay,
+  type Document,
+  type EditorBehaviour,
+  type Encoding,
+} from '../state/document';
 
 /**
  * Reads settings fresh, applies `mutate`, writes them back.
@@ -143,5 +148,36 @@ export async function setDefaultEncodingSetting(encoding: Encoding): Promise<voi
 
   await persistSettings('default-encoding', (settings) => {
     settings.files.defaultEncoding = encoding;
+  });
+}
+
+/**
+ * SPEC §6.13's `files.autosave`.
+ *
+ * Store only. `files/autosave.ts` subscribes to this field rather than reading
+ * the settings file, because it reacts on every edit and cannot await an IPC
+ * round trip there -- the same reason `syncScroll` lives in the store.
+ */
+export async function setAutosaveSetting(autosave: boolean): Promise<void> {
+  store.setState((prev) => ({ ...prev, autosave }));
+
+  await persistSettings('autosave', (settings) => {
+    settings.files.autosave = autosave;
+  });
+}
+
+/**
+ * SPEC §6.13's `files.autosaveDelayMs`.
+ *
+ * Clamped before it reaches the store, not only before it reaches the timer:
+ * the settings dialog shows this field, and a value that displays as one thing
+ * and behaves as another is worse than one that is simply corrected.
+ */
+export async function setAutosaveDelaySetting(delayMs: number): Promise<void> {
+  const clamped = clampAutosaveDelay(delayMs);
+  store.setState((prev) => ({ ...prev, autosaveDelayMs: clamped }));
+
+  await persistSettings('autosave-delay', (settings) => {
+    settings.files.autosaveDelayMs = clamped;
   });
 }

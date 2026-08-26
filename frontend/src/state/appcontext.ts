@@ -52,6 +52,10 @@ export const store: Store<AppState> = createStore<AppState>({
   // settings cannot be read -- the safe answer, since UTF-8 without a BOM is
   // what the rest of the toolchain assumes.
   defaultEncoding: 'utf-8',
+  // Off, per SPEC §3.2 and Go's `DefaultSettings()`. A settings load that fails
+  // must not start writing the user's files behind them.
+  autosave: false,
+  autosaveDelayMs: 2000,
   // Also the value bootstrap republishes, as it happens: the startup document
   // is empty and `statusOf` of an empty document is exactly this. It stops
   // being a placeholder the first time the user types or a file is opened.

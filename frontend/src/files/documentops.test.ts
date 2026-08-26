@@ -85,6 +85,8 @@ beforeEach(() => {
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
     defaultEncoding: 'utf-8',
+    autosave: false,
+    autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));
@@ -228,6 +230,8 @@ describe('switchToDocument', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -254,6 +258,8 @@ describe('switchToDocument', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -280,6 +286,8 @@ describe('switchToDocument', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -309,6 +317,8 @@ describe('switchToDocument', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -341,6 +351,8 @@ describe('switchToDocument', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -472,6 +484,8 @@ describe('openDocumentInNewTab', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -514,6 +528,8 @@ describe('openDocumentInNewTab', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -550,6 +566,8 @@ describe('opening a document over the startup tab', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -604,6 +622,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -631,6 +651,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -657,6 +679,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -686,6 +710,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -714,6 +740,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -747,6 +775,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -784,6 +814,8 @@ describe('closeDocumentWithPrompt', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -818,6 +850,8 @@ describe('reopenLastClosed', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -844,6 +878,8 @@ describe('reopenLastClosed', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));
@@ -878,6 +914,8 @@ describe('reopenLastClosed', () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }));

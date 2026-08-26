@@ -60,6 +60,8 @@ vi.mock('../state/appcontext', async () => {
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
       defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
     }),
@@ -122,6 +124,8 @@ beforeEach(() => {
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
     defaultEncoding: 'utf-8',
+    autosave: false,
+    autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   }));

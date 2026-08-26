@@ -127,6 +127,8 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
     defaultEncoding: 'utf-8',
+    autosave: false,
+    autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
   };

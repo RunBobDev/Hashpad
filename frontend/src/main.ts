@@ -27,6 +27,7 @@ import {
   saveDocument,
   windowTitle,
 } from './files/fileops';
+import { mountAutosave } from './files/autosave';
 import {
   closeDocumentWithPrompt,
   makeUntitledDocument,
@@ -63,6 +64,7 @@ import {
 import {
   clampOutlineWidth,
   clampSplitRatio,
+  clampAutosaveDelay,
   clampTabSize,
   DEFAULT_BEHAVIOUR,
   createUntitledDocument,
@@ -255,6 +257,11 @@ async function bootstrap(): Promise<void> {
   // for symmetry: UTF-8 with no BOM is what a document nobody has configured
   // should be written as.
   let defaultEncoding: Encoding = 'utf-8';
+  // Off, per SPEC §3.2 and Go's default. The fallback matters more here than
+  // for the others: a settings load that failed must not leave the app writing
+  // the user's files on a timer they never switched on.
+  let autosave = false;
+  let autosaveDelayMs = 2000;
 
   try {
     const settings = await LoadSettings();
@@ -333,6 +340,11 @@ async function bootstrap(): Promise<void> {
     if (isEncoding(settings.files.defaultEncoding)) {
       defaultEncoding = settings.files.defaultEncoding;
     }
+    // Taken as-is, like the other booleans: Go unmarshals it into a `bool` and
+    // a file that fails to unmarshal is replaced with defaults before it gets
+    // here. The delay is clamped for the same reason `tabSize` is.
+    autosave = settings.files.autosave;
+    autosaveDelayMs = clampAutosaveDelay(settings.files.autosaveDelayMs);
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -346,6 +358,8 @@ async function bootstrap(): Promise<void> {
       editorBehaviour,
       defaultViewMode,
       defaultEncoding,
+      autosave,
+      autosaveDelayMs,
       outlineWidth,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
@@ -443,6 +457,11 @@ mountShortcuts(view);
 // fixed to the viewport and belong to the window, not to any row; see
 // ui/windowedges.ts for the three separate ways the edge failed without them.
 mountWindowEdges(root);
+
+// SPEC §3.2's autosave. Mounted unconditionally and inert while the setting is
+// off -- it subscribes to the setting as well as to the documents, so switching
+// it on mid-session starts the countdown without waiting for a keystroke.
+mountAutosave();
 
 // Files dropped on the window open as tabs (SPEC §6.4). Whole-window, so it is
 // mounted here rather than on any one region; see ui/filedrop.ts for why the
@@ -699,6 +718,8 @@ async function resetSettings(): Promise<void> {
     defaultViewMode: 'source',
     defaultEncoding: 'utf-8',
     syncScroll: defaults.preview.syncScroll,
+    autosave: defaults.files.autosave,
+    autosaveDelayMs: defaults.files.autosaveDelayMs,
     previewSplitRatio: defaults.window.previewSplitRatio,
     outlineWidth: defaults.window.outlineWidth,
     pinnedToolbarCommands: defaults.toolbar.pinned,

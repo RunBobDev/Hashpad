@@ -29,6 +29,8 @@ import type { app } from '../../wailsjs/go/models';
 import { applyAccent, isValidAccent } from '../theme/theme';
 import { applyTypography } from '../settings/typography';
 import {
+  setAutosaveDelaySetting,
+  setAutosaveSetting,
   setBehaviourSetting,
   setDefaultEncodingSetting,
   setDefaultViewModeSetting,
@@ -52,6 +54,9 @@ const LIMITS = {
   editorFontSize: { min: 8, max: 48 },
   lineHeight: { min: 1, max: 3 },
   previewFontSize: { min: 8, max: 48 },
+  // Mirrors `clampAutosaveDelay`. The floor is not cosmetic: below it, every
+  // keystroke is an IPC round trip and a disk write.
+  autosaveDelayMs: { min: 200, max: 60_000 },
   tabSize: { min: 1, max: 16 },
 } as const;
 
@@ -499,9 +504,25 @@ function filesGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
     if (isEncoding(encoding.value)) void setDefaultEncodingSetting(encoding.value);
   });
 
+  // SPEC §3.2: "off by default ... an opt-in for saved files only (never
+  // silently creates files)". The hint says so, because a switch called
+  // "autosave" that quietly does nothing on the untitled tab you are looking at
+  // is worse than one that tells you why.
+  const autosave = checkbox(store.getState().autosave);
+  autosave.addEventListener('change', () => void setAutosaveSetting(autosave.checked));
+
+  const autosaveDelay = numberField(LIMITS.autosaveDelayMs, 100, store.getState().autosaveDelayMs);
+  onNumber(autosaveDelay, (delayMs) => void setAutosaveDelaySetting(delayMs));
+
   return group('Files', [
     row('Image folder', assetFolder, 'Beside the document'),
     row('Encoding for new documents', encoding, 'Opened files keep their own'),
+    row('Autosave', autosave, 'Saved files only'),
+    row(
+      'Autosave after',
+      autosaveDelay,
+      `${LIMITS.autosaveDelayMs.min}–${LIMITS.autosaveDelayMs.max} ms`,
+    ),
   ]);
 }
 

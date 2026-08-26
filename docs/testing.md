@@ -1242,3 +1242,41 @@ and sizes exactly like the three already there.
   and the Reset button's border is the same token pair. Unchanged from H.4a: it
   is `--border-strong` on `--bg-elevated`, which the confirm dialog's buttons
   already use, so it is an app-wide token question.
+
+## Checkpoint H.5 — autosave
+
+SPEC §3.2: "off by default. Offer it in settings as an opt-in **for saved files
+only** (never silently creates files)." That parenthesis is the whole design —
+`saveDocument` falls back to Save As for a document with no path, so autosave
+filters untitled documents out itself rather than trusting the save path to be
+polite. A file picker on a timer is the worst thing this feature could do.
+
+Debounced from the last edit, not run on an interval: `autosaveDelayMs` is named
+for a delay. The trade is that continuous typing with no pause never saves.
+
+Both controls are in the Files group, added now rather than with H.4c so they
+never shipped wired to nothing.
+
+- [ ] **Off by default.** A fresh install writes nothing on a timer.
+- [ ] **Turn it on with a saved file open, type, and stop.** Two seconds later
+      the dirty dot clears with no keypress. Check the file on disk.
+- [ ] **Turn it on with an *untitled* tab.** Type and wait. **No save dialog
+      appears**, ever, and the tab stays dirty. This is the one to be sure of.
+- [ ] **Keep typing without pausing** for longer than the delay: nothing is
+      written until you stop. Each keystroke pushes the write back.
+- [ ] **Turn it on while a file is already dirty and you have stopped typing.**
+      It saves within the delay — it must not wait for another keystroke.
+- [ ] **Turn it off mid-countdown** (type, then untick within the delay).
+      Nothing is written.
+- [ ] **Edit a file, switch to another tab inside the delay.** The tab you left
+      still gets saved — autosave covers every dirty saved document, not only
+      the one in front.
+- [ ] **Change the delay** and confirm the new one takes effect immediately,
+      including shortening one that is already counting down.
+- [ ] **Type below the floor** in the delay field (say `5`). It is corrected to
+      200, and the field shows 200 rather than the number you typed.
+- [ ] **Make a file read-only, edit it with autosave on.** The tab stays dirty
+      and no dialog appears; the error goes to the log. Other tabs still save.
+- [ ] **Autosave plus Reset to default** turns it back off, immediately.
+- [ ] **Quit with autosave on and an untitled dirty tab.** You are still
+      prompted — the prompt is what stands in for the save that cannot happen.

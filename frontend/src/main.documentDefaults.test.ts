@@ -91,7 +91,15 @@ vi.mock('../wailsjs/go/app/App', () => ({
     // Not `'utf-8'`, for exactly the same reason -- and `'utf-16le'` rather
     // than `'utf-8-bom'` because it differs from the default in more than a
     // byte order mark, so a half-applied value has nowhere to hide.
-    files: { defaultEncoding: 'utf-16le' },
+    // Autosave on, and a delay that is neither the compiled-in 2000 nor
+    // anything the clamp would produce from it -- so a bootstrap that never
+    // read the block cannot pass by coincidence.
+    // `autosaveDelayMs: 50` is below the clamp floor deliberately, so this one
+    // fixture proves both halves at once: 200 is what the clamp produces, and
+    // it is not the compiled-in 2000, so a bootstrap that never read the block
+    // cannot pass either. An in-range value proved only the read -- the clamp
+    // was a no-op on it, and deleting the clamp broke nothing.
+    files: { defaultEncoding: 'utf-16le', autosave: true, autosaveDelayMs: 50 },
   }),
   ReadFile: vi.fn(),
   ResetSettings: vi.fn(),
@@ -206,5 +214,19 @@ describe('bootstrap applying the saved default encoding', () => {
    */
   it('does not touch the line ending', () => {
     expect(startupDocument.lineEnding).toBe('crlf');
+  });
+});
+
+describe('bootstrap seeding autosave', () => {
+  /**
+   * SPEC §3.2 has this off by default, so a seed that never read the file is
+   * indistinguishable from one that read `false` -- hence a fixture that says
+   * `true`. The delay is checked alongside it because the two are useless
+   * apart: autosave on with the compiled-in delay would still look like a
+   * working seed.
+   */
+  it('reads both fields from settings, clamping the delay', () => {
+    expect(store.getState().autosave).toBe(true);
+    expect(store.getState().autosaveDelayMs).toBe(200);
   });
 });

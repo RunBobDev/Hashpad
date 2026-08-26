@@ -914,3 +914,65 @@ describe('closeSettings', () => {
     expect(() => closeSettings()).not.toThrow();
   });
 });
+
+/**
+ * SPEC §3.2's autosave, added to the Files group by H.5 rather than shipped
+ * with H.4c: two controls wired to nothing is what `PreviewSettings`'s
+ * `loadRemoteImages` comment exists to warn against.
+ */
+describe('the Files group’s autosave controls', () => {
+  it('reads both from the store', () => {
+    store.setState((prev) => ({ ...prev, autosave: true, autosaveDelayMs: 5000 }));
+    const scope = group(mount(), 'Files');
+
+    expect(byLabel<HTMLInputElement>(scope, 'Autosave').checked).toBe(true);
+    expect(byLabel<HTMLInputElement>(scope, 'Autosave after').value).toBe('5000');
+  });
+
+  it('routes the switch through the shared setter', async () => {
+    store.setState((prev) => ({ ...prev, autosave: false }));
+    const box = byLabel<HTMLInputElement>(group(mount(), 'Files'), 'Autosave');
+
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+
+    expect(store.getState().autosave).toBe(true);
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.autosave).toBe(true);
+    });
+  });
+
+  it('routes the delay through the shared setter', async () => {
+    const delay = byLabel<HTMLInputElement>(group(mount(), 'Files'), 'Autosave after');
+
+    delay.value = '4000';
+    delay.dispatchEvent(new Event('input'));
+
+    expect(store.getState().autosaveDelayMs).toBe(4000);
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.autosaveDelayMs).toBe(4000);
+    });
+  });
+
+  /**
+   * The spinner's floor matches `clampAutosaveDelay`'s. Below it every
+   * keystroke is an IPC round trip and a disk write -- and a control that
+   * offers a value the app then silently corrects is worse than one that does
+   * not offer it, because the number on screen stops being the number in force.
+   */
+  it('does not offer a delay the clamp would reject', async () => {
+    const delay = byLabel<HTMLInputElement>(group(mount(), 'Files'), 'Autosave after');
+    expect(delay.min).toBe('200');
+    expect(delay.max).toBe('60000');
+
+    // Typed past the floor anyway -- `min` is advisory on a number input, so
+    // the clamp is what actually holds, and the store must show what it holds.
+    delay.value = '5';
+    delay.dispatchEvent(new Event('input'));
+
+    expect(store.getState().autosaveDelayMs).toBe(200);
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.autosaveDelayMs).toBe(200);
+    });
+  });
+});
