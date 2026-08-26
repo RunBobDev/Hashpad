@@ -57,6 +57,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
     throw new TypeError("Cannot read properties of undefined (reading 'app')");
   }),
   ReadFile: vi.fn(),
+  ResetSettings: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),

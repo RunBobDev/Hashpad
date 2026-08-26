@@ -94,6 +94,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
     files: { defaultEncoding: 'utf-16le' },
   }),
   ReadFile: vi.fn(),
+  ResetSettings: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),

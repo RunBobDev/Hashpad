@@ -30,11 +30,14 @@ import { applyAccent, isValidAccent } from '../theme/theme';
 import { applyTypography } from '../settings/typography';
 import {
   setBehaviourSetting,
+  setDefaultEncodingSetting,
   setDefaultViewModeSetting,
+  setSyncScrollSetting,
   setWordWrapSetting,
 } from '../settings/live';
 import { store } from '../state/appcontext';
-import type { Document } from '../state/document';
+import { isEncoding, type Document } from '../state/document';
+import { confirmReset } from './confirmdialog';
 import { emitCommand } from './menubar';
 
 /**
@@ -48,6 +51,7 @@ const LIMITS = {
   uiFontSize: { min: 10, max: 24 },
   editorFontSize: { min: 8, max: 48 },
   lineHeight: { min: 1, max: 3 },
+  previewFontSize: { min: 8, max: 48 },
   tabSize: { min: 1, max: 16 },
 } as const;
 
@@ -336,10 +340,33 @@ function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement 
     });
   });
 
+  // The preview's typography lives here rather than in a Preview group of its
+  // own: SPEC §6.13 names four groups and Preview is not one of them, and these
+  // two are fonts and sizes exactly like the three above.
+  const previewFont = textField(settings.preview.fontFamily, 'Segoe UI');
+  previewFont.addEventListener('input', () => {
+    liveTypography(settings, saves, 'preview.fontFamily', (target) => {
+      target.preview.fontFamily = previewFont.value;
+    });
+  });
+
+  const previewFontSize = numberField(LIMITS.previewFontSize, 1, settings.preview.fontSize);
+  onNumber(previewFontSize, (size) => {
+    liveTypography(settings, saves, 'preview.fontSize', (target) => {
+      target.preview.fontSize = size;
+    });
+  });
+
   return group('Appearance', [
     row('Theme', theme),
     row('Accent colour', accent),
     row('Interface font size', uiFontSize, `${LIMITS.uiFontSize.min}–${LIMITS.uiFontSize.max} px`),
+    row('Preview font', previewFont),
+    row(
+      'Preview font size',
+      previewFontSize,
+      `${LIMITS.previewFontSize.min}–${LIMITS.previewFontSize.max} px`,
+    ),
   ]);
 }
 
@@ -439,6 +466,75 @@ function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
 }
 
 /**
+ * The Files group.
+ *
+ * `assetFolder` needs no wiring beyond the write: Go's `assetFolder()` reads
+ * the settings file on every image save, so the next paste uses the new folder
+ * with nothing to reconfigure. It is also the one control here whose value can
+ * be nonsense in a way that only shows up later -- Go falls back to `assets`
+ * for an empty string, and `images.go` keeps the path inside the document's
+ * directory, so a bad value costs a misplaced folder rather than a stray write.
+ *
+ * `defaultEncoding` reaches untitled documents only, which is why the hint says
+ * so out loud: someone changing it while looking at an open UTF-16 file would
+ * otherwise reasonably expect that file to change with it.
+ */
+function filesGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
+  const assetFolder = textField(settings.files.assetFolder, 'assets');
+  assetFolder.addEventListener('input', () => {
+    saves.schedule('files.assetFolder', (next) => {
+      next.files.assetFolder = assetFolder.value;
+    });
+  });
+
+  const encoding = select(
+    [
+      ['utf-8', 'UTF-8'],
+      ['utf-8-bom', 'UTF-8 with BOM'],
+      ['utf-16le', 'UTF-16 LE'],
+    ],
+    store.getState().defaultEncoding,
+  );
+  encoding.addEventListener('change', () => {
+    if (isEncoding(encoding.value)) void setDefaultEncodingSetting(encoding.value);
+  });
+
+  return group('Files', [
+    row('Image folder', assetFolder, 'Beside the document'),
+    row('Encoding for new documents', encoding, 'Opened files keep their own'),
+  ]);
+}
+
+/**
+ * The Advanced group.
+ *
+ * SPEC names four groups and the settings file has a `preview` block that fits
+ * none of them, so the two genuinely fiddly settings live here: a width that is
+ * off when zero, and a scroll behaviour most people never think about. That is
+ * also what keeps this from being a one-control group.
+ */
+function advancedGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
+  // `0` means no limit, and it is the only way to say that in the file -- there
+  // is no null, and every positive number is a width. `min` is 0 rather than
+  // `LIMITS.maxContentWidth.min` for exactly that reason: the spinner has to be
+  // able to reach the off switch.
+  const maxWidth = numberField({ min: 0, max: 4000 }, 20, settings.editor.maxContentWidth);
+  onNumber(maxWidth, (width) => {
+    liveTypography(settings, saves, 'editor.maxContentWidth', (target) => {
+      target.editor.maxContentWidth = width;
+    });
+  });
+
+  const syncScroll = checkbox(store.getState().syncScroll);
+  syncScroll.addEventListener('change', () => void setSyncScrollSetting(syncScroll.checked));
+
+  return group('Advanced', [
+    row('Maximum text width', maxWidth, '0 for no limit'),
+    row('Scroll the preview with the editor', syncScroll),
+  ]);
+}
+
+/**
  * Builds the dialog without showing it.
  *
  * Split from `openSettings` for the reason `confirmdialog.ts` splits its own:
@@ -462,16 +558,40 @@ export function buildSettingsDialog(settings: app.Settings): HTMLDialogElement {
   body.className = 'settings-dialog__body';
 
   const saves = coalesce(300);
-  body.append(appearanceGroup(settings, saves), editorGroup(settings, saves));
+  body.append(
+    appearanceGroup(settings, saves),
+    editorGroup(settings, saves),
+    filesGroup(settings, saves),
+    advancedGroup(settings, saves),
+  );
 
   const actions = document.createElement('div');
   actions.className = 'settings-dialog__actions';
+
+  // Left of the row, away from Close. They are the two buttons here and one of
+  // them is destructive, so the gap between them is doing real work -- Close is
+  // what people reach for on the way out, and a reset one pixel away from it is
+  // a misclick with no undo. `confirmReset` is the other half of that.
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'settings-dialog__reset';
+  reset.textContent = 'Reset to default';
+  reset.addEventListener('click', () => {
+    void (async () => {
+      if (!(await confirmReset())) return;
+      // Through the bus, and not because the dialog cannot call `ResetSettings`
+      // itself. Re-applying the defaults means touching the theme, the status
+      // bar and the outline, and all three are owned by module locals in
+      // main.ts -- so main.ts does the reset, and rebuilds this dialog after.
+      emitCommand('settings.reset');
+    })();
+  });
 
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'settings-dialog__close';
   close.textContent = 'Close';
-  actions.append(close);
+  actions.append(reset, close);
 
   // One handler covers every route out. Escape fires `cancel` then `close`;
   // the button and a direct `close()` fire only `close`. The flush is the point
@@ -512,6 +632,29 @@ export function buildSettingsDialog(settings: app.Settings): HTMLDialogElement {
  * keyboard -- but the menu entry is still clickable from a stale render, and
  * two dialogs in the top layer is not a state worth being able to reach.
  */
+/**
+ * Closes an open settings dialog, if there is one.
+ *
+ * For main.ts's reset, which has to rebuild this dialog from the new values --
+ * every control was populated at build time, so re-reading them all in place
+ * would mean a second, parallel way of writing the same thing. Closing and
+ * reopening runs the one that already exists.
+ *
+ * Goes through `close()` rather than `remove()` so the `close` listener runs and
+ * flushes any pending write. A reset immediately after another change must not
+ * drop it -- the write it flushes is against the pre-reset file, and losing it
+ * would be invisible.
+ */
+export function closeSettings(): void {
+  const dialog = document.querySelector<HTMLDialogElement>('.settings-dialog');
+  if (dialog === null) return;
+
+  // Guarded because jsdom implements <dialog> as a bare HTMLElement with no
+  // close(); dispatching the event directly is the same path there.
+  if (typeof dialog.close === 'function') dialog.close();
+  else dialog.dispatchEvent(new Event('close'));
+}
+
 export async function openSettings(): Promise<void> {
   if (document.querySelector('.settings-dialog') !== null) return;
 

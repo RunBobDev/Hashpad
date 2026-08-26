@@ -14,6 +14,10 @@ export function ReadFile(arg1) {
   return window['go']['app']['App']['ReadFile'](arg1);
 }
 
+export function ResetSettings() {
+  return window['go']['app']['App']['ResetSettings']();
+}
+
 export function SaveClipboardImage(arg1, arg2) {
   return window['go']['app']['App']['SaveClipboardImage'](arg1, arg2);
 }

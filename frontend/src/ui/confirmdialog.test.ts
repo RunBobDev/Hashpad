@@ -28,7 +28,12 @@
  * the real interaction tests.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildConfirmDialog, confirmSave, type SaveChoice } from './confirmdialog';
+import {
+  buildConfirmDialog,
+  buildResetDialog,
+  confirmSave,
+  type SaveChoice,
+} from './confirmdialog';
 
 /** Clicks the button with the given label inside `dialog`. */
 function click(dialog: HTMLDialogElement, label: string): void {
@@ -156,5 +161,60 @@ describe('confirmSave under jsdom (see file header for why this list is short)',
     ];
     expect(buttons.length).toBeGreaterThan(0);
     expect(buttons.every((button) => button.type === 'button')).toBe(true);
+  });
+});
+
+/**
+ * The settings dialog's Reset prompt. Driven directly for the same reason every
+ * other case here is: `confirmReset`'s `showModal()` does not exist in jsdom.
+ */
+describe('buildResetDialog', () => {
+  it.each([
+    ['Reset', true],
+    ['Cancel', false],
+  ])('reports %s as %s', (label, expected) => {
+    const onChoice = vi.fn();
+    const dialog = buildResetDialog(onChoice);
+
+    click(dialog, label);
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith(expected);
+  });
+
+  /** Escape means "I didn't decide", and not deciding must not reset anything. */
+  it('treats Escape as Cancel', () => {
+    const onChoice = vi.fn();
+    const dialog = buildResetDialog(onChoice);
+
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  /**
+   * **Cancel is the primary here, unlike every other prompt in this file.** The
+   * other two ask about work the user just did and the likely answer is yes;
+   * this one asks whether to throw work away. `confirmReset` focuses the
+   * primary button, so which button carries the class decides what Enter does.
+   */
+  it('makes Cancel the primary button', () => {
+    const dialog = buildResetDialog(vi.fn());
+
+    const primary = dialog.querySelector('.confirm-dialog__button--primary');
+    expect(primary?.textContent).toBe('Cancel');
+  });
+
+  /**
+   * The prompt has to name what is at stake beyond the dialog it was launched
+   * from: a reset takes the pinned toolbar and the window size with it, and
+   * those two only come back on the next launch.
+   */
+  it('says what a reset costs that the settings dialog does not show', () => {
+    const dialog = buildResetDialog(vi.fn());
+
+    const text = dialog.querySelector('.confirm-dialog__message')!.textContent!;
+    expect(text).toContain('toolbar');
+    expect(text).toContain('next launch');
+    expect(text).toContain('cannot be undone');
   });
 });

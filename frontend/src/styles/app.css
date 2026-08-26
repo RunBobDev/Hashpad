@@ -1106,3 +1106,28 @@ body {
   accent-color: var(--accent);
   cursor: pointer;
 }
+
+/* `space-between`, so Reset sits at the far left and Close at the far right.
+   They are the only two buttons here and one of them is destructive; the gap is
+   what stops a misclick on the way out. */
+.settings-dialog__actions {
+  justify-content: space-between;
+}
+
+/* Neutral, not accented and not red. Accented would compete with Close for
+   "the obvious thing to press", and red would overstate it -- this resets
+   preferences, it does not delete anyone's writing. The confirm carries the
+   weight instead. */
+.settings-dialog__reset {
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  color: var(--fg-primary);
+  font: inherit;
+  cursor: default;
+}
+
+.settings-dialog__reset:hover {
+  background: var(--bg-hover);
+}

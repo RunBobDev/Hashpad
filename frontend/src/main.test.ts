@@ -37,10 +37,12 @@ import {
   DEFAULT_BEHAVIOUR,
 } from './state/document';
 import { getEditorView, store } from './state/appcontext';
+import { setWordWrap } from './editor/extensions';
 import { COMMAND_EVENT } from './ui/menubar';
 import { DEFAULT_PINNED } from './ui/toolbar';
 import {
   ReadFile,
+  ResetSettings,
   SaveSettings,
   ShowWindow,
   SystemThemeIsDark,
@@ -125,6 +127,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
     },
   }),
   ReadFile: vi.fn(),
+  ResetSettings: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
@@ -892,5 +895,161 @@ describe('settings.open', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(document.querySelectorAll('.settings-dialog')).toHaveLength(1);
+  });
+});
+
+/**
+ * `settings.reset` — the command behind the dialog's Reset button.
+ *
+ * What matters here and nowhere else is that the defaults are *re-applied to
+ * the running app*, not merely written to disk. Go owns what "default" means;
+ * settingsdialog.test.ts owns the button and the prompt. This is the join.
+ */
+describe('settings.reset', () => {
+  /**
+   * Deliberately unlike Go's defaults in every block this handler reads, so a
+   * handler that applied its own idea of the defaults -- or applied nothing and
+   * relied on the store already being right -- cannot pass.
+   */
+  function defaults(): unknown {
+    return {
+      version: 2,
+      appearance: { theme: 'system', accentColor: '#0078d4', uiFontSize: 14 },
+      editor: {
+        fontFamily: 'Cascadia Mono',
+        fontSize: 14,
+        lineHeight: 1.6,
+        wordWrap: true,
+        maxContentWidth: 0,
+        showLineNumbers: false,
+        tabSize: 2,
+        insertSpaces: true,
+        defaultViewMode: 'source',
+      },
+      preview: { fontFamily: 'Segoe UI', fontSize: 15, syncScroll: true },
+      files: {
+        autosave: false,
+        autosaveDelayMs: 2000,
+        assetFolder: 'assets',
+        defaultEncoding: 'utf-8',
+      },
+      window: {
+        width: 1000,
+        height: 700,
+        maximized: false,
+        outlineVisible: false,
+        outlineWidth: 240,
+        statusBarVisible: true,
+        previewSplitRatio: 0.5,
+      },
+      toolbar: { visible: true, pinned: ['bold', 'italic'] },
+    };
+  }
+
+  /** Everything this handler touches, moved off its default first. */
+  function derange(): void {
+    store.setState((prev) => ({
+      ...prev,
+      wordWrap: false,
+      editorBehaviour: { showLineNumbers: true, tabSize: 8, insertSpaces: false },
+      defaultViewMode: 'split',
+      defaultEncoding: 'utf-16le',
+      syncScroll: false,
+      previewSplitRatio: 0.2,
+      outlineWidth: 400,
+    }));
+  }
+
+  afterEach(() => {
+    document.querySelector('.settings-dialog')?.remove();
+  });
+
+  it('puts every store field back', async () => {
+    vi.mocked(ResetSettings).mockResolvedValue(defaults() as never);
+    derange();
+
+    emit('settings.reset');
+
+    await vi.waitFor(() => expect(store.getState().wordWrap).toBe(true));
+    const state = store.getState();
+    expect(state.editorBehaviour).toEqual({
+      showLineNumbers: false,
+      tabSize: 2,
+      insertSpaces: true,
+    });
+    expect(state.defaultViewMode).toBe('source');
+    expect(state.defaultEncoding).toBe('utf-8');
+    expect(state.syncScroll).toBe(true);
+    expect(state.previewSplitRatio).toBeCloseTo(0.5);
+    expect(state.outlineWidth).toBeCloseTo(240);
+  });
+
+  /**
+   * The store alone is a half-wired reset: the editor is already constructed,
+   * and only a reconfigure reaches it. This is the same gap mutation testing
+   * found in `settings/live.ts` -- worth asserting on the path that re-applies
+   * *everything*, because it is the one where forgetting is least visible.
+   */
+  it('reconfigures the live editor, not just the store', async () => {
+    vi.mocked(ResetSettings).mockResolvedValue(defaults() as never);
+    store.setState((prev) => ({ ...prev, wordWrap: false }));
+    setWordWrap(getEditorView(), false);
+    expect(getEditorView().contentDOM.className).not.toContain('cm-lineWrapping');
+
+    emit('settings.reset');
+
+    await vi.waitFor(() => {
+      expect(getEditorView().contentDOM.className).toContain('cm-lineWrapping');
+    });
+  });
+
+  it('re-applies the typography to the page', async () => {
+    vi.mocked(ResetSettings).mockResolvedValue(defaults() as never);
+    document.documentElement.style.setProperty('--size-ui', '99px');
+
+    emit('settings.reset');
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--size-ui')).toBe('14px');
+    });
+  });
+
+  /**
+   * Rebuilt rather than left showing the old values. Every control is populated
+   * when the dialog is built, so a reset that skipped this would leave the user
+   * looking at the settings they had just thrown away.
+   */
+  it('rebuilds the settings dialog with the new values', async () => {
+    vi.mocked(ResetSettings).mockResolvedValue(defaults() as never);
+    emit('settings.open');
+    await vi.waitFor(() => expect(document.querySelector('.settings-dialog')).not.toBeNull());
+    const first = document.querySelector('.settings-dialog');
+
+    emit('settings.reset');
+
+    await vi.waitFor(() => {
+      const now = document.querySelector('.settings-dialog');
+      expect(now).not.toBeNull();
+      expect(now).not.toBe(first);
+    });
+  });
+
+  /**
+   * **A failed reset changes nothing.** Wails rejects the promise and discards
+   * the value, so there is no half-state to land in -- and a reset that seemed
+   * to work while the file still held the old settings would be discovered at
+   * the next launch, with nothing to connect it to.
+   */
+  it('leaves the running app alone when the write fails', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(ResetSettings).mockRejectedValue(new Error('disk full'));
+    derange();
+
+    emit('settings.reset');
+
+    await vi.waitFor(() => expect(errors).toHaveBeenCalled());
+    expect(store.getState().wordWrap).toBe(false);
+    expect(store.getState().editorBehaviour.tabSize).toBe(8);
+    errors.mockRestore();
   });
 });

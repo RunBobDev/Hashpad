@@ -5,10 +5,12 @@ import { EventsOn, Quit, WindowSetTitle } from '../wailsjs/runtime/runtime';
 import {
   ConfirmQuit,
   LoadSettings,
+  ResetSettings,
   SaveSettings,
   ShowWindow,
   SystemThemeIsDark,
 } from '../wailsjs/go/app/App';
+import type { app } from '../wailsjs/go/models';
 import { createEditor } from './editor/editor';
 import { COMMANDS, toEditorCommand, type CommandId } from './editor/commands';
 import {
@@ -35,7 +37,7 @@ import { confirmSave } from './ui/confirmdialog';
 import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
-import { openSettings } from './ui/settingsdialog';
+import { closeSettings, openSettings } from './ui/settingsdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
@@ -647,6 +649,75 @@ async function restoreViewMode(mode: Document['viewMode']): Promise<void> {
 }
 
 /**
+ * File > Settings > Reset to default (SPEC §6.13).
+ *
+ * Go owns what "default" means -- `DefaultSettings()` is the one definition of
+ * it, and a TypeScript copy would be a second one that drifts the first time a
+ * default changes. `ResetSettings` writes it and hands it back, and everything
+ * below re-applies exactly what is now on disk.
+ *
+ * **On failure, nothing happens at all.** Wails rejects the promise and
+ * discards the value, so a failed write leaves both the file and the running
+ * app as they were -- which is the right outcome: a reset that appeared to work
+ * and quietly did not persist is worse than one that visibly did nothing.
+ *
+ * This lives in main.ts and not in the dialog because three of the things it
+ * has to re-apply -- the theme, the status bar, the outline -- are owned by
+ * module locals in this file, and a second writer would leave those behind.
+ *
+ * **Two settings do not come back until the next launch:** the toolbar's
+ * visibility, which is decided once at bootstrap because nothing can toggle it
+ * at runtime, and its pinned list, which `mountToolbar` seeds into a closure
+ * rather than reading from the store. Both are on disk immediately. The confirm
+ * says so rather than leaving the user to notice.
+ */
+async function resetSettings(): Promise<void> {
+  let defaults: app.Settings;
+  try {
+    defaults = await ResetSettings();
+  } catch (err) {
+    console.error('hashpad: failed to reset the settings; nothing was changed', err);
+    return;
+  }
+
+  // No validation on the way in, unlike bootstrap's read of the same fields.
+  // This is Go's `DefaultSettings()`, not a hand-editable file -- there is no
+  // trust boundary here, and `applyTypography` clamps its own inputs regardless.
+  void setThemeMode('system');
+  applyAccent(defaults.appearance.accentColor);
+  applyTypography(defaults);
+
+  const behaviour = {
+    showLineNumbers: defaults.editor.showLineNumbers,
+    tabSize: defaults.editor.tabSize,
+    insertSpaces: defaults.editor.insertSpaces,
+  };
+  store.setState((prev) => ({
+    ...prev,
+    wordWrap: defaults.editor.wordWrap,
+    editorBehaviour: behaviour,
+    defaultViewMode: 'source',
+    defaultEncoding: 'utf-8',
+    syncScroll: defaults.preview.syncScroll,
+    previewSplitRatio: defaults.window.previewSplitRatio,
+    outlineWidth: defaults.window.outlineWidth,
+    pinnedToolbarCommands: defaults.toolbar.pinned,
+  }));
+  // The store alone is half-wired for these two: the open editor is already
+  // constructed, and only a reconfigure reaches it.
+  setWordWrap(view, defaults.editor.wordWrap);
+  setEditorBehaviour(view, behaviour);
+  setStatusBar(defaults.window.statusBarVisible);
+  setOutline(defaults.window.outlineVisible);
+
+  // Rebuilt rather than updated in place: every control was populated when the
+  // dialog was built, so re-reading them all here would be a second way of
+  // writing what `buildSettingsDialog` already does.
+  closeSettings();
+  void openSettings();
+}
+
+/**
  * Puts the startup document on the saved `files.defaultEncoding`.
  *
  * Needed for the same reason `restoreViewMode` is: the document is minted at
@@ -934,6 +1005,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     case 'settings.open':
       void openSettings();
+      break;
+    case 'settings.reset':
+      void resetSettings();
       break;
     case 'view.wordWrap':
       void setWordWrapSetting(!store.getState().wordWrap);

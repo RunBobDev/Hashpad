@@ -408,3 +408,70 @@ func TestSavedSettingsCarryTheCurrentVersion(t *testing.T) {
 		t.Errorf("version = %d, want %d", got.Version, settingsVersion)
 	}
 }
+
+// ResetSettings is the settings dialog's Reset button. Two claims worth
+// pinning: what it returns is the compiled-in defaults, and it actually
+// overwrites the file rather than only reporting what the defaults would be --
+// a version that forgot the write would look identical to the caller, which
+// re-applies what it is handed, and would only show up on the next launch.
+func TestResetSettingsOverwritesTheFileWithDefaults(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("APPDATA", dir)
+	path, err := SettingsPath()
+	if err != nil {
+		t.Fatalf("settings path: %v", err)
+	}
+
+	// A file that disagrees with the defaults in more than one block, so a
+	// partial reset cannot pass.
+	edited := DefaultSettings()
+	edited.Appearance.Theme = "dark"
+	edited.Editor.TabSize = 8
+	edited.Files.DefaultEncoding = "utf-16le"
+	if err := SaveSettingsTo(path, edited); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	app := &App{}
+	got, err := app.ResetSettings()
+	if err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	if !reflect.DeepEqual(got, DefaultSettings()) {
+		t.Errorf("returned %+v, want the defaults", got)
+	}
+
+	onDisk, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if !reflect.DeepEqual(onDisk, DefaultSettings()) {
+		t.Errorf("on disk %+v, want the defaults", onDisk)
+	}
+}
+
+// The defaults still come back when the write fails, so the caller can apply
+// them to the running app and say only that they will not survive a restart --
+// the same bargain every other setting makes.
+func TestResetSettingsReturnsDefaultsEvenWhenTheWriteFails(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("APPDATA", dir)
+	path, err := SettingsPath()
+	if err != nil {
+		t.Fatalf("settings path: %v", err)
+	}
+	// A directory where the file belongs: the write cannot succeed, and no
+	// permission juggling is needed to arrange it.
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	app := &App{}
+	got, err := app.ResetSettings()
+	if err == nil {
+		t.Error("expected an error when the settings path is a directory")
+	}
+	if !reflect.DeepEqual(got, DefaultSettings()) {
+		t.Errorf("returned %+v, want the defaults", got)
+	}
+}

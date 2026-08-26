@@ -15,8 +15,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
+import { confirmReset } from './confirmdialog';
 import { COMMAND_EVENT } from './menubar';
-import { buildSettingsDialog } from './settingsdialog';
+import { buildSettingsDialog, closeSettings } from './settingsdialog';
 import { store } from '../state/appcontext';
 import type { app } from '../../wailsjs/go/models';
 
@@ -30,6 +31,11 @@ vi.mock('../../wailsjs/go/app/App', () => ({
 // that need one are stubbed -- what this file asserts is that the dialog reaches
 // the right function with the right value; `settings/live.test.ts` covers what
 // those functions then do.
+// `confirmReset` calls `showModal()`, which jsdom does not implement, so the
+// real one rejects rather than resolving. confirmdialog.test.ts covers the
+// prompt through `buildResetDialog`; this file covers what the settings dialog
+// does with the answer.
+vi.mock('./confirmdialog', () => ({ confirmReset: vi.fn() }));
 vi.mock('../editor/extensions', () => ({
   setWordWrap: vi.fn(),
   setEditorBehaviour: vi.fn(),
@@ -122,6 +128,27 @@ function group(dialog: HTMLElement, legend: string): HTMLElement {
   );
   expect(found, 'a group named ' + legend).toBeDefined();
   return found!;
+}
+
+/**
+ * Collects `hashpad:command` events until stopped.
+ *
+ * Returned as an object rather than an array so `commands` can be read inside a
+ * `vi.waitFor` callback -- a destructured array would be captured by value at
+ * the wrong moment.
+ */
+function captureCommands(): { commands: string[]; stop: () => void } {
+  const commands: string[] = [];
+  const listen = (event: Event): void => {
+    commands.push((event as CustomEvent<string>).detail);
+  };
+  document.addEventListener(COMMAND_EVENT, listen);
+  return { commands, stop: () => document.removeEventListener(COMMAND_EVENT, listen) };
+}
+
+/** Long enough for an awaited chain to have emitted, if it were going to. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 /** A control by the visible text of the row it sits in. */
@@ -439,9 +466,20 @@ describe('accessibility', () => {
   it('groups the controls under a named legend', () => {
     const dialog = mount();
 
-    const fieldset = dialog.querySelector('fieldset')!;
-    expect(fieldset.querySelector('legend')?.textContent).toBe('Appearance');
-    expect(fieldset.querySelectorAll('label')).toHaveLength(3);
+    // SPEC §6.13's four groups, in the order it names them. Asserted as a list
+    // rather than "the first fieldset is Appearance", which is what this said
+    // while Appearance was the only one and stopped meaning anything useful the
+    // moment a second was added below it.
+    expect([...dialog.querySelectorAll('legend')].map((el) => el.textContent)).toEqual([
+      'Appearance',
+      'Editor',
+      'Files',
+      'Advanced',
+    ]);
+    // Every row is a label, and every group has at least one.
+    for (const fieldset of dialog.querySelectorAll('fieldset')) {
+      expect(fieldset.querySelectorAll('label').length).toBeGreaterThan(0);
+    }
   });
 
   /**
@@ -647,5 +685,232 @@ describe('the Editor group', () => {
     const mode = byLabel<HTMLSelectElement>(editor(mount()), 'New documents open in');
 
     expect([...mode.options].map((option) => option.value)).toEqual(['source', 'split']);
+  });
+});
+
+describe('the Appearance group also carries the preview', () => {
+  /**
+   * SPEC §6.13 names four groups and Preview is not one of them, so the
+   * preview's two typography settings live with the other fonts and sizes
+   * rather than in a fifth group of their own.
+   */
+  it('shows the preview font and size', () => {
+    const scope = group(mount(), 'Appearance');
+
+    expect(byLabel<HTMLInputElement>(scope, 'Preview font').value).toBe('Segoe UI');
+    expect(byLabel<HTMLInputElement>(scope, 'Preview font size').value).toBe('15');
+  });
+
+  it('applies and persists the preview font size', async () => {
+    const size = byLabel<HTMLInputElement>(group(mount(), 'Appearance'), 'Preview font size');
+
+    size.value = '22';
+    size.dispatchEvent(new Event('input'));
+
+    expect(document.documentElement.style.getPropertyValue('--size-preview')).toContain('22');
+    expect((await savedSettings()).preview.fontSize).toBe(22);
+  });
+});
+
+describe('the Files group', () => {
+  it('carries the loaded asset folder and the store’s default encoding', () => {
+    store.setState((prev) => ({ ...prev, defaultEncoding: 'utf-16le' }));
+    const scope = group(mount(), 'Files');
+
+    expect(byLabel<HTMLInputElement>(scope, 'Image folder').value).toBe('assets');
+    expect(byLabel<HTMLSelectElement>(scope, 'Encoding for new documents').value).toBe('utf-16le');
+  });
+
+  /**
+   * Nothing to apply, only to write: Go's `assetFolder()` reads the settings
+   * file on every image save, so the next paste picks the new folder up with no
+   * reconfiguration on this side.
+   */
+  it('persists the asset folder', async () => {
+    const folder = byLabel<HTMLInputElement>(group(mount(), 'Files'), 'Image folder');
+
+    folder.value = 'images';
+    folder.dispatchEvent(new Event('input'));
+
+    expect((await savedSettings()).files.assetFolder).toBe('images');
+  });
+
+  it('routes the default encoding through the shared setter', async () => {
+    store.setState((prev) => ({ ...prev, defaultEncoding: 'utf-8' }));
+    const encoding = byLabel<HTMLSelectElement>(
+      group(mount(), 'Files'),
+      'Encoding for new documents',
+    );
+
+    encoding.value = 'utf-8-bom';
+    encoding.dispatchEvent(new Event('change'));
+
+    expect(store.getState().defaultEncoding).toBe('utf-8-bom');
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.defaultEncoding).toBe('utf-8-bom');
+    });
+  });
+
+  /**
+   * All three encodings the app can write, and only those. `isEncoding` guards
+   * the write as well, so an option list that grew a fourth would be silently
+   * inert rather than corrupting a file -- which is the safer failure and
+   * exactly why it would go unnoticed without this.
+   */
+  it('offers every encoding the writer supports', () => {
+    const encoding = byLabel<HTMLSelectElement>(
+      group(mount(), 'Files'),
+      'Encoding for new documents',
+    );
+
+    expect([...encoding.options].map((option) => option.value)).toEqual([
+      'utf-8',
+      'utf-8-bom',
+      'utf-16le',
+    ]);
+  });
+});
+
+describe('the Advanced group', () => {
+  it('carries the loaded width and the store’s sync-scroll setting', () => {
+    store.setState((prev) => ({ ...prev, syncScroll: false }));
+    const scope = group(mount(), 'Advanced');
+
+    expect(byLabel<HTMLInputElement>(scope, 'Maximum text width').value).toBe('0');
+    expect(byLabel<HTMLInputElement>(scope, 'Scroll the preview with the editor').checked).toBe(
+      false,
+    );
+  });
+
+  /**
+   * **Zero has to be reachable.** It is the only way to say "no limit" in the
+   * settings file -- there is no null, and every positive number is a width --
+   * so a spinner whose `min` came from the clamp's lower bound (320) would make
+   * the off switch unreachable from the dialog that owns it. The owner reported
+   * the capped column as a defect twice before the default was turned off.
+   */
+  it('lets the width reach zero, and applies it as no limit', async () => {
+    const width = byLabel<HTMLInputElement>(group(mount(), 'Advanced'), 'Maximum text width');
+    expect(width.min).toBe('0');
+
+    width.value = '720';
+    width.dispatchEvent(new Event('input'));
+    expect(document.documentElement.style.getPropertyValue('--max-content-width')).toBe('720px');
+
+    width.value = '0';
+    width.dispatchEvent(new Event('input'));
+    expect(document.documentElement.style.getPropertyValue('--max-content-width')).toBe('none');
+
+    expect((await savedSettings()).editor.maxContentWidth).toBe(0);
+  });
+
+  it('routes sync scroll through the shared setter', async () => {
+    store.setState((prev) => ({ ...prev, syncScroll: true }));
+    const sync = byLabel<HTMLInputElement>(
+      group(mount(), 'Advanced'),
+      'Scroll the preview with the editor',
+    );
+
+    sync.checked = false;
+    sync.dispatchEvent(new Event('change'));
+
+    expect(store.getState().syncScroll).toBe(false);
+    await vi.waitFor(() => {
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].preview.syncScroll).toBe(false);
+    });
+  });
+});
+
+describe('Reset to default', () => {
+  function resetButton(dialog: HTMLElement): HTMLButtonElement {
+    return dialog.querySelector<HTMLButtonElement>('.settings-dialog__reset')!;
+  }
+
+  /**
+   * Next to Close, which is the one button people reach for on the way out --
+   * so the two are pushed to opposite ends of the row and the destructive one
+   * asks first. Position is asserted because "somewhere in the actions row" is
+   * satisfied by putting it flush against Close.
+   */
+  it('sits at the other end of the row from Close', () => {
+    const dialog = mount();
+    const actions = dialog.querySelector('.settings-dialog__actions')!;
+
+    expect([...actions.children].map((el) => el.className)).toEqual([
+      'settings-dialog__reset',
+      'settings-dialog__close',
+    ]);
+    expect(resetButton(dialog).textContent).toBe('Reset to default');
+  });
+
+  /**
+   * `confirmReset` is mocked rather than driven for real, and not to dodge the
+   * work: it calls `showModal()`, which jsdom does not implement, so the real
+   * one rejects before it can resolve to anything. confirmdialog.test.ts covers
+   * the prompt itself through `buildResetDialog`, the same split the rest of
+   * this app's dialogs already use. What is left here is the part that lives in
+   * this file: ask first, and emit only on yes.
+   */
+  it('asks before emitting anything', async () => {
+    const seen = captureCommands();
+    vi.mocked(confirmReset).mockResolvedValue(false);
+
+    resetButton(mount()).click();
+    await vi.waitFor(() => expect(confirmReset).toHaveBeenCalled());
+    await settle();
+
+    expect(seen.commands).toEqual([]);
+    seen.stop();
+  });
+
+  /**
+   * Declining has to mean nothing happened. The command is what triggers the
+   * write, so an implementation that emitted first and asked afterwards would
+   * still pass a test that only checked the prompt appeared.
+   */
+  it('emits settings.reset only once confirmed', async () => {
+    const seen = captureCommands();
+    vi.mocked(confirmReset).mockResolvedValue(true);
+
+    resetButton(mount()).click();
+    await vi.waitFor(() => expect(seen.commands).toEqual(['settings.reset']));
+
+    seen.stop();
+  });
+});
+
+describe('closeSettings', () => {
+  /**
+   * main.ts calls this before rebuilding the dialog after a reset. It has to go
+   * through the close path rather than removing the node: a pending write from
+   * a change made moments earlier is against the *pre-reset* file, and dropping
+   * it silently would be invisible.
+   */
+  it('flushes a pending write on the way out', async () => {
+    const dialog = mount();
+    const accent = control<HTMLInputElement>(dialog, 'input[type="color"]');
+    accent.value = '#0b0c0d';
+    accent.dispatchEvent(new Event('input'));
+    expect(LoadSettings).not.toHaveBeenCalled();
+
+    closeSettings();
+
+    // Synchronous, for the reason the sibling case in `closing` spells out: the
+    // 300 ms debounce would land inside a polling window on its own.
+    expect(LoadSettings).toHaveBeenCalled();
+    expect((await savedSettings()).appearance.accentColor).toBe('#0b0c0d');
+  });
+
+  it('takes the dialog out of the DOM', () => {
+    mount();
+
+    closeSettings();
+
+    expect(document.querySelector('.settings-dialog')).toBeNull();
+  });
+
+  /** Nothing open is not an error; main.ts calls it unconditionally. */
+  it('does nothing when no dialog is open', () => {
+    expect(() => closeSettings()).not.toThrow();
   });
 });

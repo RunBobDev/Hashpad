@@ -184,3 +184,41 @@ export function confirmSave(filename: string): Promise<SaveChoice> {
     dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
   });
 }
+
+/**
+ * The settings dialog's Reset button (SPEC §6.13).
+ *
+ * A prompt, because this button sits next to Close -- the one people reach for
+ * on the way out -- and there is no undo. What it costs a misclick is every
+ * setting in the file, including the toolbar's pinned buttons and the window's
+ * size, neither of which is visible in the dialog doing the resetting.
+ *
+ * Reset is *not* the primary button, unlike the other prompts here. Its two
+ * siblings ask about work the user just did and the likely answer is yes; this
+ * one asks whether to throw work away, and the likely answer is no. Escape
+ * declines, per `buildDialog`'s contract.
+ */
+export function buildResetDialog(onChoice: (reset: boolean) => void): HTMLDialogElement {
+  return buildDialog(
+    'Reset all settings to their defaults?\n\n' +
+      'This includes settings not shown here, such as the pinned toolbar ' +
+      'buttons and the window size — those take effect on the next launch. ' +
+      'It cannot be undone.',
+    [
+      { choice: true, label: 'Reset' },
+      { choice: false, label: 'Cancel', primary: true },
+    ],
+    false,
+    onChoice,
+  );
+}
+
+export function confirmReset(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialog = buildResetDialog(resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+    // Cancel, which is the primary here: the safe answer to "throw this away?".
+    dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
+  });
+}

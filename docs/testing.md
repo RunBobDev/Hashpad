@@ -1195,3 +1195,50 @@ with 113px scrolling inside the body.
       Close button stays visible at the bottom while it does.
 - [ ] **Clear any number field to retype it.** Nothing jumps to a default and
       nothing is written until you type a real value.
+
+## Checkpoint H.4c — Files, Advanced, and Reset to default
+
+The dialog is complete: four groups, 17 rows. Measured in
+`harness/settings.html` — one label column, one control column, 527px of scroll
+inside a body capped at 640px, and the actions row pinned below it so Close
+never walks off the bottom. Reset and Close sit 296px apart.
+
+Preview typography joined **Appearance** rather than getting a group of its own:
+SPEC §6.13 names four groups and Preview is not one of them, and these are fonts
+and sizes exactly like the three already there.
+
+- [ ] **Preview font and size.** With the preview open, both change it live.
+- [ ] **Image folder.** Change it, then paste an image into a saved document —
+      it lands in the new folder. Go re-reads the setting on every image save,
+      so this needs no restart.
+- [ ] **Encoding for new documents.** Ctrl+N picks it up; a file you *open*
+      keeps its own encoding, which is the whole point.
+- [ ] **Maximum text width.** Type a number and the column narrows live; set it
+      to **0** and the limit is gone. Zero has to be reachable from the spinner
+      — it is the only way to say "no limit", and the capped column was reported
+      as a defect twice.
+- [ ] **Scroll the preview with the editor.** Turn it off, scroll the editor:
+      the preview stays put. Turn it back on: it follows again.
+
+### Reset to default
+
+- [ ] **It asks first**, and **Cancel is the highlighted button** — the opposite
+      of the other prompts in this app, because this one asks whether to throw
+      work away rather than whether to keep it.
+- [ ] **Cancel changes nothing.** Check `settings.json` is untouched.
+- [ ] **Reset puts the running app back**: theme, accent, all four fonts, word
+      wrap, line numbers, tab width, the content width, sync scroll, the status
+      bar and the outline sidebar — without a restart. The dialog itself
+      rebuilds, showing the defaults rather than what you just discarded.
+- [ ] **Two things wait for the next launch**: the pinned toolbar buttons and
+      the toolbar's visibility. Both are written to disk immediately; the
+      toolbar seeds its list once at startup and nothing can re-seed it. The
+      prompt says so.
+- [ ] **The window size is reset on disk too** and applies next launch.
+
+### For your judgement, still not fixed
+
+- Input borders remain below WCAG's 3:1 for non-text UI (2.17 light, 1.69 dark),
+  and the Reset button's border is the same token pair. Unchanged from H.4a: it
+  is `--border-strong` on `--bg-elevated`, which the confirm dialog's buttons
+  already use, so it is an app-wide token question.

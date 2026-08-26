@@ -74,6 +74,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
     toolbar: { visible: true, pinned: ['blockquote', 'footnote'] },
   }),
   ReadFile: vi.fn(),
+  ResetSettings: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),

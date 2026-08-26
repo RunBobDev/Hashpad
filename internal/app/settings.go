@@ -302,3 +302,32 @@ func (a *App) SaveSettings(s Settings) error {
 	}
 	return SaveSettingsTo(path, s)
 }
+
+// ResetSettings writes the compiled-in defaults over the user's file and hands
+// them back, for the settings dialog's Reset button.
+//
+// It lives here rather than in the frontend because DefaultSettings is the one
+// definition of what "default" means. A TypeScript copy of that table would be
+// a second one, and the two would drift the first time a default changed --
+// which is not hypothetical: `migrateSettings` above exists precisely because a
+// default changed and the owner did not get it.
+//
+// Returns the settings as well as writing them, so the caller re-applies
+// exactly what is now on disk rather than its own idea of the defaults.
+//
+// The error is what the frontend sees: Wails maps a `(T, error)` method onto a
+// promise that *rejects* on a non-nil error and discards the value, so the
+// defaults returned alongside one never cross the bridge. That is the right
+// behaviour here anyway -- a reset that appeared to work and quietly did not
+// persist is worse than one that visibly failed and changed nothing -- and
+// frontend/src/main.ts's handler leaves the running app untouched on a
+// rejection. The pair is still returned for the Go-side caller and its test.
+func (a *App) ResetSettings() (Settings, error) {
+	defaults := DefaultSettings()
+
+	path, err := SettingsPath()
+	if err != nil {
+		return defaults, err
+	}
+	return defaults, SaveSettingsTo(path, defaults)
+}

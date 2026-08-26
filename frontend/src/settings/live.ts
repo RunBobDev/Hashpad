@@ -24,7 +24,7 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import type { app } from '../../wailsjs/go/models';
 import { setEditorBehaviour, setWordWrap } from '../editor/extensions';
 import { getEditorView, store } from '../state/appcontext';
-import type { Document, EditorBehaviour } from '../state/document';
+import type { Document, EditorBehaviour, Encoding } from '../state/document';
 
 /**
  * Reads settings fresh, applies `mutate`, writes them back.
@@ -109,5 +109,39 @@ export async function setDefaultViewModeSetting(mode: Document['viewMode']): Pro
 
   await persistSettings('view-mode', (settings) => {
     settings.editor.defaultViewMode = mode;
+  });
+}
+
+/**
+ * SPEC §6.13's `preview.syncScroll`.
+ *
+ * Store only -- no view to reconfigure. Both scroll handlers in
+ * `preview/pane.ts` read this field on every scroll event and neither can await
+ * an IPC round trip, which is why it is in the store rather than read from the
+ * file at the moment it is needed.
+ */
+export async function setSyncScrollSetting(syncScroll: boolean): Promise<void> {
+  store.setState((prev) => ({ ...prev, syncScroll }));
+
+  await persistSettings('sync-scroll', (settings) => {
+    settings.preview.syncScroll = syncScroll;
+  });
+}
+
+/**
+ * SPEC §6.13's `files.defaultEncoding` — what a document that has never been
+ * read from disk is written as.
+ *
+ * Changes no *open* document, and that is the whole design rather than a
+ * limitation. An opened file's encoding was detected on read and is preserved
+ * on save; overriding it from here would transcode the user's file the next
+ * time they pressed Ctrl+S. The status bar is where a single document's
+ * encoding is changed.
+ */
+export async function setDefaultEncodingSetting(encoding: Encoding): Promise<void> {
+  store.setState((prev) => ({ ...prev, defaultEncoding: encoding }));
+
+  await persistSettings('default-encoding', (settings) => {
+    settings.files.defaultEncoding = encoding;
   });
 }
