@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -135,4 +136,92 @@ func TestAssetHandlerWithNoActiveDocument(t *testing.T) {
 func assetRequest(dir, path string) *http.Request {
 	q := url.Values{"dir": {dir}, "path": {path}}
 	return httptest.NewRequest(http.MethodGet, assetRoute+"?"+q.Encode(), nil)
+}
+
+// TestFilepathIsLocalOnDeviceNames pins the *premise* AssetHandler's containment
+// check rests on, rather than the handler itself.
+//
+// It exists because the note that scheduled this change was wrong. The ledger
+// said `filepath.IsLocal` rejects "Windows device names (NUL)", full stop, and
+// that belief was carried for two checkpoints. It rejects the **bare** name and
+// accepts `NUL.png`. The handler's comment now says so; this is what will fail
+// if a future Go moves the line either way, so the comment cannot quietly rot
+// into another wrong claim.
+func TestFilepathIsLocalOnDeviceNames(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		// `NUL` is an ordinary filename everywhere else, so IsLocal is true for
+		// all of these and the cases below assert nothing.
+		t.Skip("device names are a Windows concept")
+	}
+
+	rejected := []string{"NUL", "nul", "CON", "COM1", "LPT1", "AUX", "PRN"}
+	for _, name := range rejected {
+		if filepath.IsLocal(name) {
+			t.Errorf("IsLocal(%q) = true; a bare device name must not be treated as a local path", name)
+		}
+	}
+
+	// Accepted, and this is the half the old note missed. Left as an assertion
+	// rather than a comment so the day it changes is a failing test and not a
+	// surprise.
+	accepted := []string{"NUL.png", "COM1.png", "assets/NUL.png"}
+	for _, name := range accepted {
+		if !filepath.IsLocal(name) {
+			t.Errorf("IsLocal(%q) = false; the handler's comment says this reaches os.Open, "+
+				"and if that is no longer true the comment needs rewriting", name)
+		}
+	}
+}
+
+// TestAssetHandlerRefusesDeviceNames covers what the suite had nothing for at
+// all: a request naming a Windows device rather than a file.
+//
+// `os.Open("COM1")` is an open serial port, and a read on one can block --
+// which in this handler means a request that never returns. Nothing here was
+// testing that, and the protection was split across two layers by accident
+// rather than design: the extension allow-list happened to refuse the bare
+// forms, and `os.Open` happened to refuse the dotted ones.
+func TestAssetHandlerRefusesDeviceNames(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("device names are a Windows concept")
+	}
+
+	dir := t.TempDir()
+	handler := AssetHandler()
+
+	// Bare names, refused before any filesystem call.
+	//
+	// **Two layers refuse these, and no test can tell them apart**: since H.9
+	// `filepath.IsLocal` rejects them, and the extension allow-list rejected
+	// them before that and still would -- a device name has no image extension.
+	// Reverting the `IsLocal` line leaves this test green, which was measured.
+	// That is not a hole in the case: what is worth pinning is that the route
+	// refuses them at all, which nothing tested before this existed.
+	for _, name := range []string{"NUL", "nul", "CON", "COM1", "LPT1", "AUX"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, assetRequest(dir, name))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("path %q: got %d, want %d", name, rec.Code, http.StatusForbidden)
+		}
+	}
+
+	// Dotted forms, which `IsLocal` accepts (see the test above) and which
+	// therefore run the whole handler and reach `os.Open`.
+	//
+	// **This is a tripwire, not a proof.** None of these files exists, so 404 is
+	// over-determined -- it is what a missing file returns too. What the case
+	// pins is the outcome that matters: the route never *serves* one. If a
+	// future Go stops refusing device names, `NUL.png` becomes an empty 200 and
+	// this fails; and if `COM1.png` ever opens a serial port, the read blocks
+	// and this times out. Either way the day it changes is loud.
+	for _, name := range []string{"NUL.png", "CON.png", "COM1.png", "assets/NUL.png"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, assetRequest(dir, name))
+		if rec.Code == http.StatusOK {
+			t.Errorf("path %q: got 200; a device name must never be served", name)
+		}
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("path %q: got %d, want %d", name, rec.Code, http.StatusNotFound)
+		}
+	}
 }

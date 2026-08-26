@@ -1373,3 +1373,19 @@ one branch. A `marker` draws the tick, keeps `role="menuitem"`, and puts
 - [ ] **Shift+F10 or the Menu key** on a focused item does the same as
       right-click. That is how Windows context menus are reachable without a
       mouse, and the toolbar row already relied on it.
+
+## Checkpoint H.9 — the asset handler's path checks
+
+Nothing user-visible changed. The route that serves images to the preview swapped
+a hand-rolled anchoring check for `filepath.IsLocal`, matching what `images.go`
+already used, and gained the device-name tests it had none of.
+
+Worth knowing rather than checking: the swap adds **no** protection. Measured
+input by input, every path `IsLocal` rejects was already refused by another
+layer — and a bare `NUL` was being refused by the *extension allow-list*, which
+is why that list is load-bearing security rather than a content-type nicety.
+
+- [ ] **Images still render in the preview** from a document's own folder and
+      from a subfolder of it. That is the whole behavioural surface here.
+- [ ] **A document saved at a drive root** (`C:\notes.md`) still shows its
+      images — that path shape is what the anchoring check exists for.

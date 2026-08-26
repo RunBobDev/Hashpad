@@ -118,10 +118,50 @@ func AssetHandler() http.Handler {
 		// resolves on the Linux build instead of 404ing.
 		rel = strings.ReplaceAll(rel, `\`, "/")
 
-		// A volume name means the path is anchored somewhere other than `dir`.
-		// filepath.IsAbs is not enough on Windows: `C:foo` is drive-relative
-		// and reports false.
-		if filepath.VolumeName(rel) != "" || strings.HasPrefix(rel, "/") {
+		// The path must be anchored at `dir` and nowhere else. `filepath.IsAbs`
+		// is not enough on Windows -- `C:foo` is drive-relative and reports
+		// false -- so this used to be a hand-rolled
+		// `VolumeName(rel) != "" || HasPrefix(rel, "/")`.
+		//
+		// `filepath.IsLocal` (Go 1.20+) is that pair in one stdlib call, and is
+		// the same primitive `images.go` uses for the asset folder -- so the two
+		// path boundaries in this package now agree rather than each carrying
+		// its own idea of containment.
+		//
+		// **It adds no protection, and that was measured rather than assumed.**
+		// Reverting this line to the hand-rolled pair leaves the whole suite
+		// green, because every input `IsLocal` rejects is already refused
+		// downstream: absolute and drive-relative paths by the pair it replaced,
+		// `../x.png` by the `..` check below, and a bare `NUL`/`CON`/`COM1` by
+		// the **extension allow-list** -- a device name has no image extension.
+		// This is a consistency change. Claiming otherwise would be the third
+		// wrong thing said about it (see below).
+		//
+		// What it does change is *which* layer refuses a bare device name:
+		// intent rather than the allow-list's side effect. That only matters the
+		// day someone widens the allow-list, which is exactly when nobody will
+		// be thinking about `NUL`.
+		//
+		// **Two corrections, both from measurement.** This was first written up
+		// as a security hole in `assets.go`; it is not, and never was. The note
+		// that then scheduled it claimed `IsLocal` rejects "Windows device names
+		// (NUL)", full stop -- on go1.26.5 it rejects the *bare* name and
+		// **accepts `NUL.png`**. So the file header's "every check below is
+		// lexical and runs before any filesystem access" has one exception:
+		// `NUL.png` passes every check here and is refused by `os.Open` inside
+		// `http.ServeFile`, which is the runtime's behaviour rather than this
+		// handler's intention.
+		//
+		// That exception is accepted rather than closed. Closing it means a
+		// hand-rolled reserved-name matcher, which has to get `COM0`, trailing
+		// dots and trailing spaces right to be worth anything, and getting it
+		// wrong is a likelier defect than the one it prevents. The residual is
+		// "a future Go stops refusing device names, and `COM1.png` blocks on a
+		// serial port" -- covered by `TestAssetHandlerRefusesDeviceNames`, which
+		// fails loudly if that day comes, and by
+		// `TestFilepathIsLocalOnDeviceNames`, which pins the premise this
+		// comment rests on so it cannot rot into a fourth wrong claim.
+		if !filepath.IsLocal(rel) {
 			http.Error(w, "", http.StatusForbidden)
 			return
 		}
