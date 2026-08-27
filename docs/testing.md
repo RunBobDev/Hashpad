@@ -1409,3 +1409,39 @@ not something this code can reduce; measured at 135.4 MB.
       start and WebView2 init are not. Measure a **second** launch — a freshly
       downloaded unsigned exe pays a one-off Defender and SmartScreen cost of
       seconds that has nothing to do with the app.
+
+## Checkpoint H.10 — one tab per file
+
+Reported by the owner: the same file could be opened repeatedly, each time
+getting its own tab. Two tabs over one path are two buffers that drift apart,
+and then whichever is saved second silently wins — so this was a data-loss
+shape, not a tidiness one.
+
+The existing tab is **focused** rather than the request being ignored. "Nothing
+happens" is right only when that tab is already in front; when it is a
+background tab, Open would otherwise appear to have done nothing at all.
+
+- [ ] **Open a file, then open the same file again.** No second tab, and the
+      first one comes to the front.
+- [ ] **With that file in a background tab**, open it again from the dialog.
+      It comes forward. This is the case where doing literally nothing would
+      have looked broken.
+- [ ] **Type into a file without saving, then open the same file again.** Your
+      unsaved text is still there — the tab is left completely alone rather than
+      re-read from disk. This is the one worth being sure of.
+- [ ] **Re-open the file that is already in front.** Nothing moves, including
+      the caret and the scroll position.
+- [ ] **Drop the same file on the window twice.** Same behaviour as the dialog —
+      both routes go through one guard.
+- [ ] **Close a file, open it again from the dialog, then Ctrl+Shift+T.** No
+      duplicate. Reopen-closed reaches the same guard.
+- [ ] **Two different files still get two tabs.**
+
+### Known ceiling, deliberate
+
+The comparison is an exact string match on the path. The same file spelled
+differently — `C:\A.md` against `C:\a.md`, or a path carrying `..` — would still
+open twice. Every route in arrives with a path the OS produced (the file dialog,
+a native drop, or a stored path that came from one of those), so a non-canonical
+spelling cannot arise from the UI. If it ever can, the fix is Go's
+`os.SameFile`, which compares file identity rather than text.

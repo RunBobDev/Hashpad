@@ -171,8 +171,47 @@ export function switchToDocument(id: string): void {
   }
 }
 
-/** Builds a new tab from freshly read file contents and switches to it. */
+/**
+ * Builds a new tab from freshly read file contents and switches to it — or
+ * switches to the tab that already holds this file.
+ *
+ * **One tab per file.** Reported by the owner: opening a file that was already
+ * open gave a second tab over the same path. That is worse than untidy — two
+ * tabs over one file are two buffers that drift apart, and then whichever is
+ * saved second silently wins.
+ *
+ * The existing tab is *focused* rather than the request being ignored. "Nothing
+ * happens" is only right when that tab is already in front; when it is a
+ * background tab, Open would otherwise appear to have done nothing at all.
+ * `switchToDocument` already no-ops on a redundant switch to the current tab,
+ * so the in-front case really does do nothing.
+ *
+ * Guarded here rather than in `openPaths`, which is where the dialog and the
+ * drop meet: `reopenLastClosed` reaches this function without going through
+ * that one, and it can produce a duplicate too -- close a file, open it again
+ * from the dialog, then press Ctrl+Shift+T. One guard where every route
+ * converges, rather than one per caller.
+ *
+ * **Exact string comparison, and that is a deliberate ceiling.** The same file
+ * spelled differently -- `C:\A.md` against `C:\a.md`, or a path carrying `..`
+ * -- would still open twice. Every route in arrives with a path the OS
+ * produced: the file dialog, a native drop, and `reopenLastClosed`'s record of
+ * a path that came from one of those. A non-canonical spelling cannot arise
+ * from the UI, so normalising here would be guarding against nothing. If it
+ * ever can, the fix is Go's `os.SameFile`, which compares file identity rather
+ * than text and gets case, symlinks and short names right in one call.
+ */
 export function openDocumentInNewTab(contents: FileContentsLike): void {
+  // No `doc.filePath !== null` guard beside this, and its absence is deliberate:
+  // `contents.path` is typed `string` and Go always sends one, so an untitled
+  // tab's `null` can never equal it. That guard was written, and mutation
+  // testing removed it -- deleting it broke nothing, because it could not.
+  const alreadyOpen = store.getState().documents.find((doc) => doc.filePath === contents.path);
+  if (alreadyOpen !== undefined) {
+    switchToDocument(alreadyOpen.id);
+    return;
+  }
+
   const editorState = EditorState.create({
     doc: contents.content,
     extensions: buildExtensions(

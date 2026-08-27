@@ -981,3 +981,130 @@ describe('documentDirOf', () => {
     expect(documentDirOf('/home/user/notes/post.md')).toBe('/home/user/notes');
   });
 });
+
+/**
+ * One tab per file (H.10).
+ *
+ * Reported by the owner: the same file could be opened over and over, each time
+ * getting its own tab. Two tabs over one path are two buffers that drift apart,
+ * and then whichever is saved second silently wins -- so this is a data-loss
+ * shape, not a tidiness one.
+ */
+describe('opening a file that is already open', () => {
+  const contents = {
+    path: 'C:/notes/a.md',
+    content: 'hello',
+    encoding: 'utf-8',
+    lineEnding: 'crlf',
+  };
+
+  it('adds no second tab', () => {
+    openDocumentInNewTab(contents);
+    expect(store.getState().documents).toHaveLength(1);
+
+    openDocumentInNewTab(contents);
+
+    expect(store.getState().documents).toHaveLength(1);
+  });
+
+  it('switches to the tab that already holds it', () => {
+    openDocumentInNewTab(contents);
+    const first = activeDocument(store.getState())!.id;
+    openDocumentInNewTab({ ...contents, path: 'C:/notes/b.md', content: 'other' });
+    expect(activeDocument(store.getState())!.id).not.toBe(first);
+
+    openDocumentInNewTab(contents);
+
+    expect(activeDocument(store.getState())!.id).toBe(first);
+  });
+
+  /**
+   * **The one that matters.** A fix that replaced the open document with the
+   * freshly read contents would pass every other case here and quietly throw
+   * away whatever the user had typed but not saved. The existing tab is left
+   * completely alone.
+   */
+  it('does not overwrite unsaved changes in that tab', () => {
+    openDocumentInNewTab(contents);
+    const id = activeDocument(store.getState())!.id;
+    // Stand in for typing: the buffer diverges from what is on disk.
+    store.setState((prev) => ({
+      ...prev,
+      documents: prev.documents.map((doc) =>
+        doc.id === id
+          ? {
+              ...doc,
+              editorState: doc.editorState.update({ changes: { from: 5, insert: ' world' } }).state,
+            }
+          : doc,
+      ),
+    }));
+    expect(isDirty(store.getState().documents[0]!)).toBe(true);
+
+    // The file on disk has moved on too -- so a re-read would visibly clobber.
+    openDocumentInNewTab({ ...contents, content: 'something else entirely' });
+
+    const doc = store.getState().documents[0]!;
+    expect(doc.editorState.doc.toString()).toBe('hello world');
+    expect(isDirty(doc)).toBe(true);
+  });
+
+  /**
+   * Re-opening the tab that is already in front must be a genuine no-op --
+   * `switchToDocument` skips a redundant swap, and without that this would
+   * reinitialise the view and throw away the caret and scroll position.
+   */
+  it('leaves the view untouched when that tab is already in front', () => {
+    openDocumentInNewTab(contents);
+    const before = getEditorView().state;
+
+    openDocumentInNewTab(contents);
+
+    expect(getEditorView().state).toBe(before);
+  });
+
+  it('still opens a different path in its own tab', () => {
+    openDocumentInNewTab(contents);
+
+    openDocumentInNewTab({ ...contents, path: 'C:/notes/b.md' });
+
+    expect(store.getState().documents).toHaveLength(2);
+  });
+
+  /**
+   * Opening a file while untitled tabs are around gives it its own tab rather
+   * than hijacking one of theirs.
+   *
+   * True by *typing* rather than by a guard: `contents.path` is a `string` and
+   * an untitled tab's `filePath` is `null`, so they cannot compare equal. An
+   * explicit null check was written here and deleted -- removing it broke
+   * nothing, because it could not. The case stays because the behaviour is
+   * worth stating even where the type system is what enforces it.
+   */
+  it('does not treat untitled documents as already open', () => {
+    store.setState((prev) => ({
+      ...prev,
+      documents: [makeUntitledDocument(), makeUntitledDocument()],
+      activeDocumentId: null,
+    }));
+
+    openDocumentInNewTab(contents);
+
+    expect(store.getState().documents.filter((doc) => doc.filePath !== null)).toHaveLength(1);
+  });
+
+  /**
+   * `reopenLastClosed` reaches `openDocumentInNewTab` without going through
+   * `openPaths`, so a guard placed in the latter would miss this: close a file,
+   * open it again from the dialog, then press Ctrl+Shift+T.
+   */
+  it('is not duplicated by reopening a closed tab', async () => {
+    vi.mocked(ReadFile).mockResolvedValue(contents as never);
+    store.setState((prev) => ({ ...prev, closedPaths: [contents.path] }));
+    openDocumentInNewTab(contents);
+
+    await reopenLastClosed();
+
+    expect(store.getState().documents).toHaveLength(1);
+  });
+});
