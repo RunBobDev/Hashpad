@@ -41,6 +41,7 @@ import { mountShortcuts } from './ui/shortcuts';
 import { closeSettings, openSettings } from './ui/settingsdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
+import { mountOpenWith, openPendingFiles } from './files/openwith';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
 import {
@@ -445,6 +446,18 @@ async function bootstrap(): Promise<void> {
       console.error('hashpad: failed to restore the saved view mode; opening in source mode', err);
     }
     ShowWindow();
+
+    // The files this launch was given, opened *after* the window is up (SPEC
+    // §6.4). After, on purpose, twice over: reading and decoding a file has no
+    // business sitting on the path to first paint, and everything above has to
+    // have run first or the new tab would be minted with the compiled-in view
+    // mode and encoding rather than the saved ones -- the same catching-up the
+    // startup document needed.
+    //
+    // Fire-and-forget: it handles its own failures, and nothing here waits on
+    // it. That also keeps a file that cannot be read from stranding the window
+    // behind a rejected promise.
+    void openPendingFiles();
   }
 }
 void bootstrap();
@@ -473,6 +486,13 @@ mountAutosave();
 // mounted here rather than on any one region; see ui/filedrop.ts for why the
 // paths have to come from Wails rather than the DOM `drop` event.
 mountFileDrop();
+
+// Launching Hashpad again — double-clicking a second .md in Explorer — hands
+// its files to this window instead of starting another app (SPEC §6.4).
+// Mounted here rather than from bootstrap so that a second launch arriving
+// *during* startup is still heard; anything earlier than this waits in Go's
+// queue and comes through `openPendingFiles` above. See files/openwith.ts.
+mountOpenWith();
 
 // F11's state, read once from the window rather than assumed (ui/fullscreen.ts).
 // Fire-and-forget with its own error handling inside: nothing downstream waits

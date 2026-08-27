@@ -43,6 +43,11 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('../wailsjs/go/app/App', () => ({
+  // bootstrap asks Go which files this launch was given (files/openwith.ts).
+  // Without it the default parameter throws on property access, which happens
+  // outside that function's try/catch and lands as an unhandled rejection --
+  // the same way OnFileDrop announced itself in the runtime mock above.
+  PendingFiles: vi.fn().mockResolvedValue([]),
   ConfirmQuit: vi.fn(),
   ShowWindow: vi.fn(),
   LoadSettings: vi.fn().mockResolvedValue({

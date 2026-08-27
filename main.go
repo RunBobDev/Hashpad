@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 
 	"hashpad/internal/app"
 	"hashpad/internal/platform"
@@ -14,6 +15,17 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+// singleInstanceID names the lock that makes a second launch hand its files to
+// the first (SPEC §6.4). The value is arbitrary but must never change: Wails
+// derives a mutex name and a window class from it, so a different string is a
+// different application as far as the lock is concerned, and two builds that
+// disagree would happily run side by side.
+//
+// PLATFORM: Windows uses a named mutex and a message-only window; Linux uses a
+// lock file under the user's runtime directory. Wails picks per platform, so
+// this one constant serves both.
+const singleInstanceID = "hashpad-8f3a1c62-5d94-4b0e-9a7f-2c6e1d0b4a83"
 
 func main() {
 	// Before the webview exists, so every process it spawns inherits the job.
@@ -27,6 +39,16 @@ func main() {
 	}
 
 	application := app.New()
+
+	// The files this launch was asked to open (SPEC §6.4), collected before
+	// wails.Run because Explorer's double-click arrives as an argument and
+	// there is no other moment to read it.
+	//
+	// os.Getwd's error is deliberately ignored: an empty cwd leaves relative
+	// arguments relative, and the os.Stat inside resolves them against the
+	// process's working directory — which is the answer os.Getwd failed to give.
+	cwd, _ := os.Getwd()
+	application.OpenFromCommandLine(os.Args[1:], cwd)
 
 	err := wails.Run(&options.App{
 		Title:  "Hashpad",
@@ -69,7 +91,21 @@ func main() {
 		StartHidden:   true,
 		OnStartup:     application.Startup,
 		OnBeforeClose: application.OnBeforeClose,
-		Bind:          []interface{}{application},
+		// SPEC §6.4: double-clicking a .md in Explorer must reach the window
+		// that is already open rather than start a second Hashpad. Wails takes
+		// the lock, exits the second process, and forwards its arguments here.
+		//
+		// Wrapped in a closure rather than pointing at a method with this
+		// signature, so `internal/app` never imports Wails' options package —
+		// and so the bound method it does expose takes two plain arguments
+		// instead of putting a Wails struct into the generated TypeScript.
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: singleInstanceID,
+			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
+				application.OpenFromCommandLine(data.Args, data.WorkingDirectory)
+			},
+		},
+		Bind: []interface{}{application},
 	})
 	if err != nil {
 		// wails.Run only returns on failure to start (for example, the webview

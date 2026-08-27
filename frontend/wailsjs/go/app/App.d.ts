@@ -6,6 +6,10 @@ export function ConfirmQuit():Promise<void>;
 
 export function LoadSettings():Promise<app.Settings>;
 
+export function OpenFromCommandLine(arg1:Array<string>,arg2:string):Promise<void>;
+
+export function PendingFiles():Promise<Array<string>>;
+
 export function ReadFile(arg1:string):Promise<app.FileContents>;
 
 export function ResetSettings():Promise<app.Settings>;

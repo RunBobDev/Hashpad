@@ -10,6 +10,14 @@ export function LoadSettings() {
   return window['go']['app']['App']['LoadSettings']();
 }
 
+export function OpenFromCommandLine(arg1, arg2) {
+  return window['go']['app']['App']['OpenFromCommandLine'](arg1, arg2);
+}
+
+export function PendingFiles() {
+  return window['go']['app']['App']['PendingFiles']();
+}
+
 export function ReadFile(arg1) {
   return window['go']['app']['App']['ReadFile'](arg1);
 }

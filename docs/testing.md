@@ -1445,3 +1445,68 @@ open twice. Every route in arrives with a path the OS produced (the file dialog,
 a native drop, or a stored path that came from one of those), so a non-canonical
 spelling cannot arise from the UI. If it ever can, the fix is Go's
 `os.SameFile`, which compares file identity rather than text.
+
+## Checkpoint I.1 — open-with and single instance
+
+SPEC §6.4 asks that double-clicking a `.md` in Explorer open it in the running
+Hashpad rather than launch a second one. Nothing implemented it: `main.go` never
+read `os.Args`, so registering file associations in I.3 would have produced an
+app that launched on a double-click and showed an empty untitled tab.
+
+The file associations are not registered yet — that is I.2 and I.3 — so these
+checks drive the same code from a terminal instead. Every route the association
+will use goes through the same two calls.
+
+Run these from the folder holding `hashpad.exe`, with a `notes.md` and an
+`other.md` somewhere handy.
+
+### One launch
+
+- [ ] **`.\hashpad.exe notes.md`** opens that file in a tab, not an untitled one.
+- [ ] **`.\hashpad.exe notes.md other.md`** opens both, in that order.
+- [ ] **`.\hashpad.exe C:\full\path\to\notes.md`** works the same as the relative
+      form.
+- [ ] **`.\hashpad.exe`** with no argument still opens an untitled tab, as before.
+- [ ] **`.\hashpad.exe missing.md`** opens an untitled tab and does not hang or
+      error — the path is dropped because there is no file there.
+- [ ] **`.\hashpad.exe some-folder`** does the same. Only regular files open.
+
+### A second launch, while it is already running
+
+This is the part SPEC §6.4 is actually about.
+
+- [ ] **With Hashpad open, run `.\hashpad.exe other.md`.** No second window
+      appears. `other.md` opens in the window already running, and that window
+      comes to the front.
+- [ ] **Minimise Hashpad, then run `.\hashpad.exe other.md`.** It restores rather
+      than blinking on the taskbar. Both the unminimise and the show are needed —
+      a minimised window is already "shown" as far as the show call is concerned.
+- [ ] **With Hashpad open, run `.\hashpad.exe` with no argument.** The window
+      still comes forward. Launching Hashpad is a request to see Hashpad, even
+      without a file.
+- [ ] **Run `.\hashpad.exe notes.md` twice while it is running.** The second one
+      switches to the existing tab rather than opening a duplicate — H.10's rule,
+      reached through this route too.
+- [ ] **Type into a tab without saving, then launch again with that same file.**
+      Your unsaved text is still there.
+- [ ] **You can no longer open two Hashpad windows.** That is the point of the
+      lock and what SPEC §6.4 asks for, but it is a change from every build
+      before this one.
+
+### The race worth trying
+
+- [ ] **Double-click `hashpad.exe`, and while it is still starting, launch it
+      again with a file.** The file opens. This is the case the code goes out of
+      its way to handle: Wails creates the window that receives a second launch's
+      message at the *top* of its startup and tells our code the app has started
+      at the *bottom*, with the whole of WebView2's initialisation in between. A
+      launch landing in that gap has nowhere to send an event, so Go queues the
+      paths and the frontend collects them when it comes up. Getting this wrong
+      is not a lost file but a crash — the running app would panic on a context
+      that does not exist yet.
+
+### Known ceiling, deliberate
+
+`hashpad.exe --anything` treats the argument as a path, finds no file there, and
+drops it. There are no command-line options, so there is nothing to confuse it
+with; if options are ever added, they have to be parsed before this runs.

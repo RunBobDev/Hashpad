@@ -19,7 +19,21 @@ const showWindowFallbackDelay = 3 * time.Second
 
 // App is the receiver for every method exposed to the frontend.
 type App struct {
-	ctx context.Context
+	// ctx is written once by Startup and read by every runtime call.
+	//
+	// ctxMu guards only the pair that genuinely race: Startup's write, and
+	// OpenFromCommandLine's read from the goroutine Wails pumps single-instance
+	// messages on, which can run before Startup has been dispatched at all
+	// (openwith.go explains when). Every other reader here is reachable only
+	// from the frontend, which does not exist until after Startup has returned,
+	// so those read the field directly.
+	ctx   context.Context
+	ctxMu sync.Mutex
+
+	// pendingFiles holds paths waiting for the frontend to collect them, and
+	// pendingMu guards it. See PendingFiles.
+	pendingMu    sync.Mutex
+	pendingFiles []string
 
 	// quitApproved is set by ConfirmQuit once the frontend has resolved every
 	// dirty document. See OnBeforeClose for why this exists.
@@ -40,8 +54,21 @@ func New() *App {
 // Startup stores the Wails context, which the runtime methods require.
 // Exported because Wails calls it from main.
 func (a *App) Startup(ctx context.Context) {
+	a.ctxMu.Lock()
 	a.ctx = ctx
+	a.ctxMu.Unlock()
+
 	go a.showWindowEventually()
+}
+
+// startupContext reports the context Startup stored, or nil if it has not run.
+// Only OpenFromCommandLine needs to ask — see the field's comment for why the
+// rest of this file does not.
+func (a *App) startupContext() context.Context {
+	a.ctxMu.Lock()
+	defer a.ctxMu.Unlock()
+
+	return a.ctx
 }
 
 // ShowWindow reveals the window, which starts hidden so the frontend can paint
