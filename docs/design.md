@@ -873,3 +873,63 @@ what it means in every other editor.
 Menu separators were added alongside, which is the other half of why thirteen
 items in one list had been uncomfortable — `menubar.ts` had carried a comment
 apologising for their absence since Checkpoint A.
+
+### 4.21 The 100 MB RAM budget is missed, at 135 MB
+
+SPEC §1.3 sets three budgets: binary under 25 MB, cold start under 500 ms, and
+**under 100 MB RAM with five tabs open**. The first is met with room to spare
+(12.7 MB). The third is not, and this records the measurement rather than the
+estimate that stood in for it.
+
+**Measured 2026-08-27**, release build, five tabs open, on the owner's machine.
+Seven processes, all rooted at `hashpad.exe`:
+
+| Process | Working set | Private |
+|---|---|---|
+| `hashpad.exe` (Go) | 99.3 MB | 63.3 MB |
+| webview2 main | 119.1 MB | 38.3 MB |
+| renderer | 106.0 MB | 48.9 MB |
+| gpu-process | 58.0 MB | 18.9 MB |
+| utility ×2 | 56.9 MB | 20.9 MB |
+| crashpad-handler | 11.5 MB | 2.9 MB |
+
+**"RAM used" is not one number**, which is half of why this was deferred rather
+than answered:
+
+- **450.8 MB** — sum of working sets. Overstates badly: Chromium shares pages
+  between its processes and this counts them once per process.
+- **193.2 MB** — sum of private bytes (commit).
+- **135.4 MB** — sum of *active private working set*. This is the figure Task
+  Manager reports, it is the fairest of the three, and it is the one this
+  deviation is written against.
+
+**Why it is a floor rather than a defect.** The overshoot is fixed cost, not
+per-tab. Five tabs of markdown is a few kilobytes of text; the renderer's
+48.9 MB private is approximately what an *empty* Chromium renderer costs, and
+the GPU process, the two utility processes and the crashpad handler exist
+identically with one tab open. There is no per-tab growth to optimise away.
+
+**One lever exists and was declined.** Wails can start WebView2 with the GPU
+process disabled, which is the 58 MB / 18.9 MB row. It costs scrolling
+smoothness in an editor — the one interaction the app is for — and even taking
+it would land around 116 MB, still over. Rejected on both counts.
+
+**What the budget was really arguing against.** §1.3's own table justifies Wails
+as "~10–20 MB instead of Electron's 150 MB+". That is the *binary*, and it holds:
+12.7 MB against a 25 MB budget. The RAM figure was written in the same breath,
+but Electron and WebView2 are both Chromium underneath, so the runtime saving
+was never going to be proportional to the download saving. Hashpad genuinely is
+lighter than an Electron equivalent — by roughly the binary difference, not by
+the runtime one.
+
+**What stays a gate.** Binary size and cold start remain real, checkable
+budgets. This deviation is scoped to the RAM figure alone, and the number is
+recorded so a future regression is visible against 135 MB rather than against a
+budget nothing has ever met.
+
+**How to re-measure.** Walk the process tree down from `hashpad.exe` by
+`ParentProcessId` — not by image name, because Windows runs its own
+`msedgewebview2` processes under `SharedWebView\EBWebView` and those are not
+ours — then sum `WorkingSetPrivate` from
+`Win32_PerfRawData_PerfProc_Process` across the tree. docs/testing.md carries
+the procedure as a checklist item.

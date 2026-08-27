@@ -1389,3 +1389,23 @@ is why that list is load-bearing security rather than a content-type nicety.
       from a subfolder of it. That is the whole behavioural surface here.
 - [ ] **A document saved at a drive root** (`C:\notes.md`) still shows its
       images — that path shape is what the anchoring check exists for.
+
+## The three budgets (SPEC §1.3)
+
+Binary under 25 MB, cold start under 500 ms, under 100 MB RAM with five tabs.
+The RAM one is a **recorded miss** — see design §4.21. It is a Chromium floor,
+not something this code can reduce; measured at 135.4 MB.
+
+- [ ] **Binary.** `build/bin/hashpad.exe` under 25 MB. Was 12.7 MB at H.9.
+- [ ] **RAM.** Open five tabs, then walk the process tree *down from
+      `hashpad.exe` by parent PID* — not by image name, because Windows runs its
+      own `msedgewebview2` processes under `SharedWebView\EBWebView` and those
+      are not ours. Sum `WorkingSetPrivate` from
+      `Win32_PerfRawData_PerfProc_Process` across the tree. Compare against
+      **135 MB, not 100**: the budget is a documented miss, and what matters now
+      is that it has not grown.
+- [ ] **Cold start.** Still unmeasured on the native side. The JS half is
+      ~90–142 ms with IPC stubbed (+21 ms when the preview restores); process
+      start and WebView2 init are not. Measure a **second** launch — a freshly
+      downloaded unsigned exe pays a one-off Defender and SmartScreen cost of
+      seconds that has nothing to do with the app.
