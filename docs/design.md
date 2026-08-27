@@ -933,3 +933,77 @@ budget nothing has ever met.
 ours — then sum `WorkingSetPrivate` from
 `Win32_PerfRawData_PerfProc_Process` across the tree. docs/testing.md carries
 the procedure as a checklist item.
+
+### 4.22 UPX compression is skipped
+
+SPEC §9 says to build with UPX "if it doesn't trip antivirus heuristics — test
+this". The owner's decision, 2026-08-27, is to skip it. It was not measured;
+the argument below did not depend on the measurement.
+
+**What UPX would buy.** Go binaries typically compress 55–65%, so 12.7 MB would
+land somewhere near 5 MB. Estimated, not measured.
+
+**Why that is worth nothing here.** SPEC §1.3's binary budget is 25 MB and the
+build sits at 12.7 MB, winning by 12 MB. The other two budgets are the ones
+under pressure, and UPX works against both:
+
+- **Cold start.** UPX prepends a stub that decompresses the entire image into
+  memory before `main` runs, on every launch. §7 called cold start the tight
+  budget of the three.
+- **RAM.** The decompressed image is private dirty memory rather than a
+  file-backed mapping Windows can drop under pressure. §4.21 already records
+  that budget missed at 135 MB.
+
+So the trade is to spend the two budgets being lost to improve the one being
+won comfortably.
+
+**On the antivirus question**, which is what SPEC asked to test. UPX is a
+runtime unpacker, which is structurally what packed malware uses to hide a
+payload from a static scanner, and it is the commonest packer in commodity
+malware — so heuristics weight it heavily. The tells are concrete: `UPX0`/`UPX1`
+section names, an import table holding little more than `LoadLibraryA` and
+`GetProcAddress`, an entry point in a section with no raw data, near-maximum
+entropy. There is no way to have those and not look like a packer.
+
+**SmartScreen is a separate thing and is not about packing at all.** It is
+reputation, keyed on the exact binary hash, and an unsigned build starts at zero
+every time it is rebuilt. That is what the owner felt as a slow first launch
+during Checkpoint H. The fix for it is a code-signing certificate, which SPEC §9
+already rules out for now; a certificate would also soften the heuristic
+question, but a signed packed binary is still a packed binary.
+
+Testing this honestly would mean testing against real antivirus engines rather
+than one, which is not something this project can do. Skipping is recorded here
+rather than left as an untested build flag.
+
+### 4.23 Four file associations, not two
+
+SPEC §9 says the installer registers `.md` and `.markdown`. It registers four:
+`.md`, `.markdown`, `.mdown`, `.mkd`. The owner's decision, 2026-08-27.
+
+SPEC §6.4 lists eight extensions Hashpad *opens*. That list and the list it
+*claims from Explorer* are different questions, and the eight split cleanly:
+
+| | Extensions | Claimed? |
+|---|---|---|
+| The same format under different names | `.md`, `.markdown`, `.mdown`, `.mkd` | **Yes** |
+| Markdown plus something Hashpad cannot run | `.mdx` (JSX), `.qmd` (Quarto), `.rmd` (R Markdown) | No |
+| Not markdown at all | `.txt` | No |
+
+The first four are interchangeable — rename a file between them and nothing
+about its content changes — and **nothing else on Windows claims any of them**,
+so registering all four takes no file type away from another program and means
+an old `.mkd` from some 2012 project opens on a double-click like any other.
+
+The last four all have real owners. `.txt` is Notepad's. `.mdx` is normally a
+code editor's. `.qmd` and `.rmd` belong to Quarto and RStudio, and Hashpad
+cannot execute the code chunks that are the entire point of those formats —
+claiming them would be actively wrong, not merely presumptuous.
+
+Registration stays **opt-in at install time** either way, as SPEC §9 requires.
+
+The gap this opens is that `wails.json` and `ui/filedrop.ts` now hold two
+different lists that must stay compatible: an extension registered but not
+opened would launch Hashpad on a double-click and then silently do nothing.
+`files/openwith.test.ts` reads `wails.json` and asserts every associated
+extension is one the frontend accepts.

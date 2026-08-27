@@ -4,7 +4,7 @@ Manual test checklist and recorded measurement baselines for Hashpad, per checkp
 
 ## Checkpoint A baseline
 
-Recorded 2026-07-29 on a VMware VM (virtual GPU, 8 GB RAM) via `pwsh -File scripts/measure.ps1` against `build/bin/hashpad.exe`.
+Recorded 2026-07-29 on a VMware VM (virtual GPU, 8 GB RAM) via `pwsh -File scripts/measure.ps1` against `build/bin/Hashpad.exe`.
 
 **Correction:** the figures originally recorded here (705.7 MB / 404.5 MB whole-tree memory over 13 processes, 2532.3 ms average cold start) were wrong and have been replaced below. The memory figures counted every `msedgewebview2.exe` on the machine by name, which on this VM also swept in ~6 processes belonging to Windows' own Widgets Board shell feature (~390 MB of unrelated working set). The cold-start figure was an unweighted mean over a run where `WaitForInputIdle` returned wildly inconsistently, which a single average hid rather than exposed. `scripts/measure.ps1` was fixed to scope memory to Hashpad's actual descendant process tree and to report the cold-start distribution with a median-based verdict; see that script's header comment for the mechanism. **Do not compare future checkpoints against the old numbers named in this correction (705.7 MB / 404.5 MB, 2532.3 ms) — they were never real.**
 
@@ -22,8 +22,8 @@ performance.now() mark back to Go over the Wails runtime bridge -- a
 follow-up, not implemented by this script. Treat the verdict above as provisional.
 
 Memory, one empty document (budget 100 MB with five tabs):
-  hashpad.exe working set    : 25.4 MB
-  whole tree working set     : 310.9 MB  (6 descendant processes, 7 total incl. hashpad.exe)
+  Hashpad.exe working set    : 25.4 MB
+  whole tree working set     : 310.9 MB  (6 descendant processes, 7 total incl. Hashpad.exe)
   whole tree private commit  : 169.7 MB
   process breakdown          : hashpad x1, msedgewebview2 x6
   resolved PIDs              : 6772, 4116, 9596, 12700, 8972, 5524, 8768
@@ -37,8 +37,8 @@ Startup figures will be pessimistic versus physical hardware.
 
 **Reading this baseline:**
 
-- Binary size and `hashpad.exe`'s own working set are clean measurements, unaffected by either defect. Both pass their budgets by a wide margin.
-- Memory is now scoped to the actual process tree launched by this script: starting from the launched `hashpad.exe` PID, the script walks `Win32_Process` parent/child links transitively (any depth, not just direct children) to find the WebView2 browser, renderer, GPU, and utility processes that are really Hashpad's. That resolved to 6 descendant `msedgewebview2.exe` processes (7 total including `hashpad.exe`), listed above by PID for auditability. Net Hashpad-attributable usage is 310.9 MB working set / 169.7 MB private commit — materially lower than the old contaminated 705.7 MB / 404.5 MB, and close to the ~300 MB / ~170 MB estimate manually derived from the earlier run, which is a good sanity check that the fix is measuring the right thing. Both figures remain over the 100 MB budget. Which of the three memory figures the budget refers to is still an open question, per `scripts/measure.ps1`'s own doc comment — this baseline reports all three rather than picking one.
+- Binary size and `Hashpad.exe`'s own working set are clean measurements, unaffected by either defect. Both pass their budgets by a wide margin.
+- Memory is now scoped to the actual process tree launched by this script: starting from the launched `Hashpad.exe` PID, the script walks `Win32_Process` parent/child links transitively (any depth, not just direct children) to find the WebView2 browser, renderer, GPU, and utility processes that are really Hashpad's. That resolved to 6 descendant `msedgewebview2.exe` processes (7 total including `Hashpad.exe`), listed above by PID for auditability. Net Hashpad-attributable usage is 310.9 MB working set / 169.7 MB private commit — materially lower than the old contaminated 705.7 MB / 404.5 MB, and close to the ~300 MB / ~170 MB estimate manually derived from the earlier run, which is a good sanity check that the fix is measuring the right thing. Both figures remain over the 100 MB budget. Which of the three memory figures the budget refers to is still an open question, per `scripts/measure.ps1`'s own doc comment — this baseline reports all three rather than picking one.
 - Cold start is now reported as a full distribution rather than a single mean, because the mean hides the exact thing that matters here: `WaitForInputIdle` is a weak proxy for "window painted" (it returns once the process has a message loop pumping, which can precede first paint, or in rarer cases can hit its own timeout), and its per-run noise is the signal that it's unreliable, not something to average away. This run's median is 59.6 ms against per-run timings of 211.4, 74, 59.6, 52.1, 50.9 ms — a real spread, though nowhere near as extreme as the 47x (53.5 ms to 2532.3 ms average) seen on the run that produced the old, discarded numbers. The PASS verdict above is based on the median and is explicitly labeled provisional: a trustworthy first-paint number requires the frontend to report a `performance.now()` mark back to Go over the Wails runtime bridge, which is a follow-up and not implemented here. Cold start is measured on a VM with a virtual GPU (VMware SVGA 3D), which the script detects and flags; figures here should not be taken as a verdict on real hardware without re-measuring there.
 
 The app closed cleanly on every run via `CloseMainWindow()`; the `Kill()` fallback did not fire (verified separately in the prior run: `CloseMainWindow()` returned `True` and `WaitForExit(5000)` succeeded in ~82 ms on the frameless window).
@@ -46,7 +46,7 @@ The app closed cleanly on every run via `CloseMainWindow()`; the `Kill()` fallba
 ## Checkpoint B manual checks
 
 Automation cannot drive real file dialogs, real files on disk, or a real OS
-close request, so the following need a human running `build/bin/hashpad.exe`.
+close request, so the following need a human running `build/bin/Hashpad.exe`.
 
 - [ ] Open a CRLF file, make no edits, save it, and confirm the bytes on disk are unchanged (byte-identical round trip).
 - [ ] Open a UTF-8-BOM file, make an edit, save, and confirm the BOM is still present in the saved file.
@@ -57,7 +57,7 @@ close request, so the following need a human running `build/bin/hashpad.exe`.
 
 ## Checkpoint C manual checks
 
-Automation cannot drive a real OS-level drag gesture, real horizontal scroll physics, or real hover/pointer timing, so the following need a human running `build/bin/hashpad.exe`.
+Automation cannot drive a real OS-level drag gesture, real horizontal scroll physics, or real hover/pointer timing, so the following need a human running `build/bin/Hashpad.exe`.
 
 - [ ] Drag a tab past several others and confirm the order sticks (survives switching away and back, and survives closing an unrelated tab).
 - [ ] Open enough tabs to trigger horizontal scrolling in the strip.
@@ -72,7 +72,7 @@ Automation cannot drive a real OS-level drag gesture, real horizontal scroll phy
 
 ## Checkpoint D manual checks
 
-Automation cannot drive a real Windows theme change, a real cold-start paint, or (per Task 5's own investigation, recorded in `.superpowers/sdd/task-5-report.md`) fully exercise CodeMirror's async grammar-loading path under jsdom, so the following need a human running `build/bin/hashpad.exe`.
+Automation cannot drive a real Windows theme change, a real cold-start paint, or (per Task 5's own investigation, recorded in `.superpowers/sdd/task-5-report.md`) fully exercise CodeMirror's async grammar-loading path under jsdom, so the following need a human running `build/bin/Hashpad.exe`.
 
 - [ ] With Hashpad running, switch the Windows theme (Settings > Personalization > Colors > Choose your mode) and confirm the app's own theme follows within about a second -- Hashpad re-reads the system theme on window focus (SPEC §6.12's deviation, recorded in the plan's self-review: this is focus-triggered, not a live OS event subscription, so switching the theme while Hashpad is the focused window and waiting won't update it until you focus away and back).
 - [ ] Set the Windows theme to Dark, fully close Hashpad, then relaunch it, and confirm there is no flash of a light-themed window before the dark theme applies (a flash means the theme is being applied after first paint rather than before it).
@@ -90,7 +90,7 @@ Automation cannot drive a real Windows theme change, a real cold-start paint, or
 
 Automation cannot press a real key on a real keyboard layout, judge whether a
 16×16 icon reads at a glance, or drive a real right-click, so the following
-need a human running `build/bin/hashpad.exe`.
+need a human running `build/bin/Hashpad.exe`.
 
 **Layout.**
 
@@ -193,7 +193,7 @@ Binary size      : 12.53 MB  (budget 25 MB) [PASS]
 Cold start        : median 53.8 ms  (avg 262.8, min 46.1, max 1103.8 ms, n=5)
   per-run (ms)    : 1103.8, 52.7, 46.1, 53.8, 57.5
 Memory, one empty document:
-  hashpad.exe working set    : 26.8 MB
+  Hashpad.exe working set    : 26.8 MB
   whole tree working set     : 327 MB  (6 descendant processes, 7 total)
   whole tree private commit  : 173.2 MB
 ```
@@ -224,7 +224,7 @@ it is always loaded.
 - **The memory figure is not trustworthy and no conclusion is drawn from it.**
   Both tree figures remain over the nominal 100 MB budget, as they have since
   Checkpoint A, and which of the three numbers the budget refers to is still
-  open. This run resolved 7 processes (1 `hashpad.exe` + 6 `msedgewebview2.exe`),
+  open. This run resolved 7 processes (1 `Hashpad.exe` + 6 `msedgewebview2.exe`),
   matching Checkpoints A and D — the process-count defect seen elsewhere in this
   checkpoint, where the script reported 1, did **not** reproduce here.
   Deliberately not investigated in this task.
@@ -310,7 +310,7 @@ looks right without one.
 
 The rest of Checkpoint F. jsdom has no layout engine, never issues an `<img>`
 GET, and cannot judge whether a colour reads — so everything below needs a human
-running `build/bin/hashpad.exe`. **Nothing in this section has been ticked by an
+running `build/bin/Hashpad.exe`. **Nothing in this section has been ticked by an
 agent; every box is genuinely open.**
 
 **Use `docs/fixtures/preview-checks.md`**, which exercises every construct these
@@ -836,7 +836,7 @@ so these are checked by editing `settings.json` by hand and relaunching.
 Two places the file can live, and **the one beside the executable wins**
 (SPEC §6.13 portable mode), which is the easier one to test with:
 
-- portable: `settings.json` in the same folder as `hashpad.exe`
+- portable: `settings.json` in the same folder as `Hashpad.exe`
 - installed: `%APPDATA%\Hashpad\settings.json`
 
 A partial file is fine -- `LoadSettingsFrom` starts from the defaults and
@@ -1396,9 +1396,9 @@ Binary under 25 MB, cold start under 500 ms, under 100 MB RAM with five tabs.
 The RAM one is a **recorded miss** — see design §4.21. It is a Chromium floor,
 not something this code can reduce; measured at 135.4 MB.
 
-- [ ] **Binary.** `build/bin/hashpad.exe` under 25 MB. Was 12.7 MB at H.9.
+- [ ] **Binary.** `build/bin/Hashpad.exe` under 25 MB. Was 12.7 MB at H.9.
 - [ ] **RAM.** Open five tabs, then walk the process tree *down from
-      `hashpad.exe` by parent PID* — not by image name, because Windows runs its
+      `Hashpad.exe` by parent PID* — not by image name, because Windows runs its
       own `msedgewebview2` processes under `SharedWebView\EBWebView` and those
       are not ours. Sum `WorkingSetPrivate` from
       `Win32_PerfRawData_PerfProc_Process` across the tree. Compare against
@@ -1457,34 +1457,34 @@ The file associations are not registered yet — that is I.2 and I.3 — so thes
 checks drive the same code from a terminal instead. Every route the association
 will use goes through the same two calls.
 
-Run these from the folder holding `hashpad.exe`, with a `notes.md` and an
+Run these from the folder holding `Hashpad.exe`, with a `notes.md` and an
 `other.md` somewhere handy.
 
 ### One launch
 
-- [ ] **`.\hashpad.exe notes.md`** opens that file in a tab, not an untitled one.
-- [ ] **`.\hashpad.exe notes.md other.md`** opens both, in that order.
-- [ ] **`.\hashpad.exe C:\full\path\to\notes.md`** works the same as the relative
+- [ ] **`.\Hashpad.exe notes.md`** opens that file in a tab, not an untitled one.
+- [ ] **`.\Hashpad.exe notes.md other.md`** opens both, in that order.
+- [ ] **`.\Hashpad.exe C:\full\path\to\notes.md`** works the same as the relative
       form.
-- [ ] **`.\hashpad.exe`** with no argument still opens an untitled tab, as before.
-- [ ] **`.\hashpad.exe missing.md`** opens an untitled tab and does not hang or
+- [ ] **`.\Hashpad.exe`** with no argument still opens an untitled tab, as before.
+- [ ] **`.\Hashpad.exe missing.md`** opens an untitled tab and does not hang or
       error — the path is dropped because there is no file there.
-- [ ] **`.\hashpad.exe some-folder`** does the same. Only regular files open.
+- [ ] **`.\Hashpad.exe some-folder`** does the same. Only regular files open.
 
 ### A second launch, while it is already running
 
 This is the part SPEC §6.4 is actually about.
 
-- [ ] **With Hashpad open, run `.\hashpad.exe other.md`.** No second window
+- [ ] **With Hashpad open, run `.\Hashpad.exe other.md`.** No second window
       appears. `other.md` opens in the window already running, and that window
       comes to the front.
-- [ ] **Minimise Hashpad, then run `.\hashpad.exe other.md`.** It restores rather
+- [ ] **Minimise Hashpad, then run `.\Hashpad.exe other.md`.** It restores rather
       than blinking on the taskbar. Both the unminimise and the show are needed —
       a minimised window is already "shown" as far as the show call is concerned.
-- [ ] **With Hashpad open, run `.\hashpad.exe` with no argument.** The window
+- [ ] **With Hashpad open, run `.\Hashpad.exe` with no argument.** The window
       still comes forward. Launching Hashpad is a request to see Hashpad, even
       without a file.
-- [ ] **Run `.\hashpad.exe notes.md` twice while it is running.** The second one
+- [ ] **Run `.\Hashpad.exe notes.md` twice while it is running.** The second one
       switches to the existing tab rather than opening a duplicate — H.10's rule,
       reached through this route too.
 - [ ] **Type into a tab without saving, then launch again with that same file.**
@@ -1495,7 +1495,7 @@ This is the part SPEC §6.4 is actually about.
 
 ### The race worth trying
 
-- [ ] **Double-click `hashpad.exe`, and while it is still starting, launch it
+- [ ] **Double-click `Hashpad.exe`, and while it is still starting, launch it
       again with a file.** The file opens. This is the case the code goes out of
       its way to handle: Wails creates the window that receives a second launch's
       message at the *top* of its startup and tells our code the app has started
@@ -1507,6 +1507,48 @@ This is the part SPEC §6.4 is actually about.
 
 ### Known ceiling, deliberate
 
-`hashpad.exe --anything` treats the argument as a path, finds no file there, and
+`Hashpad.exe --anything` treats the argument as a path, finds no file there, and
 drops it. There are no command-line options, so there is nothing to confuse it
 with; if options are ever added, they have to be parsed before this runs.
+
+## Checkpoint I.2 — packaging metadata and file associations
+
+Until now the executable shipped with no identity at all: `wails.json` had an
+empty `author` block and no `info` section, so Explorer's Properties dialog was
+blank in every field. It also built as `hashpad.exe`, where SPEC §9 asks for
+`Hashpad.exe`.
+
+The file associations are *declared* here and *registered* in I.3, so nothing in
+Explorer changes yet — the installer does that.
+
+- [ ] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
+      Product name **Hashpad**, Product version **0.1.0**, File version
+      **0.1.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
+      description **Hashpad**. Blank fields here mean the version resource did
+      not link.
+- [ ] **The file is named `Hashpad.exe`, capital H.** Windows does not care
+      about the case when you type it, so the old `.\hashpad.exe` still runs it.
+- [ ] **The icon still looks right** at the sizes Explorer uses — the icon
+      resource is rebuilt by the same step that adds the version information, so
+      a mistake there would show up here first.
+
+### Worth knowing: what does *not* read this
+
+Do not check this with PowerShell's `(Get-Item x).VersionInfo`, or with
+`[System.Diagnostics.FileVersionInfo]`. Both report every string field as empty
+for this binary even when the resource is correct and Explorer displays it
+perfectly — verified by dumping the resource out of the executable, where all
+six strings are present and well-formed under a valid `040904b0` block. The
+reader that agrees with Explorer is the shell itself, via
+`Shell.Application`'s `GetDetailsOf`.
+
+That is a measurement trap, not a defect, and it cost a rebuild to find. The
+same trap would make a future "the version info is broken" report a false alarm.
+
+### Known ceiling, deliberate
+
+**The associated files get the application icon, not their own document icon.**
+Windows convention is that a `.md` file looks different from the program that
+opens it, and Hashpad has no document icon to give it. Reusing `appicon` costs
+nothing and is honest; drawing a page-with-a-mark icon is design work that
+belongs with whoever can look at it.

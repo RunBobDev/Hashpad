@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { OPEN_FILES_EVENT, mountOpenWith, openPendingFiles } from './openwith';
+import { SUPPORTED_EXTENSIONS } from '../ui/filedrop';
 
 describe('openPendingFiles', () => {
   it('opens what Go was holding', async () => {
@@ -114,4 +115,25 @@ it('listens for the event name Go actually emits', () => {
   );
 
   expect(source).toMatch(new RegExp(`openFilesEvent\\s*=\\s*"${OPEN_FILES_EVENT}"`));
+});
+
+/**
+ * The installer's file associations decide which files *launch* Hashpad;
+ * `SUPPORTED_EXTENSIONS` decides which files Hashpad will *open* once launched.
+ * An extension in the first list but not the second registers happily, launches
+ * the app on a double-click, and then silently opens nothing — two files that
+ * each look perfectly correct, in two languages, with no test between them.
+ */
+it('associates only extensions Hashpad will actually open', () => {
+  const config = JSON.parse(
+    readFileSync(new URL('../../../wails.json', import.meta.url), 'utf8'),
+  ) as { info: { fileAssociations: { ext: string }[] } };
+
+  const associated = config.info.fileAssociations.map((each) => `.${each.ext}`);
+
+  // Without this the check passes vacuously the day someone empties the list.
+  expect(associated.length).toBeGreaterThan(0);
+  for (const ext of associated) {
+    expect(SUPPORTED_EXTENSIONS).toContain(ext);
+  }
 });
