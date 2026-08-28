@@ -300,7 +300,8 @@ be built without one.
 | 8 | `preview.css`, and the manual checks in `docs/testing.md` |
 
 Eight tasks, comparable in size to the toolbar phase. Each is implemented, then
-reviewed independently against its brief, then has the findings applied.
+reviewed independently against its brief, then has the review's findings applied
+as a separate pass.
 
 ---
 

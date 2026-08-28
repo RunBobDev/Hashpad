@@ -11,9 +11,12 @@ of what was built.
 
 Where the implementation departs from this specification — and it does, in
 twenty-four places — each departure is recorded with its reasoning in
-[`docs/design.md`](docs/design.md) §4. This document was deliberately not edited
-to match; a specification quietly rewritten to agree with its implementation
-documents nothing.
+[`docs/design.md`](docs/design.md) §4.
+
+**The requirements below have not been revised to match what was built.** Where
+this document and the software disagree, that disagreement is the point: it is
+what makes §4 a record rather than a rationalisation. A specification edited
+after the fact to agree with its own implementation documents nothing.
 
 ---
 
