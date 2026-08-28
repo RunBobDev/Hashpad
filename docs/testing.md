@@ -1605,3 +1605,82 @@ Running the portable exe straight out of `Downloads\` drops a `settings.json`
 into `Downloads\`. That is what portable means, and it is why the installed
 build does not do it — but it will surprise someone who expected a program to
 keep to itself. Giving it its own folder is the intended use.
+
+## Checkpoint I.5 — the installer
+
+`Hashpad-amd64-installer.exe`, 6.7 MB. **None of this is covered by any
+automated test** — an installer is registry writes, shortcuts and shell state,
+and the only way to know it works is to run it and then look at Windows.
+
+Four deliberate departures from the Wails template, each required by SPEC §9:
+the install scope is chosen at run time rather than fixed at build time, file
+associations are opt-in, the uninstaller *offers* to remove settings instead of
+deleting them silently, and the desktop shortcut is opt-in too.
+
+**Do these on a machine you are willing to install on, and do the uninstall
+checks as well** — a half-tested uninstaller is how a machine collects debris.
+
+### Installing, per-user (the default)
+
+- [ ] **Run the installer.** UAC prompts immediately, before any page appears,
+      and says "Publisher: Unknown". Both are expected: Windows fixes elevation
+      before the program starts, so an installer that asked first and elevated
+      afterwards is not possible without a third-party plugin.
+- [ ] **The options page appears after Welcome.** "Just me" is preselected, and
+      both checkboxes are **unticked**. The associations checkbox being unticked
+      by default is what makes SPEC §9's "never forced" true rather than merely
+      available.
+- [ ] **The directory page shows `%LOCALAPPDATA%\Programs\Hashpad`** — it should
+      have followed the scope choice, not shown Program Files.
+- [ ] **Finish, with "Run Hashpad" ticked.** It launches.
+- [ ] **Start menu has a Hashpad entry.** No desktop shortcut, because you left
+      that unticked.
+- [ ] **Settings → Apps → Installed apps lists Hashpad**, with a version of
+      0.1.0 and a publisher of Hashpad.
+
+### Installing, all users
+
+- [ ] **Run it again and choose "All users on this computer".** The directory
+      page now offers `C:\Program Files\Hashpad`.
+- [ ] **Tick the associations checkbox this time.**
+- [ ] **After installing, a `.md` file in Explorer shows the Hashpad icon**, and
+      double-clicking it opens that file in Hashpad — not an empty tab. This is
+      the check that I.1 and I.2 were building toward, and the first time the
+      whole chain is exercised.
+- [ ] **Right-click a `.md` file → Open with.** Hashpad is listed.
+- [ ] **`.markdown`, `.mdown` and `.mkd` behave the same.** All four were
+      registered, or none were.
+- [ ] **Double-click a second `.md` while Hashpad is open.** It opens as a tab
+      in the existing window; no second Hashpad appears. This is the whole point
+      of I.1, reached the way a real user reaches it.
+
+### Uninstalling — the half that is usually untested
+
+- [ ] **Uninstall from Settings → Apps.** It asks whether to remove your
+      settings, and **No is the highlighted default.** Choose **No**.
+- [ ] **`%APPDATA%\Hashpad\settings.json` still exists.** Keeping settings
+      through a reinstall is the point; losing your theme and toolbar layout
+      because you clicked through a dialog is not.
+- [ ] **The Start menu entry, the desktop shortcut and the install folder are
+      gone.**
+- [ ] **`.md` files went back to whatever opened them before** — not to nothing.
+      The uninstaller restores the previous association rather than assuming
+      Hashpad owned the extension.
+- [ ] **Hashpad no longer appears in Installed apps.**
+- [ ] **Install and uninstall once more, this time answering Yes** to the
+      settings question. `%APPDATA%\Hashpad` is gone.
+
+### Known ceilings, deliberate
+
+**The UAC prompt appears even for "Just me".** Windows decides a process's
+elevation before it runs, so a single installer cannot ask first and elevate
+only if needed without bundling a third-party plugin. Two separate installers
+would avoid it; one installer that asks is the trade that was chosen.
+
+**A machine-wide uninstall removes only the settings of the account running
+it.** Settings live per-user under `%APPDATA%`, and reaching into other users'
+profiles would be overreach rather than thoroughness.
+
+**Upgrading over an existing install is untested.** Installing again to the same
+directory should overwrite the executable, but nothing here has exercised it, and
+NSIS does not do it for free.

@@ -7,7 +7,7 @@
 This document records the decisions made while planning against
 [`SPEC.md`](../SPEC.md). The specification remains the authority on *what* Hashpad
 does; this document covers *how*, and records every place the implementation
-deviates from the specification, and why. §4 is that list — twenty-four entries,
+deviates from the specification, and why. §4 is that list — twenty-five entries,
 including several where the specification turned out to be wrong, and several
 recording ideas that were investigated and rejected so they are not proposed again.
 
@@ -1058,3 +1058,65 @@ Hashpad.exe to make that copy portable — still works on the installed binary.
 **The cost, stated.** Run the portable exe straight out of `Downloads\` and a
 `settings.json` lands in `Downloads\`. That is what portable means; it is also
 why the installed build does not do it.
+
+### 4.25 The installer asks for the install scope, and pays a UAC prompt for it
+
+SPEC §9 asks for an NSIS installer with an opt-in association checkbox, a Start
+Menu entry and a clean uninstaller. It does not say where the application is
+installed. Decided 2026-08-28: **the user chooses, on a page in the installer.**
+
+Windows makes that harder than it sounds. **A process's elevation is fixed
+before it starts**, from a manifest inside the executable — so an installer
+cannot show a page, learn that per-user was chosen, and then decline the
+elevation it already has. Three options existed:
+
+| | Asks the user | UAC prompt | Cost |
+|---|---|---|---|
+| **A. One installer, always elevated** | yes | always | a needless prompt for per-user installs |
+| B. One installer, elevates on demand | yes | only for all-users | a third-party NSIS plugin, committed as a binary blob |
+| C. Two installers | no — chosen at download | only the machine-wide one | the choice moves off the installer |
+
+**A was chosen.** B is what VS Code-class installers do, and it is the better
+experience, but it costs a third-party DLL in the repository that cannot be
+verified and that everyone building from source then compiles with — for one
+saved click on an application that already trips SmartScreen for want of a
+signing certificate. C is free but answers a different question than the one
+asked.
+
+The consequence, recorded rather than hidden: **installing "just for me" still
+raises a UAC prompt reading "Publisher: Unknown".**
+
+**What this cost in the script.** Two Wails template macros had to be replaced,
+both for the same reason — they resolve the scope at *compile* time and so
+cannot follow a run-time choice:
+
+- `wails.setShellContext` branches on the `REQUEST_EXECUTION_LEVEL` define.
+  Replaced with a direct `SetShellVarContext` from the page's answer. Everything
+  downstream that writes to `SHELL_CONTEXT` — the file associations, the
+  uninstall entry — then lands in the right hive without further work, because
+  `SHELL_CONTEXT` is an NSIS *run-time* keyword rather than a define.
+- `wails.writeUninstaller` picks HKCU or HKLM from `WAILS_INSTALL_SCOPE`.
+  Replaced with the same keys written to `SHELL_CONTEXT`.
+
+**The uninstaller rediscovers its own scope** rather than being told: it is a
+separate process with no memory of the page, so it reads the uninstall key from
+HKLM and falls back to HKCU. Only one of the two can hold it, which makes the
+answer unambiguous.
+
+**Settings are asked about, and the default is No.** SPEC §9 says the uninstaller
+should offer to remove settings "but doesn't do so silently". Defaulting to
+*keep* is the stronger reading: someone reinstalling later should not lose their
+theme, fonts and toolbar layout because they clicked through a dialog. The
+question is only asked when a settings file actually exists.
+
+For that question the shell context is switched to `current` regardless of
+install scope, because settings belong to the person rather than the machine —
+under `all`, `$APPDATA` resolves to `ProgramData`, where nothing lives. The
+consequence: **a machine-wide uninstall removes only the settings of the account
+running it.** Enumerating other users' profiles would be overreach, not
+thoroughness.
+
+**The desktop shortcut became opt-in too.** The template created one unasked.
+SPEC §9 asks for a Start Menu entry and says nothing about the desktop, and an
+installer that puts an icon there without asking is the behaviour this project
+exists in opposition to.

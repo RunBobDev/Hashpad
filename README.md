@@ -75,7 +75,7 @@ Two downloads. Both are the same application.
 | | What it does |
 |---|---|
 | **`Hashpad.exe`** (portable) | Runs from anywhere. Creates its `settings.json` beside itself on first launch and writes nothing else outside its own folder. Give it its own directory and it leaves no trace on the machine. |
-| **`Hashpad-installer.exe`** | Installs to Program Files or to your user profile — it asks which. Adds a Start Menu entry, and *offers* to associate `.md`, `.markdown`, `.mdown` and `.mkd`. The association is a checkbox, never forced, and the uninstaller asks before removing your settings. |
+| **`Hashpad-amd64-installer.exe`** | Installs to Program Files or to your user profile — it asks which. Adds a Start Menu entry, and *offers* to associate `.md`, `.markdown`, `.mdown` and `.mkd`. The association is a checkbox, never forced, and the uninstaller asks before removing your settings. |
 
 Windows 10 or 11. The WebView2 runtime is required and is already present on
 current Windows installations; the installer will fetch it if it is missing.
@@ -182,7 +182,7 @@ here, and the difference is a process rather than a prompt:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Twenty-four of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Twenty-five of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 
