@@ -1552,3 +1552,56 @@ Windows convention is that a `.md` file looks different from the program that
 opens it, and Hashpad has no document icon to give it. Reusing `appicon` costs
 nothing and is honest; drawing a page-with-a-mark icon is design work that
 belongs with whoever can look at it.
+
+## Checkpoint I.3 — the portable build keeps to its own folder
+
+Two executables now come out of one codebase, differing in a single link-time
+marker: the portable one **creates** `settings.json` beside itself on first
+launch, the installed one never does. Which file wins once one exists is the
+same in both (SPEC §6.13), so dropping the file next to any copy by hand still
+makes that copy portable.
+
+**Put the two exes in separate folders for these checks.** In one folder they
+would share the same `settings.json`, which is correct behaviour and a
+confusing thing to test against.
+
+### The portable build
+
+- [ ] **Put `Hashpad-portable.exe` alone in an empty folder and run it.** A
+      `settings.json` appears beside it, holding the full defaults — readable
+      and hand-editable, not an empty stub.
+- [ ] **Change a setting, close, reopen.** It persisted, and
+      `%APPDATA%\Hashpad\` was never created.
+- [ ] **Edit `settings.json` by hand — say set the theme to `"dark"` — then
+      relaunch.** Your edit survives. This is the one worth being sure of:
+      seeding runs on *every* launch, not just the first, so a version that
+      wrote unconditionally would silently reset everything you had changed,
+      every time you started the app.
+- [ ] **Move the exe and its `settings.json` to another folder together.** Your
+      settings come with it. That is the whole point.
+- [ ] **Move only the exe, leaving `settings.json` behind.** It seeds a fresh
+      one — the settings did not follow, which is the honest consequence of
+      leaving them.
+
+### The installed-style build
+
+- [ ] **Put `Hashpad.exe` alone in a different empty folder and run it.** No
+      `settings.json` appears beside it. Settings go to
+      `%APPDATA%\Hashpad\settings.json` as before.
+- [ ] **Copy a `settings.json` next to `Hashpad.exe` by hand and relaunch.** It
+      uses that file instead. SPEC §6.13's escape hatch, and it is deliberately
+      not conditional on which build you have.
+
+### Awkward places
+
+- [ ] **Run the portable exe from a read-only location** — a locked folder, or a
+      CD/read-only share if you have one. It still starts. It stops being
+      portable and falls back to `%APPDATA%`, which is the honest outcome rather
+      than refusing to launch.
+
+### Known ceiling, deliberate
+
+Running the portable exe straight out of `Downloads\` drops a `settings.json`
+into `Downloads\`. That is what portable means, and it is why the installed
+build does not do it — but it will surprise someone who expected a program to
+keep to itself. Giving it its own folder is the intended use.

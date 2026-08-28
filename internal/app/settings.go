@@ -155,15 +155,58 @@ func DefaultSettings() Settings {
 	}
 }
 
-// SettingsPath resolves where settings live. A settings.json beside the
-// executable wins, which is what makes the portable build genuinely portable —
-// it leaves no trace on the host machine (SPEC §6.13).
+// settingsFileName is the same in both locations SettingsPath can choose.
+const settingsFileName = "settings.json"
+
+// portableBuild marks the portable artifact, and is a string only because
+// `-X` can set nothing else. The portable exe is linked with
+//
+//	-ldflags "-X hashpad/internal/app.portableBuild=true"
+//
+// and every other build leaves it alone. It changes exactly one thing: whether
+// SettingsPath will *create* a settings file beside the executable. Which file
+// wins once one exists is the same either way.
+var portableBuild = "false"
+
+// executable is os.Executable, indirected so tests can point the
+// beside-the-executable branch at a temporary directory instead of at the test
+// binary's own — which is real, writable, and would otherwise be seeded.
+var executable = os.Executable
+
+// SettingsPath resolves where settings live.
+//
+// A settings.json beside the executable always wins (SPEC §6.13). That is what
+// makes a portable copy portable, and it is deliberately not conditional on the
+// build: dropping the file next to any Hashpad.exe by hand makes that copy
+// leave no trace on the host machine, which is the documented escape hatch.
+//
+// The portable build additionally *creates* that file when it is missing, so a
+// bare downloaded exe is portable from its first launch rather than only after
+// someone knows to make the file. The installed build never does, because its
+// executable normally sits somewhere the user cannot write, and where it can
+// write — a per-user install — one shared file under Program Files or a
+// per-machine install directory is the wrong answer for a second user.
 func SettingsPath() (string, error) {
-	exe, err := os.Executable()
-	if err == nil {
-		portable := filepath.Join(filepath.Dir(exe), "settings.json")
-		if _, statErr := os.Stat(portable); statErr == nil {
-			return portable, nil
+	exe, exeErr := executable()
+	if exeErr == nil {
+		beside := filepath.Join(filepath.Dir(exe), settingsFileName)
+		if _, statErr := os.Stat(beside); statErr == nil {
+			return beside, nil
+		}
+
+		// Seeding *is* the writability test, and that is the point rather than
+		// a shortcut: there is no reliable way to ask Windows whether a
+		// directory is writable short of writing to it — ACLs, redirection and
+		// read-only media all disagree with the obvious checks — and the file
+		// has to be written anyway. Reached only when the Stat above found
+		// nothing, so it can never overwrite settings someone already has.
+		if portableBuild == "true" {
+			writeErr := SaveSettingsTo(beside, DefaultSettings())
+			if writeErr == nil {
+				return beside, nil
+			}
+			log.Printf("hashpad: cannot keep settings beside the executable (%v); "+
+				"falling back to the user config directory", writeErr)
 		}
 	}
 
@@ -171,7 +214,7 @@ func SettingsPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("locate user config dir: %w", err)
 	}
-	return filepath.Join(dir, "Hashpad", "settings.json"), nil
+	return filepath.Join(dir, "Hashpad", settingsFileName), nil
 }
 
 // LoadSettingsFrom never fails on bad input. A corrupt or future-versioned file

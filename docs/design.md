@@ -1007,3 +1007,48 @@ different lists that must stay compatible: an extension registered but not
 opened would launch Hashpad on a double-click and then silently do nothing.
 `files/openwith.test.ts` reads `wails.json` and asserts every associated
 extension is one the frontend accepts.
+
+### 4.24 Two executables from one codebase, differing by one link-time marker
+
+SPEC §9's portable artifact "writes nothing outside its own folder **when a
+local settings.json is present**", and SPEC §6.13 makes that file's presence the
+switch. Neither says who creates it. Shipping a zip with a seed file would
+satisfy both, and was the plan until the owner asked for something better,
+2026-08-27: **one bare exe that is portable from its first launch**, with the
+installer as a separate download.
+
+So the portable build creates the file. The installed build does not. That is
+the entire difference between the two binaries:
+
+```
+-ldflags "-X hashpad/internal/app.portableBuild=true"
+```
+
+**Why not make it runtime behaviour.** Deciding portability by asking whether
+the executable's folder is writable would need no build flag, and it is wrong
+in the case that matters: a per-user install lands in
+`%LOCALAPPDATA%\Programs\Hashpad`, which *is* writable, so an installed copy
+would quietly go portable. Under a machine-wide install the same rule would put
+one shared settings file where a second user cannot write it. The build knows
+which artifact it is; the runtime can only guess.
+
+**Why the marker is a string.** `-X` sets nothing else. `portableBuild == "true"`
+reads oddly next to a real bool, and the alternative — a build tag — would mean
+two compilation paths and a whole file that ordinary `go test` never sees.
+
+**The failure mode this creates, and the guard for it.** `-X` against a symbol
+path that does not exist is **not an error**. The linker ignores it, the build
+succeeds, and the result is an executable that is simply not portable, with no
+diagnostic anywhere. Measured, not assumed: a deliberately misspelled package
+path produced `"false"` and printed nothing. `TestPortableMarkerMatchesTheBuild`
+runs under the portable build's own ldflags with `HASHPAD_EXPECT_PORTABLE=true`
+and fails loudly when the path is wrong; an ordinary `go test` skips it. The
+portable build task runs it before building.
+
+**What remains shared.** Which settings file wins once one exists is identical
+in both builds, so SPEC §6.13's escape hatch — drop a `settings.json` beside any
+Hashpad.exe to make that copy portable — still works on the installed binary.
+
+**The cost, stated.** Run the portable exe straight out of `Downloads\` and a
+`settings.json` lands in `Downloads\`. That is what portable means; it is also
+why the installed build does not do it.
