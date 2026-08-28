@@ -203,11 +203,11 @@ written specification, adversarial review of every change, tests proven capable
 of failing, and numbers instead of adjectives — is what makes the result worth
 trusting.
 
-As an answer to the second question: held to that standard, current models are
-genuinely good, and considerably more methodical than I expected. Left to
-produce a result without it, I do not believe this would have been the same
-program. The process is the interesting part. The code is just markdown editor
-code.
+As for the second purpose — how good, how methodical, how efficient — held to
+that standard, current models are genuinely good, and considerably more
+methodical than I expected going in. Left to produce a result without it, I do
+not believe this would have been the same program. The process is the
+interesting part. The code is just markdown editor code.
 
 ---
 
