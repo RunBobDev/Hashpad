@@ -10,7 +10,7 @@ written, so that the record of what was asked for stays separate from the record
 of what was built.
 
 Where the implementation departs from this specification — and it does, in
-twenty-five places — each departure is recorded with its reasoning in
+twenty-six places — each departure is recorded with its reasoning in
 [`docs/design.md`](docs/design.md) §4.
 
 **The requirements below have not been revised to match what was built.** Where

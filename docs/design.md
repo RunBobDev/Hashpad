@@ -7,7 +7,7 @@
 This document records the decisions made while planning against
 [`SPEC.md`](../SPEC.md). The specification remains the authority on *what* Hashpad
 does; this document covers *how*, and records every place the implementation
-deviates from the specification, and why. §4 is that list — twenty-five entries,
+deviates from the specification, and why. §4 is that list — twenty-six entries,
 including several where the specification turned out to be wrong, and several
 recording ideas that were investigated and rejected so they are not proposed again.
 
@@ -1120,3 +1120,53 @@ thoroughness.
 SPEC §9 asks for a Start Menu entry and says nothing about the desktop, and an
 installer that puts an icon there without asking is the behaviour this project
 exists in opposition to.
+
+### 4.26 The licence is GPL-3.0, not MIT
+
+SPEC §4's repository layout annotates `LICENSE` as MIT, and §3.3 says so again
+in passing. **Both are superseded.** Changed 2026-08-28, before the first public
+release and while the repository was still private — which is the only cheap
+moment to do it, since a licence applies to whatever anyone has already taken
+under it.
+
+**Why.** MIT permits anyone to take Hashpad, extend it, and ship the result as
+closed source, including commercially. Asked directly whether that scenario was
+acceptable, the answer was that it was not, and that it had been seen happen to
+other projects.
+
+That is not a preference floating free of the rest of the project. SPEC §1
+defines Hashpad against "subscription paywalls, cloud sync nobody asked for,
+telemetry" — an editor built in opposition to enclosure. **MIT permits exactly
+the enclosure the mission objects to; GPL-3.0 forbids it.** The licence now
+enforces the ethos on derivatives rather than merely stating it in prose.
+
+**What it does and does not do**, since this is routinely misunderstood:
+
+- It does **not** prevent selling Hashpad. Anyone may charge for it.
+- It requires that anyone *distributing a modified version* publish their source
+  under the GPL as well. The practical deterrent to selling a closed fork is not
+  a prohibition on payment — it is that recipients may then pass it on freely.
+- It does not apply retroactively. Anything taken under MIT before this change
+  stays under MIT. Nothing had been published, so nothing was.
+
+**Compatibility was checked, not assumed.** Every dependency is permissive and
+GPL-compatible: CodeMirror 6, markdown-it and Wails are MIT; DOMPurify is
+`MPL-2.0 OR Apache-2.0`, and both of those are one-way compatible with GPLv3;
+the Go standard library is BSD-3. No dependency constrained the choice in either
+direction.
+
+**GPL-3.0 rather than AGPL-3.0.** AGPL's additional clause covers software
+offered over a network. Hashpad is a desktop application that makes no network
+requests at all (§3), so the clause would add an obligation with nothing to
+attach to.
+
+**`LICENSE` holds the GPL text verbatim**, including its "how to apply these
+terms" appendix, which is a template addressed to other authors and is not
+filled in. The copyright notice lives in the README, which is the conventional
+split.
+
+**Not done, and worth knowing:** the GPL FAQ recommends a per-file header notice
+in every source file. Around 130 files here carry none. The licence still
+applies — the `LICENSE` file and the README statement are sufficient to
+establish it — but headers make the terms travel with an individual file that
+someone copies out. Left as a deliberate omission rather than an oversight.

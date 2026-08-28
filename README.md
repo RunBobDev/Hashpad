@@ -101,7 +101,7 @@ Requires [Go](https://go.dev/) 1.24+, [Node.js](https://nodejs.org/) 20+, and
 the [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation).
 
 ```bash
-git clone https://github.com/<your-account>/Hashpad.git
+git clone https://github.com/RunBobDev/Hashpad.git
 cd Hashpad
 wails build
 ```
@@ -149,22 +149,34 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 
 ## On how this was built
 
-**Hashpad was written entirely by an AI — every line of it — and the point of
-saying so is that this is not the disclaimer it usually is.**
+**Hashpad was written entirely by an AI. Every line of it.** I am saying so
+plainly rather than burying it, because this project had two purposes and the
+second one is the reason it gets said at all.
+
+**The first purpose was the editor.** I wanted a markdown editor and viewer that
+was genuinely good — fast, private, and finished, rather than perpetually almost
+ready.
+
+**The second was to find out how good, how methodical and how efficient current
+AI models actually are** when they are held to a real process instead of being
+asked for a result and taken at their word.
 
 "Vibe coding" normally means describing what you want, accepting whatever comes
 back, and finding out later what it actually does. That is not what happened
-here, and the difference is a process rather than a prompt:
+here. My own contribution was the specification, the direction, and checking
+every phase by hand — the difference between this and the usual thing is the
+process, not the prompting:
 
 - **A specification came first.** [`SPEC.md`](SPEC.md) was written before any
   code and fixed what the application had to do, what it must never do, and the
   budgets it had to fit inside. It was the reference for every decision that
   followed, not a description written afterwards.
 
-- **Work went in phases, each stopping for a human to actually run it.** Nine of
-  them. Several defects that no test could have caught — a preview pane that
-  forgot it was open, clipped icons, a caret landing in the wrong place — were
-  found exactly this way and fixed before the next phase started.
+- **Work went in phases, and every phase was manually checked** before the next
+  one started. Nine of them. Several defects that no test could have caught — a
+  preview pane that forgot it was open, clipped icons, a caret landing in the
+  wrong place — were found exactly that way, by running the thing and looking at
+  it.
 
 - **Every new test was verified by breaking the thing it tested.** A test that
   cannot fail is worse than no test, because it reports safety that is not
@@ -182,18 +194,34 @@ here, and the difference is a process rather than a prompt:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Twenty-five of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Twenty-six of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 
 The honest summary: the AI wrote the code, and the discipline around it — a
-written spec, adversarial review of every change, tests proven capable of
-failing, and numbers instead of adjectives — is what makes the result worth
-trusting. The process is the interesting part. The code is just markdown editor
+written specification, adversarial review of every change, tests proven capable
+of failing, and numbers instead of adjectives — is what makes the result worth
+trusting.
+
+As an answer to the second question: held to that standard, current models are
+genuinely good, and considerably more methodical than I expected. Left to
+produce a result without it, I do not believe this would have been the same
+program. The process is the interesting part. The code is just markdown editor
 code.
 
 ---
 
 ## Licence
 
-MIT. See [`LICENSE`](LICENSE).
+**GNU General Public License v3.0.** See [`LICENSE`](LICENSE).
+
+Copyright (C) 2026 RunBobDev.
+
+Hashpad is free software: use it, study it, change it, and share it. The one
+condition is that if you distribute a modified version, you pass those same
+freedoms on — your changes have to be published under the GPL too.
+
+This is deliberate rather than incidental. Hashpad exists because so many
+editors in this space end up behind a subscription, a login, or a closed fork of
+someone else's work. The GPL is what stops that happening to this one. You are
+free to charge for it; you are not free to close it.
