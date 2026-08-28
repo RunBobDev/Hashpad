@@ -1,8 +1,19 @@
-# Hashpad — Build Specification
+# Hashpad — Requirements Specification
 
-You are building **Hashpad**, a lightweight markdown editor for Windows, designed from day one to be portable to Linux with minimal effort.
+**Hashpad** is a lightweight markdown editor for Windows, designed from the
+outset to be portable to Linux with minimal effort.
 
-Read this entire document before writing any code. At the end there is a **Working Agreement** section describing how I want you to proceed — follow it.
+This document fixes what the application must do, what it must never do, and the
+budgets it has to fit inside. It was written before any implementation existed
+and was the reference for every decision that followed. It is preserved here as
+written, so that the record of what was asked for stays separate from the record
+of what was built.
+
+Where the implementation departs from this specification — and it does, in
+twenty-four places — each departure is recorded with its reasoning in
+[`docs/design.md`](docs/design.md) §4. This document was deliberately not edited
+to match; a specification quietly rewritten to agree with its implementation
+documents nothing.
 
 ---
 
@@ -18,20 +29,20 @@ Design north star: if a feature would make a first-time user pause and think "wh
 
 ## 2. Non-negotiable constraints
 
-These are hard requirements. If any of them ever conflicts with a feature, the constraint wins and you should stop and ask me.
+These are hard requirements. Where one conflicts with a feature, the constraint wins and the feature is what changes.
 
 1. **Zero network activity.** No telemetry, no analytics, no crash reporting, no auto-update checks, no CDN-loaded assets, no remote fonts. The app must function identically with the network cable unplugged. Every dependency is bundled locally at build time. A Content Security Policy must enforce this at the webview level, not merely by convention.
 2. **No cloud, no accounts, no sync.** Files live on disk. That is the entire storage model.
-3. **Lightweight for real.** Budgets: binary under 25 MB, cold start under 500 ms on a mid-range machine, under 100 MB RAM with five tabs open. If a dependency threatens these, raise it with me before adding it.
+3. **Lightweight for real.** Budgets: binary under 25 MB, cold start under 500 ms on a mid-range machine, under 100 MB RAM with five tabs open. A dependency that threatens them is raised before it is added, not after.
 4. **Cross-platform from the start.** Windows 10 (1809+) and Windows 11 now; Linux later. All OS-specific code lives behind Go interfaces (see §5.2). No Windows-only assumptions leak into shared code.
-5. **No dependency added without asking me first.** State what it does, its size, and why nothing lighter works.
+5. **No dependency is added without justification.** State what it does, its size, and why nothing lighter will do.
 6. **Single-file documents.** No proprietary formats, no sidecar databases, no lock-in. A Hashpad document is a `.md` file that any other editor can open.
 
 ---
 
 ## 3. Technology stack
 
-Use exactly this unless you have a strong, specific objection — in which case raise it before starting.
+This stack is fixed. Departing from it needs a strong, specific objection, raised before work starts rather than discovered in the diff.
 
 | Layer | Choice | Rationale |
 |---|---|---|
@@ -47,15 +58,15 @@ Use exactly this unless you have a strong, specific objection — in which case 
 
 Preview rendering happens **in the frontend with markdown-it**, not in Go with goldmark. Rationale: the editor already needs a client-side parser (`@lezer/markdown`) for Phase 2's live preview, and having a third parser in Go would create a three-way consistency problem where the editor, preview, and export could disagree. One renderer, one source of truth. Go handles the filesystem and the OS; it does not touch markdown semantics.
 
-### 3.2 Verify before you build
+### 3.2 Verify the API surface before building
 
-Your training data may be stale. Before scaffolding, check the current Wails v2 documentation and the current CodeMirror 6 API for anything you're unsure of. CodeMirror 6's API differs substantially from CodeMirror 5 — if you find yourself writing `CodeMirror(document.body, {...})`, you are using the v5 API and it is wrong.
+Published examples for both libraries are frequently out of date. The current Wails v2 documentation and the current CodeMirror 6 API are to be checked before scaffolding. CodeMirror 6 differs substantially from CodeMirror 5, and the difference is easy to miss: code shaped like `CodeMirror(document.body, {...})` is the v5 API and does not apply here.
 
 ### 3.3 Prior art
 
 `https://github.com/alecdotdev/Markpad` is a well-executed editor in the same space (Tauri + Svelte + Monaco, BSD-3). Worth reading for UX ideas — particularly its settings layout and its handling of pasted images.
 
-**Do not copy code from it.** It is BSD-3 and this project is MIT; mixing licenses creates attribution obligations I don't want. Ideas only.
+**No code is to be copied from it.** It is BSD-3 licensed and this project is MIT; mixing the two creates attribution obligations this project does not want. Ideas only.
 
 Note also what it *doesn't* do, because these are Hashpad's differentiators: it has no live preview mode (Monaco can't do it) and no formatting toolbar. Those two features are the reason this project exists.
 
@@ -177,7 +188,7 @@ This is what makes the accent-colour picker a five-line feature instead of a ref
 
 ## 6. Phase 1 — the working app
 
-Ship this before starting Phase 2. It must be genuinely usable on its own — something I'd choose over Notepad for daily writing.
+Phase 1 ships before Phase 2 begins. It must be genuinely usable on its own — an editor worth choosing over Notepad for daily writing.
 
 ### 6.1 Window and layout
 
@@ -216,7 +227,7 @@ Visual direction: Windows 11 Notepad's proportions and restraint, Windows 10 Not
 
 ### 6.3 Save behaviour — Windows 10 style, explicitly
 
-I want the classic model, not Windows 11's silent session restore:
+The classic model, not Windows 11's silent session restore:
 
 - Closing a dirty tab prompts **Save / Don't Save / Cancel**.
 - Quitting with multiple dirty tabs prompts once per tab, in order, with Cancel aborting the entire quit.
@@ -369,7 +380,7 @@ Malformed settings must not brick the app: log, fall back to defaults, and back 
 
 ### 6.14 Keyboard shortcuts
 
-Match Notepad and general Windows conventions wherever one exists. Full list beyond the formatting commands: Ctrl+N/O/S/Shift+S/W/Shift+T, Ctrl+Tab, Ctrl+1…9 (tab switching where not overridden by heading levels — resolve this collision sensibly and document your choice), Ctrl+F/H/G, Ctrl+Z/Y, Ctrl+Plus/Minus/0, Ctrl+Shift+P (preview), Ctrl+Shift+O (outline), Ctrl+, (settings), F11 (fullscreen), Esc (dismiss find/replace).
+Match Notepad and general Windows conventions wherever one exists. Full list beyond the formatting commands: Ctrl+N/O/S/Shift+S/W/Shift+T, Ctrl+Tab, Ctrl+1…9 (tab switching where not overridden by heading levels — this collision is to be resolved deliberately and the choice documented), Ctrl+F/H/G, Ctrl+Z/Y, Ctrl+Plus/Minus/0, Ctrl+Shift+P (preview), Ctrl+Shift+O (outline), Ctrl+, (settings), F11 (fullscreen), Esc (dismiss find/replace).
 
 Every shortcut must also be reachable through a menu, with the shortcut displayed beside it.
 
@@ -419,7 +430,7 @@ Watch open files with `fsnotify`. If a file changes on disk and the buffer is cl
 
 ## 8. Explicitly out of scope
 
-Documented decisions, not oversights. Don't add these; ask me if you think one has become necessary.
+Documented decisions, not oversights. These are not to be added; a case that one has become necessary is raised rather than acted on.
 
 - DOCX and ODT export — `copy as rich text` covers it, and Pandoc exists for real conversion work
 - Spell check
@@ -452,19 +463,23 @@ Also provide a GitHub Actions workflow building both artifacts on tag push and a
 ## 10. Code quality
 
 - **Go**: standard project idioms, `golangci-lint` clean, errors wrapped with context, no panics in normal operation. Unit tests for encoding detection, line-ending detection, settings load/migrate, and path resolution.
-- **TypeScript**: strict mode, no `any` without a comment justifying it, ESLint + Prettier. Vitest unit tests for every formatting command in `commands.ts` — these have fiddly edge cases around selection and toggling, and tests will save you real time.
+- **TypeScript**: strict mode, no `any` without a comment justifying it, ESLint + Prettier. Vitest unit tests for every formatting command in `commands.ts` — these have fiddly edge cases around selection and toggling, and are where tests pay for themselves.
 - **Comments**: explain *why*, not *what*. Non-obvious CodeMirror decoration logic in particular deserves prose explanation, since it's the code most likely to confuse someone six months later.
 - **Accessibility**: full keyboard navigability, visible focus indicators, ARIA labels on all icon-only buttons, WCAG AA contrast in both themes.
 - **Manual test checklist** in `docs/testing.md`, covering the flows automated tests won't reach — dirty-close prompts, drag-and-drop, encoding round-trips, external file changes.
 
 ---
 
-## 11. Working agreement
+## 11. Delivery approach
 
-**How I want you to proceed.** I'm going to read and modify this code myself, so clarity beats cleverness everywhere.
+The code is meant to be read and modified by hand after delivery, so clarity
+beats cleverness everywhere.
 
-1. **Before writing code**, give me a short implementation plan: the order you'll build things, and any point where you disagree with this spec. I'll confirm before you start.
-2. **Build in checkpoints**, in roughly this order. Stop at each so I can run it and give feedback:
+1. **A written plan precedes implementation**, covering the order of work and any
+   point where the plan disagrees with this specification. Disagreements are
+   resolved before work starts, not discovered afterwards.
+2. **Work proceeds in phases**, in roughly this order, each one stopping to be
+   run and evaluated before the next begins:
    - **A.** Wails scaffold, window, menu bar, CodeMirror mounted, type-and-see-text works
    - **B.** File open/save/save-as, encoding and line-ending detection, dirty tracking, save prompts
    - **C.** Tabs
@@ -475,25 +490,47 @@ Also provide a GitHub Actions workflow building both artifacts on tag push and a
    - **H.** Settings dialog and persistence
    - **I.** Build pipeline, portable exe, installer
    - Then, separately: Phase 2.
-3. **Don't add dependencies without asking.** Name it, size it, justify it.
-4. **Don't silently deviate from the spec.** If something here is wrong or impractical, say so and propose an alternative — I'd much rather have that conversation than discover the difference later.
-5. **Flag every place you write platform-specific code**, so I know where the porting surface is.
-6. **Prefer readable over clever.** If a piece of code needs a comment to be understandable, write the comment, but first consider whether simpler code would need one at all.
-7. **Test as you go**, especially the formatting commands. Don't leave testing to the end.
+3. **No dependency is added without justification.** Name it, size it, and say
+   what it earns against the budget in §2.5.
+4. **No silent deviation from this specification.** Where a requirement here is
+   wrong or impractical, it is raised and an alternative proposed. That
+   conversation is cheaper than discovering the difference later, and the
+   resulting record is [`docs/design.md`](docs/design.md) §4.
+5. **Platform-specific code is flagged where it is written**, so the porting
+   surface is visible rather than archaeological.
+6. **Readable beats clever.** Where code needs a comment to be understood, the
+   comment gets written — but simpler code that needs none is considered first.
+7. **Tests are written alongside the code**, particularly for the formatting
+   commands, whose edge cases around selection and toggling are where testing
+   pays for itself.
 
 ## 12. Definition of done for Phase 1
 
-I can open a `.md` file by double-clicking it in Explorer, write comfortably with real syntax highlighting, format text with toolbar buttons and keyboard shortcuts, toggle a live-updating preview, switch between light and dark themes, adjust settings that persist across restarts, save with Ctrl+S, get a proper Save/Don't Save/Cancel prompt when closing dirty tabs — and the whole thing starts in under half a second, sits under 100 MB of RAM, and never touches the network.
+A `.md` file opens by double-clicking it in Explorer. Text can be written
+comfortably with real syntax highlighting, formatted from toolbar buttons and
+keyboard shortcuts, and previewed in a live-updating pane. Light and dark themes
+switch cleanly. Settings persist across restarts. Ctrl+S saves; closing a
+modified tab produces a proper Save / Don't Save / Cancel prompt. The
+application starts in under half a second, sits under 100 MB of RAM, and never
+touches the network.
 
-At that point it should be an editor I'd choose over Notepad without thinking about it.
+The bar it has to clear: an editor worth choosing over Notepad without thinking
+about it.
 
 ---
 
-## 13. Open questions
+## 13. Questions left open
 
-Raise these with me during planning rather than deciding unilaterally:
+These four were deliberately not decided here. Each was to be settled during
+design, with its reasoning written down rather than resolved by whoever happened
+to reach the code first. All four are answered in
+[`docs/design.md`](docs/design.md) §2.
 
-1. **Ctrl+1…9 collision** — heading levels versus tab switching. Both are conventional. What's your recommendation?
+1. **Ctrl+1…9 collision** — heading levels versus tab switching. Both are
+   conventional; only one can have the binding.
 2. **Front matter in preview** — hidden entirely, or rendered as a metadata card?
-3. **Live preview mode in Phase 1?** — the spec defers it to Phase 2 to de-risk Phase 1. If you believe it's safe to build the foundation earlier, make the case.
-4. **Vite bundle strategy** — single bundle or code-split? Startup time is the metric that matters.
+3. **Live preview mode in Phase 1** — this specification defers it to Phase 2 to
+   de-risk Phase 1. Whether the foundation can safely be built earlier is an
+   open question, not a settled exclusion.
+4. **Vite bundle strategy** — a single bundle or code-split? Startup time is the
+   metric that decides it.

@@ -1,11 +1,13 @@
-# Checkpoint F — preview pane: design
+# Preview pane — design
 
-**Written 2026-08-11, at commit `95c87d8` on `checkpoint-a`.**
+**Date:** 2026-08-11
+**Status:** Implemented
+**Scope:** The preview pane only (Phase 1, phase F).
 
-Companion to `2026-07-27-hashpad-phase1-design.md`, which stays the master document.
-This one covers only what Checkpoint F adds or decides. Where the phase-1 design
-already settled something, this document points at it rather than restating it, and
-where F contradicts or corrects it that is called out explicitly.
+Companion to [`design.md`](design.md), which remains the master document. This one
+covers only what the preview pane adds or decides. Where the phase-1 design already
+settled something, this document points at it rather than restating it; where the
+preview work contradicts or corrects it, that is called out explicitly.
 
 Requirements: SPEC §6.7 (the pane), §6.8 (markdown support), §6.13 (settings),
 §6.14 (menu reachability).

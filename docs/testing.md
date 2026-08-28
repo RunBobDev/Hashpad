@@ -470,7 +470,7 @@ contrast and whether it clips gracefully are only checkable here.
 
 ## Checkpoint G.2 — shortcuts without editor focus
 
-Reported by the owner: "when I open Hashpad and press Ctrl+Shift+P nothing
+Reported in testing: "when I open Hashpad and press Ctrl+Shift+P nothing
 happens -- the only time I can use macros is when I press inside the editor".
 Every shortcut except zoom is declared in the editor's keymap, which CodeMirror
 installs on `view.contentDOM`, so a key pressed anywhere else never reached it.
@@ -515,7 +515,7 @@ disk, which is the whole point of the feature.
 - [ ] **UTF-16 LE round trip**, the same way. Non-ASCII text is worth using here.
 
 `docs/fixtures/encoding-*.md` are the same document saved four ways, produced by
-the owner running exactly these checks against the G.2b build and kept because
+exactly these checks being run against the G.2b build, and kept because
 they are the inputs the *next* round needs. `preview-checks.md` is the UTF-8 / LF
 original; the other four are UTF-8 CRLF, UTF-8 BOM CRLF, UTF-16 LE LF and
 UTF-16 LE CRLF. Opening each should show its own encoding and line ending in the
@@ -637,7 +637,7 @@ Windows then resizes. Only these checks can.
       against them and so were never affected.
 
 **Superseded.** The single right-edge gutter above was replaced by a full set of
-eight strips (`ui/windowedges.ts`) after the owner found three more places the
+eight strips (`ui/windowedges.ts`) after three more places were found where the
 edge did not work. The checks below replace the ones above, and the
 status-bar-hidden gap is closed by the `s` strip being fixed to the viewport
 rather than living in a row.
@@ -653,7 +653,7 @@ rather than living in a row.
 - [ ] **No white flash while dragging an edge in dark mode.** `applyTheme` now
       hands the theme's `--bg-app` to `WindowSetBackgroundColour`, so the strip
       Windows paints before WebView2 catches up is the right colour. Check the
-      right and bottom edges especially -- that is where the owner saw it.
+      right and bottom edges especially -- that is where it was seen.
 - [ ] **Switch theme with the window open**, then resize again: the flash must
       not come back in the theme you switched *to*.
 - [ ] **A menu taller than the window scrolls.** Un-maximise until the window is
@@ -780,7 +780,7 @@ hands off; whether a drop is *received at all* is only observable here.
 ## Checkpoint G.5b — pasted and dropped images
 
 SPEC §6.10 is the paste. Dropping an image into the document is an addition on
-top of it, at the owner's request -- the spec's drop bullet (§6.4) only opens
+top of it, by request -- the spec's drop bullet (§6.4) only opens
 tabs.
 
 Go does the filesystem work (`internal/app/images.go`) and its tests cover the
@@ -874,12 +874,12 @@ below is invisible to the test suite.
 - [ ] **The shipped default is uncapped** (design §4.19): with no
       `maxContentWidth` in settings.json, text fills the whole editor width at
       any window size. SPEC §6.13's example block shows 900, but §6.1 calls the
-      cap optional and the owner reported it twice as a defect.
+      cap optional, and it was reported twice as a defect.
 - [ ] **`editor.maxContentWidth`** caps the text column in **both** panes.
       Maximise the window to see it. The text still **starts at the left**, one
       `--pad-editor` in -- the cap bounds how far a line runs, it does not move
-      where it begins. An earlier version centred the column and the owner
-      reported the editor's text starting a third of the way across the window.
+      where it begins. An earlier version centred the column, and the editor's
+      text was then reported as starting a third of the way across the window.
       The scrollbars must stay at the pane edges, not move inward with the text.
 - [ ] **`"maxContentWidth": 0`** means no cap -- text runs the full width again.
 - [ ] **Ctrl+scroll and Ctrl+Plus/Minus still zoom** after changing the font
@@ -922,7 +922,7 @@ jsdom has no layout, so alignment and colour are invisible to the suite.
 
 ## Checkpoint H.2 — line numbers, tab width, tabs vs spaces (and F11)
 
-SPEC §6.13's three editor behaviours, plus the Full Screen entry the owner
+SPEC §6.13's three editor behaviours, plus the Full Screen entry that was
 reported as greyed out with a dead shortcut.
 
 **`tabSize` and `insertSpaces` needed a Tab binding to mean anything.**
@@ -936,7 +936,7 @@ routes below are part of the feature rather than a nicety.
 - [ ] **The chrome behaves in full screen** -- menus open, the window edges still
       resize after leaving, and the tab bar is where it should be.
 - [ ] **View > Line Numbers** turns the gutter on and off, and carries a tick
-      while on. The owner set `showLineNumbers` in settings.json and asked "what
+      while on. Setting `showLineNumbers` in settings.json prompted the question "what
       line numbers?" -- the feature worked, but nothing in the app switched it
       on, so the only route was hand-editing a file.
 - [ ] **`showLineNumbers: true`** in settings.json has the same effect at
@@ -995,14 +995,14 @@ reachable in the unit tests without stubbing the geometry.
       to no editor movement at all.
 - [ ] **Jumpiness through a tall image is expected**, not a defect: one source
       line is hundreds of rendered pixels, so the editor has only one line of
-      scroll to spend there. The owner has accepted this; what must not happen is
+      scroll to spend there. This is accepted; what must not happen is
       content that cannot be reached at all.
 - [ ] **A document with no images** still tracks smoothly end to end, in both
       directions -- the fix must not have cost the middle its interpolation.
 
 ## Scroll sync — the caret hybrid
 
-Agreed with the owner after the end-clamp fix: **an addition to scroll sync, not
+Agreed after the end-clamp fix: **an addition to scroll sync, not
 a replacement.** Design §4.17 still rejects driving the whole mapping from the
 caret, because the caret does not move when you use the wheel, so the other pane
 would freeze during ordinary scrolling. The two gestures keep separate mappings
@@ -1031,7 +1031,7 @@ Measured in `frontend/harness/scrollsync.html`: alignment was exact (699/699,
       the editor.** The preview jumps to put that line at the same height --
       leaving the image behind if the line is near the top of the editor's
       viewport. It must not nudge slightly *upward* from the end and land on the
-      wrong text: that was the owner's report, and it happened because the caret
+      wrong text: that was the report, and it happened because the caret
       was reading the *scroll* mapping, which answers "the bottom" for any line
       in the last screenful by design.
 - [ ] **Click the last few lines before the image.** Each lands at its own
@@ -1043,7 +1043,7 @@ Measured in `frontend/harness/scrollsync.html`: alignment was exact (699/699,
 
 ## The preview sticks (H.3, `editor.defaultViewMode`)
 
-Reported by the owner: *"if I open the preview and I close the app or open
+Reported in testing: *"if I open the preview and I close the app or open
 another document the preview disappears and I need to enable it again."*
 
 `viewMode` is per document by design (Checkpoint F), and all three places that
@@ -1345,13 +1345,13 @@ changed.
 ## Checkpoint H.8 — pinning from the ⋯ overflow
 
 Right-click already pinned from the toolbar *row* and had since Checkpoint G.
-The owner asked for it in the `···` list, which is where the full set of
+It was asked for in the `···` list, which is where the full set of
 commands is — and so where you are when you decide you want one on the row.
 
 **Left-click runs the command, right-click pins it**, on the same item. The
 first design routed right-click to a *second* popup, on the grounds that
 `PopupItem.checked` renders `role="menuitemcheckbox"` and announcing a checkbox
-while the click runs a command lies to a screen reader. The owner pushed back —
+while the click runs a command lies to a screen reader. This was pushed back on —
 two popups for one simple task is not intuitive — and was right: `popupmenu.ts`
 already separates the visual tick from the semantics, they were only coupled in
 one branch. A `marker` draws the tick, keeps `role="menuitem"`, and puts
@@ -1412,7 +1412,7 @@ not something this code can reduce; measured at 135.4 MB.
 
 ## Checkpoint H.10 — one tab per file
 
-Reported by the owner: the same file could be opened repeatedly, each time
+Reported in testing: the same file could be opened repeatedly, each time
 getting its own tab. Two tabs over one path are two buffers that drift apart,
 and then whichever is saved second silently wins — so this was a data-loss
 shape, not a tidiness one.

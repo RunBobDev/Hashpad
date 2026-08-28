@@ -4,9 +4,15 @@
 **Status:** Approved
 **Scope:** Phase 1 (SPEC.md §6). Phase 2 is out of scope except where noted as a seam.
 
-This document records the decisions made while planning against `SPEC.md`. `SPEC.md`
-remains the authority on *what* Hashpad does. This document covers *how*, and records
-every place the implementation deviates from the spec and why.
+This document records the decisions made while planning against
+[`SPEC.md`](../SPEC.md). The specification remains the authority on *what* Hashpad
+does; this document covers *how*, and records every place the implementation
+deviates from the specification, and why. §4 is that list — twenty-four entries,
+including several where the specification turned out to be wrong, and several
+recording ideas that were investigated and rejected so they are not proposed again.
+
+The preview pane has its own companion document,
+[`design-preview.md`](design-preview.md); this one stays the master.
 
 ---
 
@@ -241,7 +247,7 @@ Linux equivalent for a dialog the app can render itself.
 
 ### 4.11 Tab tear-off to a second window: considered and declined
 
-Raised by the owner after Checkpoint C: drag a tab out of the window to open it in a
+Raised in review after Checkpoint C: drag a tab out of the window to open it in a
 second instance, and drag it back to close that instance. Investigated and declined —
 recorded here so it does not resurface as an open question.
 
@@ -268,7 +274,7 @@ for **saved** files only, launching a second instance with that path. No unsaved
 transfer, no cross-process dragging. The single-instance lock would need a launch flag so
 a deliberate second window bypasses it while Explorer double-clicks still route to the
 primary. Deferred by agreement; it would overturn SPEC §8's multi-window decision, which
-is the owner's call to make.
+is a product decision rather than a technical one.
 
 ### 4.12 Table is Ctrl+Alt+T, not Ctrl+Shift+T
 
@@ -524,7 +530,7 @@ readable on wide monitors".
 
 **Decision: the setting exists and works; its default is `0`, meaning no limit.**
 
-Checkpoint H.1 shipped it at 900 and the owner reported the result twice, from two
+Checkpoint H.1 shipped it at 900 and the result was reported twice, from two
 angles. First the column was centred, so the editor's text began about a third of the
 way across a maximised window -- fixed by left-aligning it. Then, left-aligned, the
 complaint was the other half of the same thing: the text "scales great until some
@@ -866,7 +872,7 @@ menu-reachable with their shortcuts displayed.
 They are tab commands, so consistency argues for moving them, but Ctrl+W under
 File is a strong enough Windows convention that the tidiness is not worth it.
 
-**Named Tabs, not Macros.** The owner suggested "Macros". Tabs describes what the
+**Named Tabs, not Macros.** "Macros" was the alternative proposed. Tabs describes what the
 items are, and leaves that word free for recorded or scripted macros, which is
 what it means in every other editor.
 
@@ -881,7 +887,7 @@ SPEC §1.3 sets three budgets: binary under 25 MB, cold start under 500 ms, and
 (12.7 MB). The third is not, and this records the measurement rather than the
 estimate that stood in for it.
 
-**Measured 2026-08-27**, release build, five tabs open, on the owner's machine.
+**Measured 2026-08-27**, release build, five tabs open, on the development machine.
 Seven processes, all rooted at `hashpad.exe`:
 
 | Process | Working set | Private |
@@ -937,7 +943,7 @@ the procedure as a checklist item.
 ### 4.22 UPX compression is skipped
 
 SPEC §9 says to build with UPX "if it doesn't trip antivirus heuristics — test
-this". The owner's decision, 2026-08-27, is to skip it. It was not measured;
+this". The decision, 2026-08-27, is to skip it. It was not measured;
 the argument below did not depend on the measurement.
 
 **What UPX would buy.** Go binaries typically compress 55–65%, so 12.7 MB would
@@ -967,7 +973,7 @@ entropy. There is no way to have those and not look like a packer.
 
 **SmartScreen is a separate thing and is not about packing at all.** It is
 reputation, keyed on the exact binary hash, and an unsigned build starts at zero
-every time it is rebuilt. That is what the owner felt as a slow first launch
+every time it is rebuilt. That is what was observed as a slow first launch
 during Checkpoint H. The fix for it is a code-signing certificate, which SPEC §9
 already rules out for now; a certificate would also soften the heuristic
 question, but a signed packed binary is still a packed binary.
@@ -979,7 +985,7 @@ rather than left as an untested build flag.
 ### 4.23 Four file associations, not two
 
 SPEC §9 says the installer registers `.md` and `.markdown`. It registers four:
-`.md`, `.markdown`, `.mdown`, `.mkd`. The owner's decision, 2026-08-27.
+`.md`, `.markdown`, `.mdown`, `.mkd`. Decided 2026-08-27.
 
 SPEC §6.4 lists eight extensions Hashpad *opens*. That list and the list it
 *claims from Explorer* are different questions, and the eight split cleanly:
@@ -1013,7 +1019,7 @@ extension is one the frontend accepts.
 SPEC §9's portable artifact "writes nothing outside its own folder **when a
 local settings.json is present**", and SPEC §6.13 makes that file's presence the
 switch. Neither says who creates it. Shipping a zip with a seed file would
-satisfy both, and was the plan until the owner asked for something better,
+satisfy both, and was the plan until a better one was asked for,
 2026-08-27: **one bare exe that is portable from its first launch**, with the
 installer as a separate download.
 

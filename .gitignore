@@ -15,3 +15,15 @@ frontend/package.json.md5
 # the artifact itself is not.
 graphify-out/
 .local/tooling-settings.bak
+
+# Local tooling configuration. Kept on disk, out of the repository:
+# it is machine-specific (absolute paths), and it is not part of Hashpad.
+.tooling/
+TOOLING.md
+
+# Working notes from the build process — handover documents and per-phase
+# implementation plans. The decisions they produced live in docs/design.md,
+# which is the record worth keeping.
+docs/HANDOFF.md
+docs/superpowers/
+build/README.md
