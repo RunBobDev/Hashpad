@@ -8,9 +8,9 @@
  * visibly broken; on 2026-08-10 a throwaway version of this file found two
  * defects that 504 tests missed.
  *
- * Run the Vite dev server (`npm run dev` in `frontend/`) and
- * open `/harness/`. `window.harness` is the API to drive from the console or
- * from an automated browser session.
+ * Run the Vite dev server (`npm run dev` in `frontend/`) and open `/harness/`.
+ * `window.harness` is the API to drive from the browser console, or from an
+ * automated browser session.
  */
 import '../src/styles/app.css';
 import { LanguageDescription } from '@codemirror/language';
