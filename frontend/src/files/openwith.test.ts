@@ -137,3 +137,39 @@ it('associates only extensions Hashpad will actually open', () => {
     expect(SUPPORTED_EXTENSIONS).toContain(ext);
   }
 });
+
+/**
+ * The installer script must stay pure ASCII, and this is not pedantry.
+ *
+ * NSIS reads a `.nsi` source file as Windows-1252 unless it carries a UTF-8
+ * BOM, and `Unicode true` governs the *output* installer rather than the input.
+ * So a UTF-8 em dash in a displayed string compiles without complaint and
+ * reaches the user as `â€"`. That shipped: three radio labels on the installer's
+ * maintenance page rendered as mojibake, and nothing in either build or either
+ * test suite noticed, because the file is not code anything here executes.
+ *
+ * A BOM would also fix it, and would silently un-fix it the first time an editor
+ * stripped one. Pure ASCII cannot regress.
+ */
+it('keeps the installer script free of characters NSIS will mis-decode', () => {
+  const script = readFileSync(
+    new URL('../../../build/windows/installer/project.nsi', import.meta.url),
+    'utf8',
+  );
+
+  // Walked by code point rather than matched by regex: the obvious pattern for
+  // this is `/[^\x00-\x7F]/`, and eslint's no-control-regex rejects it — for
+  // good reason, since a control character in a character class is nearly
+  // always a typo. Here it would not be, but a loop says the same thing without
+  // needing the rule suppressed.
+  const offenders: string[] = [];
+  let line = 1;
+  for (const character of script) {
+    if (character === '\n') line += 1;
+    else if (character.codePointAt(0)! > 127) {
+      offenders.push(`line ${line}: ${JSON.stringify(character)}`);
+    }
+  }
+
+  expect(offenders).toEqual([]);
+});

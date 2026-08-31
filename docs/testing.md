@@ -1743,3 +1743,29 @@ that is deliberate rather than an omission. Its Modify button runs whatever the
 the installer is not on disk after installing. Pointing it at `uninstall.exe`
 instead would uninstall Hashpad when someone asked to modify it. So the entry
 claims only what it can do, and repair lives in the installer, where it works.
+
+## Checkpoint I.5b — the uninstall button, and mojibake in the labels
+
+Two more from running the installer. Both were mine.
+
+- [ ] **Run the installer with Hashpad installed, choose Uninstall, click Next.**
+      The uninstaller opens and removes Hashpad. Previously the installer just
+      closed and nothing happened: the registry's `UninstallString` is stored
+      *with its quotes included*, and quoting it again produced
+      `""C:\...\uninstall.exe""`, which fails silently.
+- [ ] **The three options read as plain words** -- `Repair  --  install the same
+      files again`, not `Repair  aE"  install...`. NSIS reads a `.nsi` file as
+      Windows-1252 unless it has a UTF-8 BOM, so an em dash arrived as mojibake.
+      The script is pure ASCII now, and a test enforces it.
+- [ ] **Rename or delete `uninstall.exe` in the install folder, then choose
+      Uninstall.** A message says where it expected to find it and what to do
+      instead, rather than closing silently. Silence was the original defect;
+      this is the same situation handled visibly.
+
+### Why no test covers the first one
+
+`project.nsi` is not executed by anything either suite runs, so nothing could
+have caught a bad `ExecWait` short of installing. The encoding half *is* now
+covered -- `openwith.test.ts` reads the script and fails on any non-ASCII
+character -- because that one is a property of the file rather than of its
+behaviour, and a file can be read without being run.

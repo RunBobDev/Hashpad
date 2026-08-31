@@ -4,7 +4,7 @@ Unicode true
 ## Hashpad installer.
 ##
 ## Diverges from the Wails template in four deliberate ways, all of them
-## required by SPEC §9:
+## required by SPEC 9:
 ##
 ##   1. The install scope is chosen by the user at run time, not fixed when the
 ##      installer is built.
@@ -79,7 +79,6 @@ Var CreateDesktopShortcut
 ## Set when an existing installation is found, which turns the maintenance page
 ## on and the directory page off. See .onInit.
 Var ExistingInstall
-Var ExistingUninstaller
 Var MaintenanceChoice
 Var RepairRadio
 Var ChangeRadio
@@ -130,7 +129,7 @@ Function .onInit
     ## person who chose them, and on a single-user machine the result is
     ## indistinguishable from a machine-wide install.
     StrCpy $InstallForAllUsers 0
-    ## SPEC §9: associations are opt-in, "never forced". Unticked by default is
+    ## SPEC 9: associations are opt-in, "never forced". Unticked by default is
     ## what makes that true rather than merely available.
     StrCpy $AssociateFiles 0
     StrCpy $CreateDesktopShortcut 0
@@ -151,7 +150,6 @@ Function .onInit
     ${If} $0 != ""
         StrCpy $ExistingInstall 1
         StrCpy $InstallForAllUsers 1
-        StrCpy $ExistingUninstaller $0
         ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation"
         ReadRegDWORD $2 HKLM "${UNINST_KEY}" "Associations"
         ReadRegDWORD $3 HKLM "${UNINST_KEY}" "DesktopShortcut"
@@ -160,7 +158,6 @@ Function .onInit
         ${If} $0 != ""
             StrCpy $ExistingInstall 1
             StrCpy $InstallForAllUsers 0
-            StrCpy $ExistingUninstaller $0
             ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
             ReadRegDWORD $2 HKCU "${UNINST_KEY}" "Associations"
             ReadRegDWORD $3 HKCU "${UNINST_KEY}" "DesktopShortcut"
@@ -200,14 +197,14 @@ Function MaintenancePageCreate
     ${NSD_CreateLabel} 0 0 100% 20u "Hashpad is installed at:$\r$\n$INSTDIR"
     Pop $0
 
-    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair  —  install the same files again, keeping the current options"
+    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair  --  install the same files again, keeping the current options"
     Pop $RepairRadio
     ${NSD_AddStyle} $RepairRadio ${WS_GROUP}
 
-    ${NSD_CreateRadioButton} 8u 42u 95% 12u "Change options  —  file associations and the desktop shortcut"
+    ${NSD_CreateRadioButton} 8u 42u 95% 12u "Change options  --  file associations and the desktop shortcut"
     Pop $ChangeRadio
 
-    ${NSD_CreateRadioButton} 8u 56u 95% 12u "Uninstall  —  remove Hashpad from this computer"
+    ${NSD_CreateRadioButton} 8u 56u 95% 12u "Uninstall  --  remove Hashpad from this computer"
     Pop $RemoveRadio
 
     ${NSD_SetState} $RepairRadio ${BST_CHECKED}
@@ -222,11 +219,27 @@ FunctionEnd
 Function MaintenancePageLeave
     ${NSD_GetState} $RemoveRadio $0
     ${If} $0 == ${BST_CHECKED}
-        ## `_?=` runs the uninstaller in place and synchronously; without it the
-        ## uninstaller copies itself to a temporary directory and returns at
-        ## once, so ExecWait would not actually wait.
-        ExecWait '"$ExistingUninstaller" _?=$INSTDIR'
+        ## Built from $INSTDIR rather than from the registry's UninstallString.
+        ## That value is written *with its quotes included* -- the convention for
+        ## a value Windows will hand to a command line -- so quoting it again
+        ## here produced `""C:\...\uninstall.exe""`, which fails, after which
+        ## Quit ran and the installer simply vanished. Reported as "the
+        ## uninstall button does nothing".
+        IfFileExists "$INSTDIR\uninstall.exe" 0 uninstaller_missing
+        ## No `_?=`: without it the uninstaller copies itself to a temporary
+        ## directory, which is what lets it delete $INSTDIR entirely, including
+        ## its own executable. Nothing here needs to wait for it, since this
+        ## installer is quitting either way.
+        Exec '"$INSTDIR\uninstall.exe"'
         Quit
+
+        uninstaller_missing:
+        ## Silence was the original defect. If the uninstaller is not where the
+        ## registry says it is, say so rather than closing and leaving the user
+        ## to guess whether anything happened.
+        MessageBox MB_ICONSTOP \
+            "Hashpad's uninstaller is not where it should be:$\n$\n$INSTDIR\uninstall.exe$\n$\nRemove Hashpad from Settings > Apps instead, or reinstall it here first."
+        Abort
     ${EndIf}
 
     ${NSD_GetState} $ChangeRadio $0
@@ -403,7 +416,7 @@ Function un.onInit
 FunctionEnd
 
 Section "uninstall"
-    ## SPEC §9 asks for "a clean uninstaller that offers to remove settings but
+    ## SPEC 9 asks for "a clean uninstaller that offers to remove settings but
     ## doesn't do so silently". Asked here, before anything is deleted, and No
     ## is the default -- someone reinstalling later should not lose their theme,
     ## fonts and toolbar layout because they clicked through a dialog.
