@@ -1684,3 +1684,62 @@ profiles would be overreach rather than thoroughness.
 **Upgrading over an existing install is untested.** Installing again to the same
 directory should overwrite the executable, but nothing here has exercised it, and
 NSIS does not do it for free.
+
+## Checkpoint I.5a — the installer looks finished, and knows it is installed
+
+Two reports from running the real installer.
+
+**"It doesn't look finished."** The progress page stopped at 100% showing a
+"Next" button and waited there, which reads as a step still to come rather than
+a completed install. `MUI_FINISHPAGE_NOAUTOCLOSE` was doing that and has been
+removed. The uninstaller was worse: it had **no completion page at all** and
+ended on its progress page.
+
+**"Running the installer again just installs it again."** It now detects the
+existing installation and offers Repair, Change options, or Uninstall.
+
+### The finish pages
+
+- [ ] **Install.** When the progress bar reaches 100% it moves to a finish page
+      by itself, headed **"Hashpad is installed"** and saying so in a sentence.
+      No stopping on the progress bar.
+- [ ] **That page's button reads "Finish"**, not "Next" or "Close".
+- [ ] **"Run Hashpad now" is ticked.** Clicking Finish launches Hashpad and
+      closes the installer.
+- [ ] **Untick it and click Finish.** The installer closes and nothing launches.
+- [ ] **Show details on the finish page still shows the install log** — removing
+      the wait did not remove access to it.
+- [ ] **Uninstall.** It now ends on **"Hashpad has been removed"** with a Finish
+      button, instead of stopping on the progress page.
+
+### Running the installer over an existing install
+
+- [ ] **With Hashpad installed, run the installer again.** After Welcome there is
+      a new page saying Hashpad is already installed, showing the path it is
+      installed at, with Repair selected.
+- [ ] **The directory page does not appear.** Reinstalling somewhere else would
+      leave the first copy behind with its own entry in Add/Remove Programs.
+- [ ] **Repair.** Goes straight to installing, no options asked. Afterwards the
+      file associations and desktop shortcut are **exactly as they were** — not
+      reset to the defaults. This is the point of recording them at install time.
+- [ ] **Change options.** The options page appears, with your previous choices
+      already filled in rather than blank.
+- [ ] **On that page the "Install for" radios are greyed out**, with a line
+      explaining that uninstalling first is how you change it. Changing scope
+      without moving the files would leave the registry in one hive and the
+      program in another.
+- [ ] **Change the association checkbox and finish.** The change takes effect —
+      tick it and `.md` files open in Hashpad; untick it and they stop.
+- [ ] **Uninstall from that page.** The existing uninstaller runs to completion,
+      and the installer closes afterwards rather than carrying on to install.
+- [ ] **With Hashpad *not* installed, run the installer.** The maintenance page
+      does not appear at all; it goes Welcome → options → directory as before.
+
+### Known ceiling, deliberate
+
+**Add/Remove Programs still offers only Uninstall**, not Modify or Repair, and
+that is deliberate rather than an omission. Its Modify button runs whatever the
+`ModifyPath` registry value names — which would have to be the installer, and
+the installer is not on disk after installing. Pointing it at `uninstall.exe`
+instead would uninstall Hashpad when someone asked to modify it. So the entry
+claims only what it can do, and repair lives in the installer, where it works.

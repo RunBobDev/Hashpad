@@ -58,13 +58,14 @@ ManifestDPIAware true
 
 !define MUI_ICON "..\icon.ico"
 !define MUI_UNICON "..\icon.ico"
-!define MUI_FINISHPAGE_NOAUTOCLOSE
 !define MUI_ABORTWARNING
 
-## Offer to launch Hashpad from the last page, ticked. Harmless, and it is the
-## first thing most people do anyway.
-!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
-!define MUI_FINISHPAGE_RUN_TEXT "Run Hashpad"
+## `MUI_FINISHPAGE_NOAUTOCLOSE` is deliberately **not** set, and was removed
+## after it was reported as looking unfinished. With it, the progress page stops
+## at 100% still showing a "Next" button and waits -- which reads as a step that
+## has not happened yet, not as a finished install. Without it, the progress page
+## hands straight over to the finish page, which says in words that it is done.
+## The install log is still reachable from that page's Show details button.
 
 Var ScopeAllUsersRadio
 Var ScopeCurrentUserRadio
@@ -75,14 +76,41 @@ Var InstallForAllUsers
 Var AssociateFiles
 Var CreateDesktopShortcut
 
+## Set when an existing installation is found, which turns the maintenance page
+## on and the directory page off. See .onInit.
+Var ExistingInstall
+Var ExistingUninstaller
+Var MaintenanceChoice
+Var RepairRadio
+Var ChangeRadio
+Var RemoveRadio
+
 !insertmacro MUI_PAGE_WELCOME
+Page custom MaintenancePageCreate MaintenancePageLeave
 Page custom OptionsPageCreate OptionsPageLeave
+!define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPagePre
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+
+!define MUI_FINISHPAGE_TITLE "Hashpad is installed"
+!define MUI_FINISHPAGE_TEXT "Hashpad has been installed on this computer, and is in your Start menu.$\r$\n$\r$\nThis installer is finished. Click Finish to close it."
+!define MUI_FINISHPAGE_BUTTON "Finish"
+## Offer to launch it from the last page, ticked. Harmless, and it is the first
+## thing most people do anyway.
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
+!define MUI_FINISHPAGE_RUN_TEXT "Run Hashpad now"
 !insertmacro MUI_PAGE_FINISH
 
+## The uninstaller previously had **no finish page at all** -- it ended on the
+## progress page, which is the other half of the same report. MUI releases its
+## finish-page defines after each page macro, so these are a fresh set rather
+## than a leftover of the installer's.
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
+!define MUI_FINISHPAGE_TITLE "Hashpad has been removed"
+!define MUI_FINISHPAGE_TEXT "Hashpad has been uninstalled from this computer.$\r$\n$\r$\nClick Finish to close this window."
+!define MUI_FINISHPAGE_BUTTON "Finish"
+!insertmacro MUI_UNPAGE_FINISH
 
 !insertmacro MUI_LANGUAGE "English"
 
@@ -106,7 +134,116 @@ Function .onInit
     ## what makes that true rather than merely available.
     StrCpy $AssociateFiles 0
     StrCpy $CreateDesktopShortcut 0
-    Call ApplyInstallDir
+    StrCpy $ExistingInstall 0
+    StrCpy $MaintenanceChoice "change"
+
+    ## Look for an existing installation before deciding anything else. Running
+    ## the installer over an install used to start a fresh one from the top,
+    ## which is how a machine ends up with two copies in two places.
+    ##
+    ## Which hive holds the uninstall key is also how the previous *scope* is
+    ## recovered -- only one of them can hold it, so the answer is unambiguous
+    ## and needs no separate record. The options chosen last time are read back
+    ## alongside it, which is what makes "repair" mean "the same install again"
+    ## rather than "the defaults again".
+    SetRegView 64
+    ReadRegStr $0 HKLM "${UNINST_KEY}" "UninstallString"
+    ${If} $0 != ""
+        StrCpy $ExistingInstall 1
+        StrCpy $InstallForAllUsers 1
+        StrCpy $ExistingUninstaller $0
+        ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation"
+        ReadRegDWORD $2 HKLM "${UNINST_KEY}" "Associations"
+        ReadRegDWORD $3 HKLM "${UNINST_KEY}" "DesktopShortcut"
+    ${Else}
+        ReadRegStr $0 HKCU "${UNINST_KEY}" "UninstallString"
+        ${If} $0 != ""
+            StrCpy $ExistingInstall 1
+            StrCpy $InstallForAllUsers 0
+            StrCpy $ExistingUninstaller $0
+            ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
+            ReadRegDWORD $2 HKCU "${UNINST_KEY}" "Associations"
+            ReadRegDWORD $3 HKCU "${UNINST_KEY}" "DesktopShortcut"
+        ${EndIf}
+    ${EndIf}
+
+    ${If} $ExistingInstall == 1
+        StrCpy $AssociateFiles $2
+        StrCpy $CreateDesktopShortcut $3
+        ## Reinstall where it already lives. Offering to move it would leave the
+        ## old copy behind with its own uninstall entry.
+        ${If} $1 != ""
+            StrCpy $INSTDIR $1
+        ${Else}
+            Call ApplyInstallDir
+        ${EndIf}
+    ${Else}
+        Call ApplyInstallDir
+    ${EndIf}
+FunctionEnd
+
+## Skipped when there is nothing installed, which is the ordinary case.
+Function MaintenancePageCreate
+    ${If} $ExistingInstall == 0
+        Abort
+    ${EndIf}
+
+    !insertmacro MUI_HEADER_TEXT "Hashpad is already installed" \
+        "Choose what to do with the copy already on this computer."
+
+    nsDialogs::Create 1018
+    Pop $0
+    ${If} $0 == error
+        Abort
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 0 100% 20u "Hashpad is installed at:$\r$\n$INSTDIR"
+    Pop $0
+
+    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair  —  install the same files again, keeping the current options"
+    Pop $RepairRadio
+    ${NSD_AddStyle} $RepairRadio ${WS_GROUP}
+
+    ${NSD_CreateRadioButton} 8u 42u 95% 12u "Change options  —  file associations and the desktop shortcut"
+    Pop $ChangeRadio
+
+    ${NSD_CreateRadioButton} 8u 56u 95% 12u "Uninstall  —  remove Hashpad from this computer"
+    Pop $RemoveRadio
+
+    ${NSD_SetState} $RepairRadio ${BST_CHECKED}
+
+    ${NSD_CreateLabel} 12u 76u 95% 20u \
+        "Repair and Change both install over the existing copy in the same place, and neither touches your settings."
+    Pop $0
+
+    nsDialogs::Show
+FunctionEnd
+
+Function MaintenancePageLeave
+    ${NSD_GetState} $RemoveRadio $0
+    ${If} $0 == ${BST_CHECKED}
+        ## `_?=` runs the uninstaller in place and synchronously; without it the
+        ## uninstaller copies itself to a temporary directory and returns at
+        ## once, so ExecWait would not actually wait.
+        ExecWait '"$ExistingUninstaller" _?=$INSTDIR'
+        Quit
+    ${EndIf}
+
+    ${NSD_GetState} $ChangeRadio $0
+    ${If} $0 == ${BST_CHECKED}
+        StrCpy $MaintenanceChoice "change"
+    ${Else}
+        StrCpy $MaintenanceChoice "repair"
+    ${EndIf}
+FunctionEnd
+
+## The directory page is skipped for any existing install: the location is
+## already decided, and offering to change it would install a second copy
+## elsewhere while the first kept its own uninstall entry.
+Function DirectoryPagePre
+    ${If} $ExistingInstall == 1
+        Abort
+    ${EndIf}
 FunctionEnd
 
 ## Keeps $INSTDIR in step with the scope choice, so the directory page that
@@ -120,6 +257,14 @@ Function ApplyInstallDir
 FunctionEnd
 
 Function OptionsPageCreate
+    ## A repair reuses the options recorded at install time, so there is nothing
+    ## to ask. Choosing "Change options" on the maintenance page is what brings
+    ## this page back.
+    ${If} $ExistingInstall == 1
+    ${AndIf} $MaintenanceChoice == "repair"
+        Abort
+    ${EndIf}
+
     !insertmacro MUI_HEADER_TEXT "Install options" \
         "Choose who Hashpad is installed for, and whether it opens Markdown files."
 
@@ -143,6 +288,18 @@ Function OptionsPageCreate
         ${NSD_SetState} $ScopeAllUsersRadio ${BST_CHECKED}
     ${Else}
         ${NSD_SetState} $ScopeCurrentUserRadio ${BST_CHECKED}
+    ${EndIf}
+
+    ## Locked when changing an existing install. The directory page is skipped in
+    ## that case, so switching scope here would move the registry entries to the
+    ## other hive while the files stayed put -- an install that no longer knows
+    ## where it is. Uninstall first to change it.
+    ${If} $ExistingInstall == 1
+        EnableWindow $ScopeCurrentUserRadio 0
+        EnableWindow $ScopeAllUsersRadio 0
+        ${NSD_CreateLabel} 12u 40u 95% 10u \
+            "Locked: uninstall Hashpad first to install it for someone else."
+        Pop $0
     ${EndIf}
 
     ${NSD_CreateCheckBox} 0 54u 100% 12u \
@@ -211,6 +368,19 @@ Section
     WriteRegStr SHELL_CONTEXT "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
     WriteRegStr SHELL_CONTEXT "${UNINST_KEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
     WriteRegStr SHELL_CONTEXT "${UNINST_KEY}" "QuietUninstallString" "$\"$INSTDIR\uninstall.exe$\" /S"
+    ## Recorded so that re-running the installer can offer a repair that means
+    ## "the same install again" rather than "the defaults again". Read back in
+    ## .onInit.
+    WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "Associations" $AssociateFiles
+    WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "DesktopShortcut" $CreateDesktopShortcut
+    ## `NoModify` and `NoRepair` stay set, and that is not an oversight now that
+    ## re-running the installer offers repair and change. Those flags describe
+    ## what *Add/Remove Programs* can do, and its Modify button runs whatever
+    ## `ModifyPath` names -- which would have to be the installer, and the
+    ## installer is not on disk after installing. Pointing it at uninstall.exe
+    ## instead would uninstall Hashpad when the user asked to modify it. So
+    ## Add/Remove offers only Uninstall, truthfully, and repair lives where it
+    ## can actually work: in the installer itself.
     WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "NoModify" 1
     WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "NoRepair" 1
     ## Add/Remove Programs shows this; without it the entry reports no size.

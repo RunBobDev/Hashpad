@@ -1121,6 +1121,45 @@ SPEC §9 asks for a Start Menu entry and says nothing about the desktop, and an
 installer that puts an icon there without asking is the behaviour this project
 exists in opposition to.
 
+#### 4.25a Amended after running it: finish pages, and maintenance mode
+
+Two things the design above got wrong, both found by installing and uninstalling
+rather than by reading the script.
+
+**The install did not look finished when it was.** `MUI_FINISHPAGE_NOAUTOCLOSE`
+held the progress page open at 100% with a "Next" button — intended as "let the
+user read the log", received as "there is another step and it has not happened".
+The define is gone; the progress page now hands over to the finish page by
+itself, which says in a sentence that Hashpad is installed. The log is still one
+click away on that page. The button is relabelled "Finish" via
+`MUI_FINISHPAGE_BUTTON`, because NSIS labels the last page's button from
+`$(^CloseBtn)` — "Close" — while MUI's own text tells the reader to click
+Finish. The two disagreed out of the box.
+
+**The uninstaller had no finish page at all.** It ended on its progress page.
+Verified by compiling with `makensis -V4`, which reports the page count
+directly: 5 install pages and **2** uninstall pages before, 6 and 3 after. That
+count is the only cheap way to check a page exists without running the thing.
+
+**Re-running the installer started a fresh install.** It now reads the uninstall
+key in `.onInit` and, when one exists, offers Repair, Change options, or
+Uninstall. Three consequences worth stating:
+
+- **The options chosen last time are recorded** in the uninstall key at install
+  time (`Associations`, `DesktopShortcut`). Without them "repair" would silently
+  mean "reinstall with the defaults", quietly dropping associations the user had
+  asked for.
+- **The directory page is skipped for an existing install**, and the scope radios
+  are disabled. Changing either would install a second copy elsewhere, or move
+  the registry entries to the other hive while the files stayed — an install
+  that no longer knows where it is. Uninstalling first is the way to change it.
+- **`NoModify` and `NoRepair` stay set**, which now looks like a contradiction
+  and is not. They describe what *Add/Remove Programs* can do, and its Modify
+  button runs whatever `ModifyPath` names. That would have to be the installer,
+  which is not on disk after installing; naming `uninstall.exe` instead would
+  uninstall Hashpad when the user asked to modify it. The entry claims only what
+  it can deliver.
+
 ### 4.26 The licence is GPL-3.0, not MIT
 
 SPEC §4's repository layout annotates `LICENSE` as MIT, and §3.3 says so again
