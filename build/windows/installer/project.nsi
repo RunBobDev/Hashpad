@@ -197,14 +197,14 @@ Function MaintenancePageCreate
     ${NSD_CreateLabel} 0 0 100% 20u "Hashpad is installed at:$\r$\n$INSTDIR"
     Pop $0
 
-    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair  --  install the same files again, keeping the current options"
+    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair - install the same files again, keeping the current options"
     Pop $RepairRadio
     ${NSD_AddStyle} $RepairRadio ${WS_GROUP}
 
-    ${NSD_CreateRadioButton} 8u 42u 95% 12u "Change options  --  file associations and the desktop shortcut"
+    ${NSD_CreateRadioButton} 8u 42u 95% 12u "Change options - file associations and the desktop shortcut"
     Pop $ChangeRadio
 
-    ${NSD_CreateRadioButton} 8u 56u 95% 12u "Uninstall  --  remove Hashpad from this computer"
+    ${NSD_CreateRadioButton} 8u 56u 95% 12u "Uninstall - remove Hashpad from this computer"
     Pop $RemoveRadio
 
     ${NSD_SetState} $RepairRadio ${BST_CHECKED}
