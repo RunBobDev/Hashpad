@@ -1769,3 +1769,57 @@ have caught a bad `ExecWait` short of installing. The encoding half *is* now
 covered -- `openwith.test.ts` reads the script and fails on any non-ASCII
 character -- because that one is a property of the file rather than of its
 behaviour, and a file can be read without being run.
+
+## Checkpoint I.6 -- the Taskfile
+
+SPEC 9's six targets, plus a few that fell out of them. Every one was run except
+`dev`, which is a long-running server.
+
+    task                    list every target
+    task build              Hashpad.exe into build/bin
+    task build:portable     the portable exe into build/bin/portable
+    task build:installer    the NSIS installer
+    task build:all          all three
+    task test               both suites
+    task lint               gofmt, go vet, tsc, eslint, prettier
+    task measure            the SPEC 1.3 budget report
+
+### The one that needs a person
+
+- [ ] **`task dev`.** Hot reload. It never exits on its own, so nothing
+      automated can check it -- run it, confirm the window appears, edit
+      something in `frontend/src`, confirm the change shows up without a
+      rebuild, then Ctrl+C.
+
+### Worth knowing
+
+**`task build:installer` prepends NSIS to PATH itself.** NSIS installs to
+`C:\Program Files (x86)\NSIS` and adds nothing to PATH, so `wails build -nsis`
+otherwise fails with a "makensis not found" that reads like a missing install.
+The task does it for that one command rather than changing the machine.
+
+**`task build:portable` runs a test before it builds**, and will refuse to build
+if that test fails. It is checking that the `-ldflags -X` symbol path actually
+resolves -- the linker ignores one it cannot find, without a word, leaving an
+executable that is simply not portable.
+
+### Latest budget report
+
+Measured with `task measure`, one empty document, on a VMware VM with a virtual
+GPU, so the startup figure is pessimistic against real hardware.
+
+| Budget | SPEC 1.3 | Measured | |
+|---|---|---|---|
+| Binary size | 25 MB | 12.71 MB | pass |
+| Cold start | 500 ms | 46 ms median | pass, provisional |
+| Memory | 100 MB | 182.8 MB private commit, 7 processes | see design 4.21 |
+
+The cold-start verdict is marked provisional by the script itself:
+`WaitForInputIdle` measures a message loop pumping, not first paint. The first
+of the five runs was 1074 ms against a median of 46, which is the disk cache
+filling rather than a real spread.
+
+**`scripts/measure.ps1` still prints "Five-tab measurement lands with tabs at
+Checkpoint C".** Tabs shipped long ago; the note is stale and the script has not
+been taught to open five. The five-tab figure in design 4.21 was measured by
+hand instead.
