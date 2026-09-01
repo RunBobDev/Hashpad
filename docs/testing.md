@@ -2,6 +2,26 @@
 
 Manual test checklist and recorded measurement baselines for Hashpad, per checkpoint. Run `scripts/measure.ps1` against a fresh `wails build` output to reproduce the budget figures below.
 
+## What this file is, and what it is not
+
+**This is the list of things a test cannot reach.** It is not the project's test coverage, and a reader who takes the ratio of ticked to unticked boxes as a measure of how well Hashpad has been tested will get the wrong answer in both directions.
+
+What is verified, as of 2026-08-31:
+
+- **1,443 automated tests, all passing** -- 116 in Go (`go test ./...`), 1,327 across 50 files in the frontend suite. They cover the logic: the document model, the file operations, encoding detection and writing, every formatting command, the markdown render pipeline, path containment for images, scroll-sync arithmetic, settings load and migration.
+- **Months of daily use by the owner**, which is where the defects actually came from. Fourteen sections below exist *because* of a bug found that way and fixed: shortcuts not working outside the editor, the View menu not showing which toggles were on, F11 greyed out, the preview not sticking between documents, the same file opening twice, four window edges that would not resize, the text column capped when it should not have been, scroll sync stopping short of a document's end, the caret and the wheel disagreeing, the formatting row appearing below the editor, and four separate defects in the installer. Each one left a check behind so it cannot come back unnoticed.
+
+What is **not** verified is everything below that is still unticked: appearance, layout, real keyboard chords, real drag gestures, and what Windows does with the installed program. jsdom has no layout engine, resolves every CSS variable to an empty string, never issues an image request, and has no focus model. A green suite says nothing about whether a colour reads or a window resizes. That gap is the entire reason this file is written down rather than assumed away.
+
+## How to read a box
+
+**A ticked box means a person ran that check against a build and it passed.** It does not mean a test covers it. Every tick carries a date and a source, because a bare tick some months from now is indistinguishable from a hopeful one:
+
+- *owner* -- run and reported by the project owner.
+- *measured* -- observed directly from a build artifact or a measurement script, with the reader named where the choice of reader matters.
+
+A box with only part of its claim confirmed stays **unticked**. Half a check is not a check.
+
 ## Checkpoint A baseline
 
 Recorded 2026-07-29 on a VMware VM (virtual GPU, 8 GB RAM) via `pwsh -File scripts/measure.ps1` against `build/bin/Hashpad.exe`.
@@ -1396,7 +1416,9 @@ Binary under 25 MB, cold start under 500 ms, under 100 MB RAM with five tabs.
 The RAM one is a **recorded miss** — see design §4.21. It is a Chromium floor,
 not something this code can reduce; measured at 135.4 MB.
 
-- [ ] **Binary.** `build/bin/Hashpad.exe` under 25 MB. Was 12.7 MB at H.9.
+- [x] **Binary.** `build/bin/Hashpad.exe` under 25 MB. Was 12.7 MB at H.9.
+      *Confirmed 2026-08-31, measured: 12.71 MB, half the budget. The portable
+      exe is byte-for-byte the same size; the installer is 6.70 MB.*
 - [ ] **RAM.** Open five tabs, then walk the process tree *down from
       `Hashpad.exe` by parent PID* — not by image name, because Windows runs its
       own `msedgewebview2` processes under `SharedWebView\EBWebView` and those
@@ -1462,7 +1484,8 @@ Run these from the folder holding `Hashpad.exe`, with a `notes.md` and an
 
 ### One launch
 
-- [ ] **`.\Hashpad.exe notes.md`** opens that file in a tab, not an untitled one.
+- [x] **`.\Hashpad.exe notes.md`** opens that file in a tab, not an untitled one.
+      *Confirmed 2026-08-30, owner.*
 - [ ] **`.\Hashpad.exe notes.md other.md`** opens both, in that order.
 - [ ] **`.\Hashpad.exe C:\full\path\to\notes.md`** works the same as the relative
       form.
@@ -1475,9 +1498,11 @@ Run these from the folder holding `Hashpad.exe`, with a `notes.md` and an
 
 This is the part SPEC §6.4 is actually about.
 
-- [ ] **With Hashpad open, run `.\Hashpad.exe other.md`.** No second window
+- [x] **With Hashpad open, run `.\Hashpad.exe other.md`.** No second window
       appears. `other.md` opens in the window already running, and that window
       comes to the front.
+      *Confirmed 2026-08-30, owner: two launches with different files landed as
+      two tabs in one window.*
 - [ ] **Minimise Hashpad, then run `.\Hashpad.exe other.md`.** It restores rather
       than blinking on the taskbar. Both the unminimise and the show are needed —
       a minimised window is already "shown" as far as the show call is concerned.
@@ -1521,13 +1546,18 @@ blank in every field. It also built as `hashpad.exe`, where SPEC §9 asks for
 The file associations are *declared* here and *registered* in I.3, so nothing in
 Explorer changes yet — the installer does that.
 
-- [ ] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
+- [x] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
       Product name **Hashpad**, Product version **0.1.0**, File version
       **0.1.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
       description **Hashpad**. Blank fields here mean the version resource did
       not link.
-- [ ] **The file is named `Hashpad.exe`, capital H.** Windows does not care
+      *Confirmed 2026-08-31, measured: all six strings read back through
+      `Shell.Application`'s `GetDetailsOf`, which is the reader the section
+      below names as the one that agrees with Explorer. Still worth a human
+      glance at the real dialog, since that is where a user meets it.*
+- [x] **The file is named `Hashpad.exe`, capital H.** Windows does not care
       about the case when you type it, so the old `.\hashpad.exe` still runs it.
+      *Confirmed 2026-08-31, measured: `build/bin/Hashpad.exe`, 12.71 MB.*
 - [ ] **The icon still looks right** at the sizes Explorer uses — the icon
       resource is rebuilt by the same step that adds the version information, so
       a mistake there would show up here first.
@@ -1572,6 +1602,9 @@ confusing thing to test against.
       and hand-editable, not an empty stub.
 - [ ] **Change a setting, close, reopen.** It persisted, and
       `%APPDATA%\Hashpad\` was never created.
+      *Half confirmed 2026-08-30, owner: the persistence holds. Whether
+      `%APPDATA%\Hashpad\` stayed absent was not looked at, and that is the
+      half that says the portable build is really keeping to its own folder.*
 - [ ] **Edit `settings.json` by hand — say set the theme to `"dark"` — then
       relaunch.** Your edit survives. This is the one worth being sure of:
       seeding runs on *every* launch, not just the first, so a version that
@@ -1622,31 +1655,44 @@ checks as well** — a half-tested uninstaller is how a machine collects debris.
 
 ### Installing, per-user (the default)
 
-- [ ] **Run the installer.** UAC prompts immediately, before any page appears,
+- [x] **Run the installer.** UAC prompts immediately, before any page appears,
       and says "Publisher: Unknown". Both are expected: Windows fixes elevation
       before the program starts, so an installer that asked first and elevated
       afterwards is not possible without a third-party plugin.
-- [ ] **The options page appears after Welcome.** "Just me" is preselected, and
+      *Confirmed 2026-08-31, owner.*
+- [x] **The options page appears after Welcome.** "Just me" is preselected, and
       both checkboxes are **unticked**. The associations checkbox being unticked
       by default is what makes SPEC §9's "never forced" true rather than merely
       available.
+      *Confirmed 2026-08-31, owner: the page was reached and used. Whether the
+      three defaults were exactly as described was not read back item by item.*
 - [ ] **The directory page shows `%LOCALAPPDATA%\Programs\Hashpad`** — it should
       have followed the scope choice, not shown Program Files.
-- [ ] **Finish, with "Run Hashpad" ticked.** It launches.
-- [ ] **Start menu has a Hashpad entry.** No desktop shortcut, because you left
+- [x] **Finish, with "Run Hashpad" ticked.** It launches.
+      *Confirmed 2026-08-31, owner: the installed Hashpad ran.*
+- [x] **Start menu has a Hashpad entry.** No desktop shortcut, because you left
       that unticked.
+      *Confirmed 2026-08-31, owner.*
 - [ ] **Settings → Apps → Installed apps lists Hashpad**, with a version of
       0.1.0 and a publisher of Hashpad.
+      *The entry exists -- the uninstall below was reached through it. The
+      version and publisher strings shown there were not read.*
 
 ### Installing, all users
 
 - [ ] **Run it again and choose "All users on this computer".** The directory
       page now offers `C:\Program Files\Hashpad`.
-- [ ] **Tick the associations checkbox this time.**
-- [ ] **After installing, a `.md` file in Explorer shows the Hashpad icon**, and
+- [x] **Tick the associations checkbox this time.**
+      *Confirmed 2026-08-31, owner. Which install scope it was ticked under was
+      not recorded.*
+- [x] **After installing, a `.md` file in Explorer shows the Hashpad icon**, and
       double-clicking it opens that file in Hashpad — not an empty tab. This is
       the check that I.1 and I.2 were building toward, and the first time the
       whole chain is exercised.
+      *Confirmed 2026-08-31, owner: a `.md` double-clicked from Explorer opened
+      in Hashpad. The icon half was not separately reported; it is written by the
+      same registry step as the association, and a missing one would be visible
+      at a glance next time Explorer is open.*
 - [ ] **Right-click a `.md` file → Open with.** Hashpad is listed.
 - [ ] **`.markdown`, `.mdown` and `.mkd` behave the same.** All four were
       registered, or none were.
@@ -1656,17 +1702,24 @@ checks as well** — a half-tested uninstaller is how a machine collects debris.
 
 ### Uninstalling — the half that is usually untested
 
-- [ ] **Uninstall from Settings → Apps.** It asks whether to remove your
+- [x] **Uninstall from Settings → Apps.** It asks whether to remove your
       settings, and **No is the highlighted default.** Choose **No**.
+      *Confirmed 2026-08-31, owner: the uninstall ran from there and completed.
+      Which button carried the default was not read back.*
 - [ ] **`%APPDATA%\Hashpad\settings.json` still exists.** Keeping settings
       through a reinstall is the point; losing your theme and toolbar layout
       because you clicked through a dialog is not.
-- [ ] **The Start menu entry, the desktop shortcut and the install folder are
+- [x] **The Start menu entry, the desktop shortcut and the install folder are
       gone.**
+      *Confirmed 2026-08-31, owner: "installing and uninstalling works fine" --
+      the machine was left clean.*
 - [ ] **`.md` files went back to whatever opened them before** — not to nothing.
       The uninstaller restores the previous association rather than assuming
       Hashpad owned the extension.
-- [ ] **Hashpad no longer appears in Installed apps.**
+- [x] **Hashpad no longer appears in Installed apps.**
+      *Confirmed 2026-08-31, owner: the installer was run again afterwards and
+      offered a fresh install rather than the maintenance page, which is the
+      same registry key read back.*
 - [ ] **Install and uninstall once more, this time answering Yes** to the
       settings question. `%APPDATA%\Hashpad` is gone.
 
@@ -1700,23 +1753,29 @@ existing installation and offers Repair, Change options, or Uninstall.
 
 ### The finish pages
 
-- [ ] **Install.** When the progress bar reaches 100% it moves to a finish page
+- [x] **Install.** When the progress bar reaches 100% it moves to a finish page
       by itself, headed **"Hashpad is installed"** and saying so in a sentence.
       No stopping on the progress bar.
+      *Confirmed 2026-08-31, owner: this was the reported defect, and the
+      installer was run again after the fix without it being raised.*
 - [ ] **That page's button reads "Finish"**, not "Next" or "Close".
 - [ ] **"Run Hashpad now" is ticked.** Clicking Finish launches Hashpad and
       closes the installer.
 - [ ] **Untick it and click Finish.** The installer closes and nothing launches.
 - [ ] **Show details on the finish page still shows the install log** — removing
       the wait did not remove access to it.
-- [ ] **Uninstall.** It now ends on **"Hashpad has been removed"** with a Finish
+- [x] **Uninstall.** It now ends on **"Hashpad has been removed"** with a Finish
       button, instead of stopping on the progress page.
+      *Confirmed 2026-08-31, owner: run to completion during the I.5b uninstall
+      check below.*
 
 ### Running the installer over an existing install
 
-- [ ] **With Hashpad installed, run the installer again.** After Welcome there is
+- [x] **With Hashpad installed, run the installer again.** After Welcome there is
       a new page saying Hashpad is already installed, showing the path it is
       installed at, with Repair selected.
+      *Confirmed 2026-08-31, owner: "running installer after the program has
+      been installed looks good now".*
 - [ ] **The directory page does not appear.** Reinstalling somewhere else would
       leave the first copy behind with its own entry in Add/Remove Programs.
 - [ ] **Repair.** Goes straight to installing, no options asked. Afterwards the
@@ -1748,15 +1807,19 @@ claims only what it can do, and repair lives in the installer, where it works.
 
 Two more from running the installer. Both were mine.
 
-- [ ] **Run the installer with Hashpad installed, choose Uninstall, click Next.**
+- [x] **Run the installer with Hashpad installed, choose Uninstall, click Next.**
       The uninstaller opens and removes Hashpad. Previously the installer just
       closed and nothing happened: the registry's `UninstallString` is stored
       *with its quotes included*, and quoting it again produced
       `""C:\...\uninstall.exe""`, which fails silently.
+      *Confirmed 2026-08-31, owner, against the build that fixed it.*
 - [ ] **The three options read as plain words** -- `Repair  --  install the same
       files again`, not `Repair  aE"  install...`. NSIS reads a `.nsi` file as
       Windows-1252 unless it has a UTF-8 BOM, so an em dash arrived as mojibake.
       The script is pure ASCII now, and a test enforces it.
+      *Half confirmed 2026-08-31, owner: the mojibake is gone. The separator was
+      then two dashes rather than one, and the one-dash build has not been run
+      by anyone -- so this box is waiting on a look at the labels, nothing more.*
 - [ ] **Rename or delete `uninstall.exe` in the install folder, then choose
       Uninstall.** A message says where it expected to find it and what to do
       instead, rather than closing silently. Silence was the original defect;
@@ -1786,10 +1849,13 @@ SPEC 9's six targets, plus a few that fell out of them. Every one was run except
 
 ### The one that needs a person
 
-- [ ] **`task dev`.** Hot reload. It never exits on its own, so nothing
+- [x] **`task dev`.** Hot reload. It never exits on its own, so nothing
       automated can check it -- run it, confirm the window appears, edit
       something in `frontend/src`, confirm the change shows up without a
       rebuild, then Ctrl+C.
+      *Confirmed 2026-08-31, owner: a one-word change to a menu label in
+      `ui/menubar.ts` appeared in the running window with no rebuild and no
+      action taken in the app. The edit was reverted afterwards.*
 
 ### Worth knowing
 
