@@ -445,6 +445,29 @@ describe('openDocumentInNewTab', () => {
    * is the asymmetry the two settings exist for, asserted on the side that
    * allows it -- `makeUntitledDocument`'s own test covers the refusal.
    */
+  /**
+   * Reading mode renders the document as markdown, where a single newline is a
+   * soft break and consecutive lines join into one paragraph. Correct
+   * CommonMark, nonsense for a text file: opening a `.txt` landed in reading
+   * mode and every line ran together. Reported as "everything is stitched
+   * together".
+   *
+   * Only the *default* is refused -- switching to reading mode from the View
+   * menu still works on a `.txt`, because that is someone asking for it.
+   */
+  it('opens a .txt in the editor even when existing documents open in reading mode', () => {
+    store.setState((prev) => ({ ...prev, openedViewMode: 'preview' }));
+
+    openDocumentInNewTab({
+      path: 'C:/notes/plain.txt',
+      content: 'one\ntwo\nthree',
+      encoding: 'utf-8',
+      lineEnding: 'lf',
+    });
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+  });
+
   it('opens an existing document in reading mode when that is the setting', () => {
     store.setState((prev) => ({ ...prev, openedViewMode: 'preview' }));
 

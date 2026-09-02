@@ -127,7 +127,40 @@ Page custom OptionsPageCreate OptionsPageLeave
 ## thing most people do anyway.
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Run Hashpad now"
+
+## **The "make me the default" door, and the only one Windows leaves open.**
+##
+## An installer cannot take `.txt` from Notepad -- the choice is protected by a
+## hash on `UserChoice` for exactly that reason. What it can do is what a browser
+## does: register properly, then send the user to the page where one click
+## settles it. This opens Windows' own Default apps screen; nothing is changed
+## without the user pressing something there.
+##
+## `MUI_FINISHPAGE_SHOWREADME` repurposed as a second checkbox. That is the
+## documented way to get one on this page -- there is no README involved, and the
+## empty target with a `_FUNCTION` is what turns it into a plain callback.
+## Unticked by default: offering is fair, pre-ticking is not.
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Choose which files open in Hashpad"
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenDefaultAppsSettings
 !insertmacro MUI_PAGE_FINISH
+
+Function OpenDefaultAppsSettings
+    ## The query parameter names the entry written to `RegisteredApplications`,
+    ## and which hive that is depends on the scope chosen on the options page --
+    ## so the parameter has to match, or Settings opens on nothing in particular.
+    ##
+    ## Supported from Windows 11 21H2 with the 2023-04 update. Older builds
+    ## ignore the parameter and open the general Default apps page, which is a
+    ## fair place to land rather than an error -- worth knowing before "it does
+    ## not deep-link" is filed as a bug on Windows 10.
+    ${If} $InstallForAllUsers == 1
+        ExecShell "open" "ms-settings:defaultapps?registeredAppMachine=${INFO_PRODUCTNAME}"
+    ${Else}
+        ExecShell "open" "ms-settings:defaultapps?registeredAppUser=${INFO_PRODUCTNAME}"
+    ${EndIf}
+FunctionEnd
 
 ## The uninstaller previously had **no finish page at all** -- it ended on the
 ## progress page, which is the other half of the same report. MUI releases its
@@ -520,6 +553,27 @@ Section
         WriteRegStr SHELL_CONTEXT \
             "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\shell\open\command" "" \
             "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+
+        ## **Default Programs registration, which is what makes Hashpad a named
+        ## app in Settings rather than an anonymous handler.**
+        ##
+        ## It is also the prerequisite for deep-linking: the finish page's
+        ## `ms-settings:defaultapps?registeredAppUser=Hashpad` looks this name up
+        ## in `RegisteredApplications`, and without it the link falls back to the
+        ## general page. Same shape a browser uses for "make me the default".
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities" \
+            "ApplicationName" "${INFO_PRODUCTNAME}"
+        ## Spelled out rather than reused from a define: wails_tools.nsh provides
+        ## INFO_PRODUCTNAME and INFO_COMPANYNAME but no description, and an
+        ## undefined `${...}` is written to the registry *as those literal
+        ## characters* without NSIS saying a word. This shipped as
+        ## `${INFO_COMMENTS}` for one build.
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities" \
+            "ApplicationDescription" "A lightweight markdown editor for Windows."
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
+            ".txt" "Hashpad.Text"
+        WriteRegStr SHELL_CONTEXT "Software\RegisteredApplications" \
+            "${INFO_PRODUCTNAME}" "Software\${INFO_PRODUCTNAME}\Capabilities"
     ${EndIf}
 
     ## Replaces `wails.writeUninstaller`, which picks HKCU or HKLM from a
@@ -668,6 +722,12 @@ Section "uninstall"
     DeleteRegValue SHELL_CONTEXT "Software\Classes\.txt\OpenWithProgids" "Hashpad.Text"
     DeleteRegKey SHELL_CONTEXT "Software\Classes\Hashpad.Text"
     DeleteRegKey SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}"
+    ## The Default Programs registration. `RegisteredApplications` is a shared
+    ## key holding one value per application, so the *value* is deleted and the
+    ## key left alone -- removing the key would unregister every other program
+    ## on the machine.
+    DeleteRegValue SHELL_CONTEXT "Software\RegisteredApplications" "${INFO_PRODUCTNAME}"
+    DeleteRegKey SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
     SetRegView 64

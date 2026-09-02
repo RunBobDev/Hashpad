@@ -27,7 +27,7 @@ import { getEditorView } from '../state/appcontext';
  * membership test, and pushing one through the other's shape costs more than
  * the duplication. They are both spelled out from the same SPEC line.
  */
-export const SUPPORTED_EXTENSIONS = [
+export const MARKDOWN_EXTENSIONS = [
   '.md',
   '.markdown',
   '.mdown',
@@ -35,8 +35,24 @@ export const SUPPORTED_EXTENSIONS = [
   '.mdx',
   '.qmd',
   '.rmd',
-  '.txt',
 ] as const;
+
+/**
+ * Everything Hashpad will open, which is the markdown extensions plus `.txt`.
+ *
+ * **`.txt` is separated out rather than listed alongside them**, because the
+ * difference matters somewhere: a text file is not markdown, so rendering it
+ * joins its lines into paragraphs -- correct CommonMark, and nonsense for a text
+ * file. `documentops.ts` uses `isMarkdownPath` to keep `.txt` out of reading
+ * mode, which was reported as "everything is stitched together".
+ */
+export const SUPPORTED_EXTENSIONS = [...MARKDOWN_EXTENSIONS, '.txt'] as const;
+
+/** Whether this path is one reading mode can sensibly render. */
+export function isMarkdownPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return MARKDOWN_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
 
 /**
  * The paths worth opening, in the order they were dropped.

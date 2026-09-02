@@ -30,6 +30,7 @@ import {
   takeReopenPath,
 } from '../state/documents';
 import { getEditorView, store } from '../state/appcontext';
+import { isMarkdownPath } from '../ui/filedrop';
 import { displayName, saveDocument } from './fileops';
 
 /**
@@ -225,13 +226,27 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
   // Not spelled `'source'` any more, which is what the owner reported: opening
   // a file with the preview showing closed it, because every tab was minted in
   // source mode regardless of the window it was opening into.
-  // `openedViewMode`, not `defaultViewMode`, and `allowPreview` true: this is a
-  // document that exists and has something to read, where a new empty one does
-  // not (design §4.27a). Every route in reaches here -- Ctrl+O, File > Open, a
-  // drop, Ctrl+Shift+T, and a file that launched Hashpad -- which is what makes
-  // this one line the whole of the setting rather than a special case per route.
+  // `openedViewMode`, not `defaultViewMode`: this is a document that exists and
+  // has something to read, where a new empty one does not (design §4.27a). Every
+  // route in reaches here -- Ctrl+O, File > Open, a drop, Ctrl+Shift+T, and a
+  // file that launched Hashpad -- which is what makes this one line the whole of
+  // the setting rather than a special case per route.
+  //
+  // **`allowPreview` is conditional, and `.txt` is why.** Reading mode renders
+  // the document as markdown, where a single newline is a soft break and
+  // consecutive lines join into one paragraph. That is correct CommonMark and
+  // nonsense for a text file: opening one landed in reading mode and every line
+  // ran together. Reported as "everything is stitched together".
+  //
+  // Only the *default* is refused. Choosing reading mode from the View menu
+  // still works on a `.txt`, because that is someone asking for it rather than
+  // being handed it.
   const state = store.getState();
-  const viewMode = resolveViewMode(state.openedViewMode, state.recentViewModes, true);
+  const viewMode = resolveViewMode(
+    state.openedViewMode,
+    state.recentViewModes,
+    isMarkdownPath(contents.path),
+  );
 
   const doc: Document = {
     id: crypto.randomUUID(),
