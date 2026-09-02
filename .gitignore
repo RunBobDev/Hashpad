@@ -5,3 +5,9 @@ frontend/dist
 # Wails rewrites this hash on every build, so tracking it makes the working
 # tree dirty after any `wails build` and adds churn to unrelated commits.
 frontend/package.json.md5
+
+# Downloaded by `wails build -nsis` and embedded into the installer, not written
+# by anyone here. It was tracked by accident: 1.8 MB of Microsoft's WebView2
+# bootstrapper, roughly half the repository, restored automatically whenever the
+# installer is built. Verified by deleting it and rebuilding.
+build/windows/installer/tmp/
