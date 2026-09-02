@@ -108,7 +108,7 @@ function waitForPane(present: boolean): Promise<void> {
  * toggle that never records anything still restore correctly, and that is the
  * exact bug the restore test below exists to catch.
  */
-function setViewModeOf(id: string, mode: 'source' | 'live'): void {
+function setViewModeOf(id: string, mode: 'source' | 'live' | 'preview'): void {
   store.setState((prev) => ({
     ...prev,
     documents: prev.documents.map((doc) =>
@@ -136,7 +136,13 @@ beforeAll(async () => {
  */
 afterEach(async () => {
   if (document.querySelector('.preview-pane') !== null) {
-    emit('view.preview');
+    // **Which command depends on the mode, and getting it wrong hangs the
+    // suite.** `view.preview` toggles split; from reading mode it switches
+    // *to* split rather than closing anything, so `waitForPane(false)` would
+    // wait forever and the whole file dies on a hook timeout. That is a
+    // ten-second failure with no connection to the test that caused it.
+    const mode = activeDocument(store.getState())?.viewMode;
+    emit(mode === 'preview' ? 'view.readingMode' : 'view.preview');
     await waitForPane(false);
   }
   // The toggle is sticky now, so it leaves `defaultViewMode` behind in the
@@ -145,7 +151,7 @@ afterEach(async () => {
   // `--sequence.shuffle` the next test to open a tab would inherit whatever
   // this one happened to leave, so it is reset explicitly rather than by
   // side effect.
-  store.setState((prev) => ({ ...prev, defaultViewMode: 'source' }));
+  store.setState((prev) => ({ ...prev, defaultViewMode: 'last', recentViewModes: [] }));
 });
 
 describe('bootstrap', () => {
@@ -230,6 +236,99 @@ describe('view.wordWrap', () => {
  * situation reported. `keyCode` as well as `key` because CodeMirror resolves a
  * shifted binding through it; see the note in `ui/shortcuts.test.ts`.
  */
+/**
+ * Preview-only mode's layout (design §4.27). Both assertions are about the
+ * *editor*, not the pane: the pane covering the row is a CSS consequence of the
+ * class, which jsdom cannot see, while whether the editor is reachable is
+ * something it can answer exactly.
+ *
+ * `inert` is the half worth testing hardest. Without it the covered editor keeps
+ * its place in the tab order and a screen reader still reads it out -- a defect
+ * that is invisible to anyone using a mouse, which is precisely why it needs a
+ * test rather than a look.
+ */
+describe('preview-only mode layout', () => {
+  it('marks the row as reading and makes the editor unreachable, and undoes both', () => {
+    const active = activeDocument(store.getState())!;
+    const split = document.querySelector('.editor-split')!;
+    const area = document.querySelector('.editor-area')!;
+
+    setViewModeOf(active.id, 'preview');
+
+    expect(split.classList.contains('editor-split--reading')).toBe(true);
+    expect(area.hasAttribute('inert')).toBe(true);
+
+    // The undo half in the same case on purpose: a `setReadingLayout` that only
+    // ever added would pass every assertion above and strand a reader in an
+    // app whose editor never comes back.
+    setViewModeOf(active.id, 'source');
+
+    expect(split.classList.contains('editor-split--reading')).toBe(false);
+    expect(area.hasAttribute('inert')).toBe(false);
+  });
+});
+
+describe('view.readingMode', () => {
+  it('opens the pane in preview-only mode and toggles back to where it came from', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    const split = document.querySelector('.editor-split')!;
+
+    emit('view.readingMode');
+    await waitForPane(true);
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('preview');
+    expect(split.classList.contains('editor-split--reading')).toBe(true);
+
+    emit('view.readingMode');
+    await waitForPane(false);
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+    expect(split.classList.contains('editor-split--reading')).toBe(false);
+  });
+
+  /**
+   * **The asymmetry with `view.preview`, and the reason it exists.** Split is a
+   * working layout, so remembering it across launches is a convenience. Reading
+   * mode has no editor, so a remembered one would give the startup tab and every
+   * File > New a blank page that cannot be typed into.
+   *
+   * Asserted as "wrote nothing at all" rather than "wrote something else",
+   * because the failure being guarded against is a copy-paste of
+   * `togglePreview` that persists out of habit -- and that would write a
+   * perfectly well-formed value.
+   */
+  it('records itself as used without touching the preference', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    store.setState((prev) => ({ ...prev, defaultViewMode: 'last', recentViewModes: [] }));
+
+    emit('view.readingMode');
+    await waitForPane(true);
+
+    // Recorded, so `openedViewMode: "last"` can put a double-clicked file
+    // straight into reading mode.
+    //
+    // `waitFor`, not a bare read: the record happens after the dynamic import
+    // resolves, so the pane can be in the tree a tick before the history is
+    // written. Asserting straight after `waitForPane` reads the store between
+    // the two.
+    await vi.waitFor(() => expect(store.getState().recentViewModes[0]).toBe('preview'));
+    // **And the preference is untouched.** This is the asymmetry that keeps a
+    // new document out of reading mode: `defaultViewMode` is what File > New
+    // consults, and a toggle writing to it would be a setting that refuses to
+    // stay set -- which is exactly what the pre-v3 toggle did.
+    expect(store.getState().defaultViewMode).toBe('last');
+
+    emit('view.readingMode');
+    await waitForPane(false);
+
+    // Leaving records too, so the history's second slot holds the mode behind
+    // it -- the fallback a new document falls back *to*.
+    expect(store.getState().recentViewModes).toEqual(['source', 'preview']);
+  });
+});
+
 describe('shortcuts with focus outside the editor', () => {
   it('opens the preview on a real Ctrl+Shift+P pressed on the body', async () => {
     const active = activeDocument(store.getState())!;
@@ -369,9 +468,9 @@ describe('view.preview', () => {
     await waitForPane(true);
 
     await vi.waitFor(() => {
-      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.defaultViewMode).toBe('split');
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.recentViewModes).toEqual(['split']);
     });
-    expect(store.getState().defaultViewMode).toBe('split');
+    expect(store.getState().recentViewModes).toEqual(['split']);
   });
 
   /**
@@ -391,9 +490,9 @@ describe('view.preview', () => {
     await waitForPane(false);
 
     await vi.waitFor(() => {
-      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.defaultViewMode).toBe('live');
+      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.recentViewModes[0]).toBe('live');
     });
-    expect(store.getState().defaultViewMode).toBe('live');
+    expect(store.getState().recentViewModes[0]).toBe('live');
   });
 
   /**
@@ -410,7 +509,7 @@ describe('view.preview', () => {
     // The toggle writes the store field after the pane is mounted, so waiting
     // on the pane alone would race it.
     await vi.waitFor(() => {
-      expect(store.getState().defaultViewMode).toBe('split');
+      expect(store.getState().recentViewModes).toEqual(['split']);
     });
 
     emit('file.new');

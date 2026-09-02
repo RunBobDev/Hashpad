@@ -26,6 +26,8 @@ export namespace app {
 	    tabSize: number;
 	    insertSpaces: boolean;
 	    defaultViewMode: string;
+	    openedViewMode: string;
+	    recentViewModes: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new EditorSettings(source);
@@ -42,6 +44,8 @@ export namespace app {
 	        this.tabSize = source["tabSize"];
 	        this.insertSpaces = source["insertSpaces"];
 	        this.defaultViewMode = source["defaultViewMode"];
+	        this.openedViewMode = source["openedViewMode"];
+	        this.recentViewModes = source["recentViewModes"];
 	    }
 	}
 	export class FileContents {

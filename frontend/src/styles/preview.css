@@ -164,7 +164,19 @@
   font-size: 0.9em;
 }
 
+/* The tinted box wraps the *code*, not the column. A fence stretched to the full
+   pane width put a wide slab of tint beside three words of shell, which reads as
+   an empty region rather than as a block of code.
+
+   `fit-content` shrinks the box to its widest line; the 16px of side padding is
+   what keeps it visibly bigger than the text inside it rather than clinging to
+   the glyphs. `max-width: 100%` is what stops it growing past the pane, and is
+   also what keeps `overflow-x` meaningful -- without the cap the box would just
+   get wider and push the pane into a horizontal scroll, which is the thing the
+   overflow rule below exists to prevent. */
 .preview-pane pre {
+  width: fit-content;
+  max-width: 100%;
   padding: 12px 16px;
   border-radius: var(--radius);
   background: var(--syn-code-bg);
@@ -359,4 +371,40 @@
    navigation control, so it stays a link colour and only loses the underline. */
 .preview-pane .footnote-backref {
   text-decoration: none;
+}
+
+/*
+ * Preview-only mode -- design §4.27's reading view.
+ *
+ * The pane is taken out of the flex row and laid over the whole of it, rather
+ * than the editor being hidden and the pane grown to fill the gap. **The editor
+ * keeps its layout box, at full width**, which is the point: a `display: none`
+ * editor reports zero for every dimension and returns from this mode needing a
+ * CodeMirror measure pass, so switching back to split would land on stale
+ * geometry and a reflow the reader can see. Occluded, it comes back instantly
+ * and correctly, with its scroll position and caret exactly where they were.
+ *
+ * `inert` on the editor area is what makes it unreachable (see main.ts). It is
+ * not decoration: the editor is still *visible* as far as the browser is
+ * concerned -- merely covered -- so without it the element keeps its place in
+ * the tab order and is still announced by a screen reader, and a reader in this
+ * mode would be handed an entire document they cannot see. `visibility: hidden`
+ * would fix that half by itself but not this one, since a hidden element still
+ * holds its flex space and the pane could then never cover it.
+ */
+.editor-split--reading {
+  position: relative;
+}
+
+.editor-split--reading .preview-pane {
+  position: absolute;
+  inset: 0;
+  /* Overrides the inline flex-basis applyRatio writes. The ratio itself is left
+     untouched in the store, so returning to split restores the width the reader
+     left rather than the default. */
+  flex-basis: auto;
+}
+
+.editor-split--reading .preview-divider {
+  display: none;
 }

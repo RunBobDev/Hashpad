@@ -29,6 +29,8 @@ function defaults(): app.Settings {
       tabSize: 2,
       insertSpaces: true,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
     },
     preview: { fontFamily: 'Segoe UI', fontSize: 15, syncScroll: true },
     files: {

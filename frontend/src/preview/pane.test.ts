@@ -117,6 +117,8 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    openedViewMode: 'preview',
+    recentViewModes: [],
     defaultEncoding: 'utf-8',
     autosave: false,
     autosaveDelayMs: 2000,
@@ -125,17 +127,31 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
   }));
 }
 
-/** A document the pane will render: `viewMode` is 'split' or nothing renders. */
-function splitDoc(id: string, text: string, filePath: string | null = null): Document {
+/**
+ * A document the pane will render. `viewMode` has to be one the pane shows for
+ * -- `'split'` or `'preview'` -- or nothing renders at all.
+ */
+function splitDoc(
+  id: string,
+  text: string,
+  filePath: string | null = null,
+  viewMode: Document['viewMode'] = 'split',
+): Document {
   const state = EditorState.create({ doc: text, extensions: buildExtensions(false) });
-  return { ...createUntitledDocument(state), id, filePath, viewMode: 'split' };
+  return { ...createUntitledDocument(state), id, filePath, viewMode };
 }
 
 /** The split container with a real editor in it, the shape main.ts builds. */
-function mount(text = '# One\n', filePath: string | null = null, ratio = 0.5, syncScroll = true) {
+function mount(
+  text = '# One\n',
+  filePath: string | null = null,
+  ratio = 0.5,
+  syncScroll = true,
+  viewMode: Document['viewMode'] = 'split',
+) {
   document.body.innerHTML = '<div class="editor-split"><div class="editor-area"></div></div>';
   const split = document.querySelector<HTMLElement>('.editor-split')!;
-  const doc = splitDoc('a', text, filePath);
+  const doc = splitDoc('a', text, filePath, viewMode);
   const view = new EditorView({
     state: doc.editorState,
     parent: split.querySelector<HTMLElement>('.editor-area')!,
@@ -389,6 +405,38 @@ describe('the divider', () => {
     expect(SaveSettings).toHaveBeenCalledTimes(1);
     expect(vi.mocked(SaveSettings).mock.calls[0]![0].window.previewSplitRatio).toBeCloseTo(0.32);
 
+    handle.destroy();
+  });
+});
+
+/**
+ * Preview-only mode (design §4.27). Two modes now put the pane on screen, and
+ * every other test in this file mounts a `'split'` document -- so reverting the
+ * pane's guards to `viewMode === 'split'` left all fifty test files green when
+ * it was measured. That is the gap these two close: without them the predicate
+ * is tested and the wiring is not, which in the app is a pane that mounts,
+ * sizes itself, and stays blank.
+ */
+describe('preview-only mode', () => {
+  it('renders for a document whose mode is preview rather than split', () => {
+    const { split, handle } = mount('# One\n', null, 0.5, true, 'preview');
+    handle.show();
+
+    expect(paneOf(split).querySelectorAll('h1')).toHaveLength(1);
+    handle.destroy();
+  });
+
+  /**
+   * The other half of the same guard: a mode that shows no pane must still
+   * render nothing. An implementation that asked "is this mode not source?"
+   * would pass the case above and quietly start rendering for `'live'`, which
+   * is reserved for SPEC §7.1 and renders identically to source until then.
+   */
+  it('renders nothing for a document in live mode', () => {
+    const { split, handle } = mount('# One\n', null, 0.5, true, 'live');
+    handle.show();
+
+    expect(paneOf(split).querySelectorAll('h1')).toHaveLength(0);
     handle.destroy();
   });
 });

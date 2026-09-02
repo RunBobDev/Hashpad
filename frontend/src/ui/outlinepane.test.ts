@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { buildExtensions } from '../editor/extensions';
-import { store } from '../state/appcontext';
+import { setTopSourceLineReader, store, topSourceLineChanged } from '../state/appcontext';
 import {
   createUntitledDocument,
   DEFAULT_OUTLINE_WIDTH,
@@ -177,6 +177,30 @@ describe('mountOutline', () => {
     const { workspace } = mount(`# One${NL}${NL}## Two`);
 
     expect(items(workspace).map((b) => b.textContent)).toEqual(['One', 'Two']);
+  });
+
+  /**
+   * The click marks its own heading, without waiting to be told by a scroll.
+   *
+   * The highlight used to be derived purely from where the viewport landed,
+   * which was exact while the sample point was the top edge. `topSourceLine`
+   * now samples one line down, so a heading whose section is a single line --
+   * a `###` directly under a `##` -- derives to the *next* heading: click one
+   * item, watch another light up, which is G.3b's old defect by a new route.
+   *
+   * Pinning it on the click is the fix, and it is worth having even at a
+   * one-line offset. The earlier attempt used a quarter of the viewport height,
+   * where this broke for almost every section rather than only the empty ones.
+   */
+  it('marks the heading it was told to go to, with no scroll to derive it from', () => {
+    const lines = ['# One', 'body', '## Two', '### Three', 'body'];
+    const { workspace } = mount(lines.join(NL));
+
+    // 'Three' immediately follows 'Two' -- a section with no body at all, which
+    // is the shape that derives wrongly when the answer is not set outright.
+    items(workspace)[1]!.click();
+
+    expect(workspace.querySelector('.outline__item[aria-current]')?.textContent).toBe('Two');
   });
 
   /**
@@ -421,6 +445,16 @@ describe('mountOutline', () => {
         value: SCROLLER_TOP - scrolled,
         configurable: true,
       });
+      // Stubbed alongside the rest of the geometry, or the arithmetic here is
+      // incoherent: `topSourceLine` offsets by one line using CodeMirror's own
+      // measured `defaultLineHeight`, which under jsdom is its internal estimate
+      // and has nothing to do with this file's pretend `LINE_HEIGHT`. With both
+      // agreeing, "scroll line N to the top" samples exactly line N+1, which is
+      // what the offset means.
+      Object.defineProperty(view, 'defaultLineHeight', {
+        value: LINE_HEIGHT,
+        configurable: true,
+      });
       view.lineBlockAtHeight = (height: number) => {
         const target = view.state.doc.line(blockLineAt(height, view.state.doc.lines));
         return { from: target.from, to: target.to, top: 0, height: 10, bottom: 10 } as ReturnType<
@@ -437,17 +471,92 @@ describe('mountOutline', () => {
 
     const DOC = ['# One', 'body', '## Two', 'body', '## Three', 'body'].join(NL);
 
+    /**
+     * Reading mode (design §4.27): the editor is covered, so following its
+     * scroll position would freeze the highlight while the reader scrolls the
+     * preview. `preview/pane.ts` registers a reader and this must prefer it.
+     *
+     * Driven through the registry rather than through a real pane on purpose --
+     * the point being tested is that the outline *asks* it, and mounting a
+     * preview here would import the lazy chunk into a test for the entry-bundle
+     * module that must never do that.
+     */
+    it('prefers the registered reader over the editor, and goes back when it clears', () => {
+      const { workspace, view } = mount(DOC);
+
+      scrollTopLineTo(view, 1);
+      expect(currentLabel(workspace)).toBe('One');
+
+      // The editor has not moved. Only the reader says otherwise.
+      setTopSourceLineReader(() => 5);
+      expect(currentLabel(workspace)).toBe('Three');
+
+      // `null` is the pane withdrawing on hide; the editor answers again.
+      setTopSourceLineReader(null);
+      expect(currentLabel(workspace)).toBe('One');
+    });
+
+    /**
+     * The notify half. Setting a reader is not the only way the answer changes:
+     * in reading mode the value moves on every preview scroll, with nothing the
+     * outline listens to firing. Without this the highlight would be correct
+     * only at the moment the mode was entered.
+     */
+    it('re-reads when the pane reports a scroll', () => {
+      const { workspace, view } = mount(DOC);
+      scrollTopLineTo(view, 2);
+
+      let line = 1;
+      setTopSourceLineReader(() => line);
+      expect(currentLabel(workspace)).toBe('One');
+
+      line = 5;
+      topSourceLineChanged();
+      expect(currentLabel(workspace)).toBe('Three');
+
+      setTopSourceLineReader(null);
+    });
+
+    // Each heading scrolled to the top marks its own section. Reads as the
+    // obvious thing to assert, and is only true because of the one-line offset:
+    // sampling the top edge exactly would land *on* the heading's own line,
+    // which is the boundary case `BOUNDARY_NUDGE` exists for.
     it('marks the section the viewport is in, and follows it', () => {
       const { workspace, view } = mount(DOC);
 
-      scrollTopLineTo(view, 2);
+      scrollTopLineTo(view, 1);
       expect(currentLabel(workspace)).toBe('One');
 
-      scrollTopLineTo(view, 4);
+      scrollTopLineTo(view, 3);
       expect(currentLabel(workspace)).toBe('Two');
 
-      scrollTopLineTo(view, 6);
+      scrollTopLineTo(view, 5);
       expect(currentLabel(workspace)).toBe('Three');
+    });
+
+    /**
+     * The offset itself, and the reason it is **one line** rather than a share
+     * of the viewport.
+     *
+     * Owner report: a section only highlighted once its heading was scrolled to
+     * the very top, so following along meant landing pixel-perfect on each one.
+     * A heading sitting one line below the top is, to a reader, the section they
+     * are in -- so it is marked.
+     *
+     * The first fix used a quarter of the viewport height, and was reverted for
+     * being far worse: a fraction scales with the *window*, so on a maximised
+     * one it spanned hundreds of pixels and skipped every section shorter than
+     * that -- the heading plainly on screen while the outline had moved past it.
+     * A line cannot do that, because no section is shorter than one line. That
+     * is the property this test pins.
+     */
+    it('marks a heading that is one line below the top, without landing exactly on it', () => {
+      const { workspace, view } = mount(DOC);
+
+      // Line 2 is the body under 'One'; line 3 is '## Two'.
+      scrollTopLineTo(view, 2);
+
+      expect(currentLabel(workspace)).toBe('Two');
     });
 
     /**
@@ -515,7 +624,7 @@ describe('mountOutline', () => {
      */
     it('keeps the mark when an edit rebuilds the list', () => {
       const { workspace, view } = mount(DOC);
-      scrollTopLineTo(view, 4);
+      scrollTopLineTo(view, 3);
       expect(currentLabel(workspace)).toBe('Two');
 
       view.dispatch({ changes: { from: view.state.doc.length, insert: `${NL}## Four` } });

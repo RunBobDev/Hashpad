@@ -36,6 +36,8 @@ function resetStore(): void {
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    openedViewMode: 'preview',
+    recentViewModes: [],
     defaultEncoding: 'utf-8',
     autosave: false,
     autosaveDelayMs: 2000,

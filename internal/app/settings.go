@@ -14,7 +14,7 @@ import (
 // settingsVersion is the schema version written to disk. Bump it only alongside
 // a migration in `migrateSettings`; a version from the *future* still falls back
 // to defaults, because we cannot guess at a format we do not know.
-const settingsVersion = 2
+const settingsVersion = 3
 
 // migrateSettings brings an older file forward, keeping everything it does not
 // have a reason to change.
@@ -43,6 +43,30 @@ func migrateSettings(settings Settings) Settings {
 		}
 	}
 
+	if settings.Version < 3 {
+		// **A field whose meaning changed, not a default that moved.**
+		//
+		// Through v2, `defaultViewMode` was *memory*: the preview toggle wrote
+		// to it on every use, so its value recorded where the user happened to
+		// be, not anything they chose. v3 makes it a preference -- what a new
+		// document opens in -- and moves the memory to `recentViewModes`.
+		//
+		// Left alone, every existing file would have its last-used mode
+		// silently promoted to a deliberate choice: someone who last had the
+		// preview open would find every new document forced into split forever,
+		// having never asked for it. Translating it is what preserves the
+		// behaviour they actually have, which "last" reproduces exactly.
+		//
+		// The cost is that a user who *did* set this from the settings dialog
+		// loses that choice. Accepted, and the same trade the v2 migration
+		// above makes: there is no record distinguishing the two, and the
+		// setting is one dropdown away.
+		if settings.Editor.DefaultViewMode != "" {
+			settings.Editor.RecentViewModes = []string{settings.Editor.DefaultViewMode}
+		}
+		settings.Editor.DefaultViewMode = "last"
+	}
+
 	settings.Version = settingsVersion
 	return settings
 }
@@ -62,7 +86,29 @@ type EditorSettings struct {
 	ShowLineNumbers bool    `json:"showLineNumbers"`
 	TabSize         int     `json:"tabSize"`
 	InsertSpaces    bool    `json:"insertSpaces"`
-	DefaultViewMode string  `json:"defaultViewMode"`
+	// What a *new* document opens in: "source", "split" or "last". Never
+	// "preview" -- reading mode has no editor, so a new document opening in it
+	// would be a blank page nobody can type into (design §4.27).
+	DefaultViewMode string `json:"defaultViewMode"`
+	// What an *existing* document opens in, by every route there is: a
+	// double-click or "Open with", a path on the command line, Ctrl+O, File >
+	// Open, dropping a file on the window, and Ctrl+Shift+T.
+	//
+	// "preview" is allowed here where DefaultViewMode refuses it, and is the
+	// default -- a file you open has something to read, where a new empty one
+	// does not. That single distinction is the whole reason these are two
+	// settings rather than one.
+	OpenedViewMode string `json:"openedViewMode"`
+	// The last two *distinct* modes used, most recent first, which is what
+	// "last" above resolves against.
+	//
+	// Two rather than one, and distinct rather than raw history, is what lets
+	// "last" be safe for new documents: deduplicating means both entries can
+	// never be the same, so at most one can be "preview" and there is always a
+	// non-reading mode to fall back to. That is the whole reason the list is
+	// this length -- one entry would make "last" unusable the moment the reader
+	// closed a document in reading mode.
+	RecentViewModes []string `json:"recentViewModes"`
 }
 
 // PreviewSettings has no loadRemoteImages field: remote images are never
@@ -131,7 +177,15 @@ func DefaultSettings() Settings {
 			// measure is a preference, not a default. The setting still works;
 			// it is off until asked for.
 			WordWrap: true, MaxContentWidth: 0, ShowLineNumbers: false,
-			TabSize: 2, InsertSpaces: true, DefaultViewMode: "source",
+			TabSize: 2, InsertSpaces: true,
+			// "last" rather than "source": the preview toggle has been sticky
+			// since H.3 because the owner reported having to re-enable it on
+			// every document, and "last" is that behaviour stated as a
+			// preference instead of hidden in a field that looked like one.
+			// An empty history resolves to source, so a fresh install still
+			// opens in the editor.
+			DefaultViewMode: "last", OpenedViewMode: "preview",
+			RecentViewModes: []string{},
 		},
 		Preview: PreviewSettings{
 			FontFamily: "Segoe UI", FontSize: 15, SyncScroll: true,

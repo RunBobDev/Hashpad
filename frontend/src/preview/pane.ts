@@ -36,8 +36,13 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { documentDirOf } from '../files/documentops';
 import { confirmOpenLink } from '../ui/confirmdialog';
-import { store } from '../state/appcontext';
-import { clampSplitRatio, MAX_SPLIT_RATIO, MIN_SPLIT_RATIO } from '../state/document';
+import { setTopSourceLineReader, store, topSourceLineChanged } from '../state/appcontext';
+import {
+  clampSplitRatio,
+  MAX_SPLIT_RATIO,
+  MIN_SPLIT_RATIO,
+  showsPreview,
+} from '../state/document';
 import { activeDocument } from '../state/documents';
 import { onLanguageLoaded } from './codehighlight';
 import { renderMarkdown } from './render';
@@ -171,7 +176,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     if (pane === null) return;
 
     const doc = activeDocument(store.getState());
-    if (doc === null || doc.viewMode !== 'split') return;
+    if (doc === null || !showsPreview(doc.viewMode)) return;
 
     try {
       // `documentDirOf` answers `''` for a document with no directory to
@@ -439,6 +444,13 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     if (target === null || !store.getState().syncScroll) return;
     // Same reasoning as `render`: the handle outlives a `hide()`, and a
     // background document must not move a pane nobody is looking at.
+    //
+    // **`=== 'split'` here on purpose, where `render` asks `showsPreview`.**
+    // They are different questions. `render` asks whether the pane is on
+    // screen; this asks whether the two panes should track each other, which
+    // needs *both* of them. In preview-only there is no visible editor and no
+    // caret the reader can place, so an alignment triggered by a selection
+    // change would yank a reading view from something they cannot see.
     if (activeDocument(store.getState())?.viewMode !== 'split') return;
 
     // `lineOffsets`, not `anchorOffsets`: see `lineAnchors` for why sharing the
@@ -691,6 +703,46 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * anchors naming lines it no longer has. Below: `lineForOffset` can answer 0
    * for an offset above the first anchor.
    */
+  /**
+   * The source line at the top of the *preview*, for the outline's current
+   * section highlight in reading mode (design §4.27).
+   *
+   * `null` means "not my business" and the outline falls back to measuring the
+   * editor. That answer is what makes this safe to register for the whole life
+   * of the pane rather than only while reading mode is on: split and reading
+   * switch without a `hide()`/`show()` pair, so a registration keyed on the mode
+   * at mount time would be stale the moment the user changed arrangement.
+   *
+   * The clamp is `syncFromPreview`'s, for the same reason: `lineForOffset`
+   * answers 0 above the first anchor, and `anchors` describes the last render,
+   * which a debounce can leave behind the document.
+   */
+  function topLineFromPane(): number | null {
+    const target = pane;
+    if (target === null) return null;
+    if (activeDocument(store.getState())?.viewMode !== 'preview') return null;
+
+    const list = anchorOffsets(target);
+    if (list.length === 0) return null;
+
+    // One line down, the same rule the editor path uses, so a section lights up
+    // at the same place whichever pane is being scrolled -- sampling the very
+    // top here and a line down there would make the highlight jump the moment
+    // the arrangement changed.
+    //
+    // The pane's own computed line height rather than the editor's: the two are
+    // different faces at different sizes (`--font-preview` against
+    // `--font-editor`), and the offset should be a line of *what the reader is
+    // looking at*. Non-numeric -- `normal`, or jsdom's empty string -- falls
+    // back to no offset, which is the pre-existing behaviour rather than a
+    // guess at a pixel count.
+    const doc = view.state.doc;
+    const lineHeight = Number.parseFloat(getComputedStyle(target).lineHeight);
+    const offset = Number.isFinite(lineHeight) ? lineHeight : 0;
+    const exact = lineForOffset(list, target.scrollTop + offset);
+    return Math.min(Math.max(Math.floor(exact), 1), doc.lines);
+  }
+
   function syncFromPreview(): void {
     const target = pane;
     if (target === null || !store.getState().syncScroll) return;
@@ -904,6 +956,12 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     pane = document.createElement('div');
     pane.className = 'preview-pane';
     pane.addEventListener('scroll', syncFromPreview);
+    // Separate from `syncFromPreview` rather than folded into it: that handler
+    // returns early when `syncScroll` is off, and the outline must keep
+    // following the preview in reading mode whether or not the two panes are
+    // set to track each other. They are different features that happen to share
+    // an event.
+    pane.addEventListener('scroll', topSourceLineChanged);
     pane.addEventListener('load', invalidateAnchors, true);
     pane.addEventListener('click', onPreviewClick);
     // The editor's scroller outlives the pane, so unlike the pane's own listener
@@ -918,6 +976,10 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // flex row with no `order`, so DOM order is left-to-right order.
     split.append(divider, pane);
     applyRatio(store.getState().previewSplitRatio);
+    // After the append, so a listener that fires immediately measures a pane
+    // that is in the tree. Registered for the pane's whole life, not just for
+    // reading mode -- `topLineFromPane` answers `null` when it does not apply.
+    setTopSourceLineReader(topLineFromPane);
     render();
   }
 
@@ -925,6 +987,11 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     clearRenderTimer();
     endDrag?.();
     pane?.removeEventListener('scroll', syncFromPreview);
+    pane?.removeEventListener('scroll', topSourceLineChanged);
+    // Withdrawn before the pane leaves the tree: a reader outliving it would
+    // have the outline measuring a detached element on every editor scroll, and
+    // pin the highlight to a pane nobody can see.
+    setTopSourceLineReader(null);
     pane?.removeEventListener('load', invalidateAnchors, true);
     pane?.removeEventListener('click', onPreviewClick);
     view.scrollDOM.removeEventListener('scroll', syncFromEditor);

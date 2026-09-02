@@ -47,7 +47,7 @@ import { applyTypography } from './settings/typography';
 import {
   setAutosaveSetting,
   setBehaviourSetting,
-  setDefaultViewModeSetting,
+  recordViewModeUsed,
   setWordWrapSetting,
 } from './settings/live';
 import { mountOutline, type OutlineHandle } from './ui/outline';
@@ -74,8 +74,13 @@ import {
   DEFAULT_SPLIT_RATIO,
   isDirty,
   isEncoding,
+  isDefaultViewMode,
+  isOpenedViewMode,
   isViewMode,
+  resolveViewMode,
+  type ViewModeSetting,
   previousViewModeFor,
+  showsPreview,
   type Document,
   type Encoding,
 } from './state/document';
@@ -114,6 +119,11 @@ mountMenuBar(root, (id) => {
     // changes, which is exactly why it is read at open time.
     case 'view.preview':
       return activeDocument(store.getState())?.viewMode === 'split';
+    // Not `showsPreview`: these two ticks are asking which *arrangement* is on,
+    // and the whole point of two entries is that they are distinguishable. A
+    // shared predicate here would tick both rows in either mode.
+    case 'view.readingMode':
+      return activeDocument(store.getState())?.viewMode === 'preview';
     // The handle doubles as the visibility flag for both of these; a separate
     // boolean beside it is a second source of truth that can disagree with the
     // DOM.
@@ -257,9 +267,12 @@ async function bootstrap(): Promise<void> {
   let outlineVisible = false;
   let outlineWidth = DEFAULT_OUTLINE_WIDTH;
   let editorBehaviour = DEFAULT_BEHAVIOUR;
-  // Go's default is `"source"`, so a failed settings load opens in source mode
-  // -- the same behaviour a fresh install has, like every local above.
-  let defaultViewMode: Document['viewMode'] = 'source';
+  // Go's defaults, so a failed settings load behaves like a fresh install, like
+  // every local above. `'last'` against an empty history resolves to source, so
+  // the fallback is still "open in the editor" without spelling it twice.
+  let defaultViewMode: ViewModeSetting = 'last';
+  let openedViewMode: ViewModeSetting = 'preview';
+  let recentViewModes: Document['viewMode'][] = [];
   // Go's default again. Worth being the fallback on its own merits and not only
   // for symmetry: UTF-8 with no BOM is what a document nobody has configured
   // should be written as.
@@ -337,10 +350,21 @@ async function bootstrap(): Promise<void> {
     };
     // Checked rather than taken as-is, unlike the booleans above: Go declares
     // this one as a `string`, so unmarshalling does not reject a hand-edited
-    // value the way it rejects a non-boolean. See `isViewMode`.
-    if (isViewMode(settings.editor.defaultViewMode)) {
+    // value the way it rejects a non-boolean. See `isDefaultViewMode`.
+    if (isDefaultViewMode(settings.editor.defaultViewMode)) {
       defaultViewMode = settings.editor.defaultViewMode;
     }
+    // Wider by one value -- a file opened from Explorer may land in reading
+    // mode where a new document may not. See `isOpenedViewMode`.
+    if (isOpenedViewMode(settings.editor.openedViewMode)) {
+      openedViewMode = settings.editor.openedViewMode;
+    }
+    // Each entry checked rather than the array taken whole: it is written by us
+    // but read from a hand-editable file, and one bad element among good ones
+    // would otherwise become the answer `'last'` resolves to. `resolveViewMode`
+    // skips what it does not recognise, so this is belt and braces -- but the
+    // store's type says these are real modes, and it should not be lying.
+    recentViewModes = (settings.editor.recentViewModes ?? []).filter(isViewMode);
     // Checked for the same reason, and it matters more: this is what an
     // untitled document gets *written* as, so an unrecognised value would reach
     // Go's `WriteFile` the first time the user saved.
@@ -364,6 +388,8 @@ async function bootstrap(): Promise<void> {
       wordWrap,
       editorBehaviour,
       defaultViewMode,
+      openedViewMode,
+      recentViewModes,
       defaultEncoding,
       autosave,
       autosaveDelayMs,
@@ -435,7 +461,11 @@ async function bootstrap(): Promise<void> {
     // permanently invisible -- the failure Checkpoint D had to add a Go-side
     // backstop for.
     try {
-      await restoreViewMode(defaultViewMode);
+      // Resolved here rather than stored resolved: the startup tab is an
+      // untitled document, so reading mode is not a legal answer for it even
+      // when it is the most recent. Files handed in on the command line are
+      // dealt with separately, after this, where it is.
+      await restoreViewMode(resolveViewMode(defaultViewMode, recentViewModes, false));
     } catch (err) {
       // The store keeps the mode it was seeded with unless this failed, and a
       // `'split'` left in place with no pane mounted is worse than losing the
@@ -460,6 +490,7 @@ async function bootstrap(): Promise<void> {
     void openPendingFiles();
   }
 }
+
 void bootstrap();
 
 // Window-level, not an editor command: zoom has to work with the caret in the
@@ -589,6 +620,23 @@ async function setToolbarPinned(commandId: string, pinned: boolean): Promise<voi
 let previewHandle: PreviewHandle | null = null;
 
 /**
+ * Preview-only mode's layout (design §4.27): the pane is laid over the whole
+ * split row, and the editor stays where it is, underneath and unreachable.
+ *
+ * **`inert` is the load-bearing half, not the class.** The editor is still
+ * *visible* as far as the browser is concerned -- merely covered -- so without
+ * this it keeps its place in the tab order and a screen reader still announces
+ * it, handing a reader an entire document they can neither see nor reach.
+ * Removing the attribute rather than setting it false: `inert` is a boolean
+ * attribute, and `inert="false"` is still inert.
+ */
+function setReadingLayout(reading: boolean): void {
+  editorSplit.classList.toggle('editor-split--reading', reading);
+  if (reading) editorArea.setAttribute('inert', '');
+  else editorArea.removeAttribute('inert');
+}
+
+/**
  * `viewMode` is per *document*, so the one shared pane has to follow whichever
  * document is on screen -- not just whichever one was toggled. Without this,
  * switching from a split-mode tab to a source-mode one leaves the pane open
@@ -604,11 +652,60 @@ let previewHandle: PreviewHandle | null = null;
 store.subscribe(
   (state) => activeDocument(state)?.viewMode ?? null,
   (mode) => {
-    if (previewHandle === null) return;
-    if (mode === 'split') previewHandle.show();
-    else previewHandle.hide();
+    // Outside the handle guard on purpose: the layout is a property of the mode,
+    // not of whether the pane has ever been mounted. Leaving a document in
+    // preview-only, closing the pane and coming back must not strand the class.
+    setReadingLayout(mode === 'preview');
+    // `showsPreview`, not `=== 'split'`. Two modes put the pane on screen now
+    // (design §4.27) and this is the only line that mounts or unmounts it, so
+    // getting the question wrong here is the whole feature failing to appear.
+    if (mode !== null && showsPreview(mode)) {
+      // **Synchronous whenever it can be.** Going through the promise
+      // unconditionally would make every tab switch into split show the pane a
+      // microtask late -- imperceptible to a person, but it turns a path that
+      // was synchronous into one that is not, and anything reading the DOM
+      // straight after a switch then sees the pane missing.
+      if (previewHandle !== null) {
+        previewHandle.show();
+        return;
+      }
+      // **Mounts if it has to.** This used to return early on a null handle,
+      // which was safe only while `showPaneMode` was the sole way to reach a
+      // mode with a pane. `openedViewMode` broke that: opening a file can now
+      // ask for split or reading mode from `documentops.ts`, which cannot
+      // import the preview at all -- it is in the entry bundle and the pane is
+      // the lazy chunk. Without this the document would carry the right mode
+      // and show nothing.
+      void ensurePreview().then((handle) => {
+        // Re-read rather than trusting `mode`: the import is a real await, and
+        // a tab switch inside it would otherwise show a pane the active
+        // document does not want.
+        const now = activeDocument(store.getState())?.viewMode ?? null;
+        if (now !== null && showsPreview(now)) handle.show();
+      });
+      return;
+    }
+    previewHandle?.hide();
   },
 );
+
+/**
+ * The preview module, imported at most once.
+ *
+ * The promise is cached, not the handle: two callers arriving before the first
+ * import resolves would each see a null handle and each mount a pane, and the
+ * second would leave the first's divider and pane orphaned in the split row.
+ * Reachable now that both the subscription and `showPaneMode` can trigger it.
+ */
+let previewImport: Promise<PreviewHandle> | null = null;
+
+function ensurePreview(): Promise<PreviewHandle> {
+  previewImport ??= import('./preview/pane').then((module) => {
+    previewHandle = module.mountPreview(editorSplit, view);
+    return previewHandle;
+  });
+  return previewImport;
+}
 
 /**
  * Puts the active document into split mode, mounting the pane if this is the
@@ -626,22 +723,58 @@ store.subscribe(
  * show an empty pane -- the pane skips rendering a document that is not yet
  * in split mode -- until the user's next keystroke.
  */
-async function showPreview(): Promise<void> {
+async function showPaneMode(target: 'split' | 'preview'): Promise<void> {
   const active = activeDocument(store.getState());
-  if (active === null || active.viewMode === 'split') return;
+  if (active === null || active.viewMode === target) return;
 
   // Copied into a local before the await below: TypeScript discards a
   // narrowing of `active.viewMode` across it, and this also pins the mode to
   // what it was when the toggle was pressed rather than whatever it is by the
   // time the dynamic import resolves.
-  const mode = active.viewMode;
+  //
+  // Through `previousViewModeFor` rather than passed straight through, because
+  // the outgoing mode can now be `'preview'` (design §4.27) and "what was
+  // showing before the split" has no such answer -- a document that went
+  // preview-only then split returns to source. The compiler is what says so:
+  // `remember` is typed `'source' | 'live'`.
+  const remember = previousViewModeFor(active.viewMode);
 
   // Imported before the state write, so the subscription has a handle to call
   // `show()` on when it fires.
-  if (!previewHandle) {
-    previewHandle = (await import('./preview/pane')).mountPreview(editorSplit, view);
+  await ensurePreview();
+  store.setState((prev) => setViewMode(prev, active.id, target, remember));
+}
+
+/**
+ * View > Reading View. The rendered pane at full width (design §4.27).
+ *
+ * **Does not write `editor.defaultViewMode`, where `togglePreview` does**, and
+ * that asymmetry is the design rather than an omission. Split is a working
+ * layout -- you can still type in it -- so remembering it across launches is a
+ * convenience. Reading mode has no editor, so a remembered one would hand the
+ * startup tab and every File > New a blank page that cannot be typed into.
+ * `isDefaultViewMode` refuses the value for the same reason; this is the other
+ * half of that guard, on the path a user can actually reach.
+ *
+ * The consequence, stated because it will be noticed: reading mode does not
+ * survive a restart, and it is per document like every other view mode.
+ */
+async function toggleReadingMode(): Promise<void> {
+  const active = activeDocument(store.getState());
+  if (active === null) return;
+
+  if (active.viewMode === 'preview') {
+    store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
+    void recordViewModeUsed(active.previousViewMode);
+    return;
   }
-  store.setState((prev) => setViewMode(prev, active.id, 'split', mode));
+
+  await showPaneMode('preview');
+  // Recorded like any other mode, which is what lets `openedViewMode: "last"`
+  // put a double-clicked file straight into reading mode. Safe for new
+  // documents because `resolveViewMode` refuses `'preview'` for them, and the
+  // two-slot history always has something else behind it to fall back to.
+  void recordViewModeUsed('preview');
 }
 
 /**
@@ -655,7 +788,7 @@ async function showPreview(): Promise<void> {
  * that reads as if it were doing the work.
  *
  * The outgoing mode is handed to `setViewMode` as `remember` only on the way in
- * (inside `showPreview`), so toggling off restores `'live'` for a document that
+ * (inside `showPaneMode`), so toggling off restores `'live'` for a document that
  * was in live mode rather than downgrading it to source.
  */
 async function togglePreview(): Promise<void> {
@@ -664,12 +797,12 @@ async function togglePreview(): Promise<void> {
 
   if (active.viewMode === 'split') {
     store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
-    void setDefaultViewModeSetting(active.previousViewMode);
+    void recordViewModeUsed(active.previousViewMode);
     return;
   }
 
-  await showPreview();
-  void setDefaultViewModeSetting('split');
+  await showPaneMode('split');
+  void recordViewModeUsed('split');
 }
 
 /**
@@ -680,14 +813,14 @@ async function togglePreview(): Promise<void> {
  * before settings load, so whatever `defaultViewMode` turns out to be, this is
  * the one place that catches it up with a new tab opened a second later.
  *
- * Deliberately not persisting -- see `showPreview`.
+ * Deliberately not persisting -- see `showPaneMode`.
  */
 async function restoreViewMode(mode: Document['viewMode']): Promise<void> {
   const active = activeDocument(store.getState());
   if (active === null || active.viewMode === mode) return;
 
   if (mode === 'split') {
-    await showPreview();
+    await showPaneMode('split');
     return;
   }
   store.setState((prev) => setViewMode(prev, active.id, mode, previousViewModeFor(mode)));
@@ -1049,6 +1182,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     }
     case 'view.preview':
       void togglePreview();
+      break;
+    case 'view.readingMode':
+      void toggleReadingMode();
       break;
     case 'settings.open':
       void openSettings();

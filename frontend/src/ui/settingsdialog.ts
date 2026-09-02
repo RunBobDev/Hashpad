@@ -34,11 +34,12 @@ import {
   setBehaviourSetting,
   setDefaultEncodingSetting,
   setDefaultViewModeSetting,
+  setOpenedViewModeSetting,
   setSyncScrollSetting,
   setWordWrapSetting,
 } from '../settings/live';
 import { store } from '../state/appcontext';
-import { isEncoding, type Document } from '../state/document';
+import { isEncoding, type ViewModeSetting } from '../state/document';
 import { confirmReset } from './confirmdialog';
 import { emitCommand } from './menubar';
 
@@ -441,21 +442,47 @@ function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
     void setBehaviourSetting({ insertSpaces: insertSpaces.checked });
   });
 
-  // Source and Split only. `'live'` is in the `viewMode` union and the app
-  // renders it exactly like source -- there is no live-preview mode yet -- so
-  // offering it would be a control wired to nothing, which is the thing
-  // `PreviewSettings`' own comment about `loadRemoteImages` warns against. A
-  // hand-edited `"live"` therefore shows as Source here, which is what it
-  // behaves as.
+  // **No Reading view option here, and that is not an oversight.** Reading mode
+  // has no editor, so a *new* document opening in it would be a blank page
+  // nobody can type into (design §4.27). It is still reachable through "Last
+  // used", which resolves past it -- that is what the two-slot history in
+  // `pushRecentViewMode` exists for.
+  //
+  // No `'live'` either, for the older reason: the app renders it exactly like
+  // source, so offering it would be a control wired to nothing. A hand-edited
+  // `"live"` shows as Editor only here, which is what it behaves as.
   const viewMode = select(
     [
       ['source', 'Editor only'],
       ['split', 'Editor and preview'],
+      ['last', 'Last used'],
     ],
     state.defaultViewMode,
   );
   viewMode.addEventListener('change', () => {
-    void setDefaultViewModeSetting(viewMode.value as Document['viewMode']);
+    // Cast to the *setting's* type, not to `Document['viewMode']`. The union
+    // gained `'preview'` and this dropdown must never offer it; narrowing the
+    // cast is what makes adding the option here a compile error rather than a
+    // quiet trap.
+    void setDefaultViewModeSetting(viewMode.value as Exclude<ViewModeSetting, 'preview'>);
+  });
+
+  // The one dropdown where Reading view is legal: a document that already
+  // exists has something to read, where a new empty one does not. Every route
+  // to an existing document consults it -- Ctrl+O, File > Open, a drop, a
+  // double-click, Ctrl+Shift+T -- so there is no route that behaves differently
+  // from the others, which was the first design and was the wrong one.
+  const openedViewMode = select(
+    [
+      ['source', 'Editor only'],
+      ['split', 'Editor and preview'],
+      ['preview', 'Reading view'],
+      ['last', 'Last used'],
+    ],
+    state.openedViewMode,
+  );
+  openedViewMode.addEventListener('change', () => {
+    void setOpenedViewModeSetting(openedViewMode.value as ViewModeSetting);
   });
 
   return group('Editor', [
@@ -467,6 +494,7 @@ function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
     row('Tab width', tabSize, `${LIMITS.tabSize.min}–${LIMITS.tabSize.max} spaces`),
     row('Insert spaces instead of tabs', insertSpaces),
     row('New documents open in', viewMode),
+    row('Existing documents open in', openedViewMode, 'Ctrl+O, a drop, or a double-click'),
   ]);
 }
 

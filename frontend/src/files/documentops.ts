@@ -20,6 +20,7 @@ import {
   isDirty,
   previousViewModeFor,
   type Document,
+  resolveViewMode,
 } from '../state/document';
 import {
   activateDocument,
@@ -88,7 +89,7 @@ export function makeUntitledDocument(): Document {
     }),
     // Read from the store rather than defaulted, the same as the three above:
     // File > New in a window where the preview is open should keep it open.
-    store.getState().defaultViewMode,
+    resolveViewMode(store.getState().defaultViewMode, store.getState().recentViewModes, false),
     // SPEC §6.13's `files.defaultEncoding`. Only untitled documents get it --
     // `openDocumentInNewTab` below takes the encoding Go detected, because
     // overriding a detected encoding with a default would transcode the file
@@ -224,7 +225,13 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
   // Not spelled `'source'` any more, which is what the owner reported: opening
   // a file with the preview showing closed it, because every tab was minted in
   // source mode regardless of the window it was opening into.
-  const viewMode = store.getState().defaultViewMode;
+  // `openedViewMode`, not `defaultViewMode`, and `allowPreview` true: this is a
+  // document that exists and has something to read, where a new empty one does
+  // not (design §4.27a). Every route in reaches here -- Ctrl+O, File > Open, a
+  // drop, Ctrl+Shift+T, and a file that launched Hashpad -- which is what makes
+  // this one line the whole of the setting rather than a special case per route.
+  const state = store.getState();
+  const viewMode = resolveViewMode(state.openedViewMode, state.recentViewModes, true);
 
   const doc: Document = {
     id: crypto.randomUUID(),

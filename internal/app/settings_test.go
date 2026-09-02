@@ -475,3 +475,63 @@ func TestResetSettingsReturnsDefaultsEvenWhenTheWriteFails(t *testing.T) {
 		t.Errorf("returned %+v, want the defaults", got)
 	}
 }
+
+// The v3 migration, which is a *meaning* change rather than a default that
+// moved -- and so the one most likely to be got wrong by leaving the value
+// alone, which reads as harmless and is not.
+//
+// Through v2 `defaultViewMode` was memory: the preview toggle overwrote it on
+// every use, so its value recorded where the user last happened to be. v3 makes
+// it a preference and moves the memory to `recentViewModes`. Leaving it would
+// promote an accident into a deliberate choice -- someone who last had the
+// preview open would find every new document forced into split forever.
+//
+// The owner's real file was exactly this case: `"defaultViewMode": "split"`,
+// written there by toggling the preview, never chosen.
+func TestLoadMigratesTheViewModeMemoryIntoItsOwnField(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	write(t, path, `{
+	  "version": 2,
+	  "appearance": {"theme": "dark"},
+	  "editor": {"defaultViewMode": "split", "fontSize": 18}
+	}`)
+
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if got.Editor.DefaultViewMode != "last" {
+		t.Errorf("defaultViewMode = %q, want last -- the old value was memory, not a choice",
+			got.Editor.DefaultViewMode)
+	}
+	if len(got.Editor.RecentViewModes) != 1 || got.Editor.RecentViewModes[0] != "split" {
+		t.Errorf("recentViewModes = %v, want [split] -- the memory must survive the move",
+			got.Editor.RecentViewModes)
+	}
+	// Not in a v2 file at all, so it comes from the defaults rather than the
+	// migration. Asserted here because the two arrive by different routes and
+	// only one of them is this function's doing.
+	if got.Editor.OpenedViewMode != "preview" {
+		t.Errorf("openedViewMode = %q, want preview", got.Editor.OpenedViewMode)
+	}
+	if got.Appearance.Theme != "dark" || got.Editor.FontSize != 18 {
+		t.Errorf("unrelated settings lost: theme=%q fontSize=%d",
+			got.Appearance.Theme, got.Editor.FontSize)
+	}
+}
+
+// A fresh install has no history, and "last" has to mean something on the very
+// first launch. Empty rather than seeded with a mode: seeding would be
+// indistinguishable from a real choice the moment anything read it back.
+func TestDefaultSettingsStartWithNoViewModeHistory(t *testing.T) {
+	got := DefaultSettings()
+
+	if got.Editor.DefaultViewMode != "last" {
+		t.Errorf("defaultViewMode = %q, want last", got.Editor.DefaultViewMode)
+	}
+	if len(got.Editor.RecentViewModes) != 0 {
+		t.Errorf("recentViewModes = %v, want empty on a fresh install",
+			got.Editor.RecentViewModes)
+	}
+}

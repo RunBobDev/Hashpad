@@ -1209,3 +1209,161 @@ in every source file. Around 130 files here carry none. The licence still
 applies — the `LICENSE` file and the README statement are sufficient to
 establish it — but headers make the terms travel with an individual file that
 someone copies out. Left as a deliberate omission rather than an oversight.
+
+### 4.27 A fourth view mode: preview-only
+
+SPEC §6.6 names three view modes — source, live and split. **There are now
+four.** `'preview'` shows the rendered pane at the full width of the workspace
+with no editor beside it: a reading view.
+
+**Why it exists.** It was asked for directly, in these words: "the current
+preview window, but on the whole screen". Everything it needs was already built
+— the render pipeline, the pane, the source-line anchors — so it is the smallest
+useful thing that can be assembled out of Checkpoint F, and it is worth having
+on its own terms before Phase 2's live preview arrives.
+
+**It is not live preview and does not stand in for it.** §7.1's live preview
+hides markdown markers inside the editor so the text reads as formatted while
+staying editable. This is the opposite arrangement: a rendered document you
+cannot type into. The `'live'` value stays in the union, still rendering
+identically to source, still reserved. Filling that slot with this feature would
+have been the cheap move and the wrong one — it would leave the headline feature
+of Phase 2 with nowhere to land.
+
+**Three choices inside it, each with a rejected alternative.**
+
+**The editor stays laid out and is marked `inert`; it is not `display: none`.**
+A hidden element reports zero for every dimension, and two things measure the
+editor's real geometry: `preview/pane.ts` for scroll sync, and
+`ui/outline.ts`'s `topSourceLine` for the current-section highlight. Hiding it
+outright would mean disabling both rather than simply leaving them accurate.
+`inert` is the native attribute for the actual requirement — out of the tab
+order, no pointer events, absent from the accessibility tree, layout untouched.
+Without it, a Narrator user in this mode would be read an entire document they
+can neither see nor reach, which is a defect SPEC §10 would count.
+
+**One `viewMode` decides everything; there are no independent flags.** The
+alternative considered was a pair of booleans — scroll sync off, editor off —
+which is appealing because `syncScroll` is already a store field gated in three
+places, so half of it exists. It was rejected because two independent booleans
+can express states that are not modes: sync enabled with no pane to sync to,
+and editor hidden with sync still driving it. The legal combinations are fewer
+than the expressible ones, and every reader would have to know which pairs are
+real. Effective sync is derived: `setting && viewMode === 'split'`. This project
+has already shipped one enum whose three values rendered as two, and the check
+in H.4b exists to stop a dropdown offering a mode wired to nothing; the same
+mistake in a different shape is not worth making twice.
+
+**The outline is handed its line number rather than fetching it.** In this mode
+the current-section highlight should follow the *preview's* scroll position, and
+the mapping for that already exists — `preview/scrollsync.ts`'s `lineForOffset`,
+which the preview→editor sync direction has used since Checkpoint F. The obvious
+implementation is for the outline to call it. That is forbidden by a constraint
+recorded in `ui/outline.ts` itself: the preview is lazily loaded and the outline
+is in the entry bundle, and Checkpoint F's measured result is that the whole
+preview feature costs startup 1.03 kB. An import in that direction would pull
+markdown-it and DOMPurify into the entry chunk and spend that win on a mode most
+launches never enter. So the dependency runs the other way — the pane registers
+a provider while it is mounted in this mode and withdraws it on `hide()`, and
+the outline keeps its editor-based implementation as the default.
+
+**No keyboard chord, deliberately.** Ctrl+Shift+P keeps meaning source↔split.
+A three-way cycle on one chord makes the common toggle worse to serve a mode
+whose use is occasional, and the spec asks for no chord here at all. The View
+menu is the way in. Adding a chord later costs one line; taking one back costs
+muscle memory.
+
+#### 4.27a Two view-mode settings, and a two-slot memory
+
+§4.27 shipped reading mode reachable only from the View menu, and deliberately
+refused to let `editor.defaultViewMode` hold `"preview"` — a new document
+opening in a view with no editor is a blank page nobody can type into.
+
+**That refusal was the right guard on the wrong field.** The owner's objection
+was that one setting was being asked two different questions: what a *new*
+document opens in, and what a *file you double-clicked* opens in. They have
+different right answers, and reading mode is only dangerous for the first.
+
+Three fields now, settings version 3:
+
+| | accepts | default |
+|---|---|---|
+| `editor.defaultViewMode` | `source`, `split`, `last` | `last` |
+| `editor.openedViewMode` | those plus `preview` | `preview` |
+| `editor.recentViewModes` | the last two *distinct* modes | `[]` |
+
+**`"last"` is safe for new documents because the history is two long and
+deduplicated.** Deduplicating means the two entries can never be equal, so at
+most one can be `preview`, so there is always a non-reading mode behind it to
+fall back to. One remembered mode would have made `"last"` unusable the moment
+the reader closed a document in reading mode. The length is a correctness
+requirement, not a nicety, and `resolveViewMode` is where the rule lives.
+
+**Every route to an existing document consults `openedViewMode`** — a
+double-click, "Open with", a path on the command line, Ctrl+O, File > Open,
+dropping a file on the window, and Ctrl+Shift+T.
+
+The first design applied it to the launch case only, on the reasoning that
+Ctrl+O happens while you are already working and landing in a view you cannot
+type into would be a surprise there. **The owner asked for it to cover Ctrl+O
+too, and that is the better answer** — not only because it is what they want, but
+because "what an existing document opens in" is one question with one answer, and
+the route it arrived by is not part of it. The narrower version needed a
+launch-specific code path that matched opened documents by path; widening it
+deleted that path and left a single line in `openDocumentInNewTab`, which every
+route already goes through.
+
+That widening exposed a real gap. `documentops.ts` is in the entry bundle and
+**cannot import the preview**, which is the lazy chunk — so a mode with a pane
+arriving from there had nothing to mount it, and the store subscription returned
+early on a null handle. The document carried the right mode and showed nothing.
+The subscription now mounts on demand, caching the *promise* rather than the
+handle so two callers racing the first import cannot mount two panes. It stays
+synchronous when the handle already exists: going through the promise
+unconditionally made every tab switch into split show the pane a microtask late,
+which an existing test caught.
+
+**The migration is a meaning change, not a moved default.** Through v2,
+`defaultViewMode` was *memory* — the preview toggle overwrote it on every use, so
+its value recorded where the user last happened to be. Left alone, every existing
+file would have had that accident promoted to a deliberate choice: someone who
+last had the preview open would find every new document forced into split
+forever. So v3 moves the old value into `recentViewModes` and sets the preference
+to `"last"`, which reproduces exactly the behaviour they already had. The cost is
+that a user who *did* choose it from the dialog loses that choice — accepted, the
+same trade the v2 migration made, and the setting is one dropdown away.
+
+The toggles now write `recentViewModes` rather than `defaultViewMode`. They had
+to: once a person can choose the preference, a toggle writing to it is a setting
+that refuses to stay set.
+
+#### 4.27b The outline's current-section offset is one line, not a share of the viewport
+
+Reported twice, and the second report is why the unit matters.
+
+First: a section only highlighted once its heading was scrolled to the very top,
+so following along while reading meant landing pixel-perfect on each one.
+Measuring at the top edge is what a *mapping* does; it is not what a reader means
+by "the section I am in".
+
+That was fixed with a quarter of the viewport height, and **the fix was worse
+than the bug**. A fraction of the viewport scales with the window rather than the
+text, so on a maximised window it spanned hundreds of pixels and skipped every
+section shorter than that — the heading plainly on screen while the outline had
+already moved past it. Reverted.
+
+The offset is now one line, taken from `EditorView.defaultLineHeight` in the
+editor and the pane's computed `line-height` in the preview, so it follows the
+font settings rather than being a magic pixel count. A line is enough to end the
+pixel-perfect hunt and **cannot swallow a section, because no section is shorter
+than one line.**
+
+A side effect worth recording: the viewport-fraction version was invisible to the
+test suite, because jsdom reports `clientHeight` as `0`. `defaultLineHeight` is
+not zero there, so the one-line version has a real test that fails when the
+offset is removed. The better-behaved design was also the testable one.
+
+`goTo` now pins the highlight for one frame after a click. At any non-zero offset
+the derived answer for a section with no body — a `###` directly under a `##` —
+is the *next* heading, which is Checkpoint G.3b's old defect arriving by a new
+route.

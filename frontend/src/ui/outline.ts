@@ -19,7 +19,7 @@ import { EditorView } from '@codemirror/view';
 import type { Text } from '@codemirror/state';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import { headingLevelAt } from '../editor/marks';
-import { store } from '../state/appcontext';
+import { readTopSourceLine, setTopSourceLineListener, store } from '../state/appcontext';
 import { clampOutlineWidth } from '../state/document';
 import { activeDocument } from '../state/documents';
 
@@ -170,6 +170,30 @@ const KEYBOARD_STEP = 16;
  */
 const BOUNDARY_NUDGE = 0.5;
 
+/**
+ * How far below the top of the viewport the "you are here" line is taken from:
+ * **one line**.
+ *
+ * Owner report, twice, and the second one is why this is measured in lines.
+ * First: a section only highlighted once its heading sat at the very top, so
+ * following along while reading meant landing pixel-perfect on each one.
+ *
+ * That was fixed with a quarter of the viewport height, and the fix was worse
+ * than the bug: a fraction of the viewport scales with the *window*, not with
+ * the text. Maximised, a quarter is hundreds of pixels, so **any section shorter
+ * than that was skipped entirely** -- the heading plainly on screen while the
+ * outline had already moved past it.
+ *
+ * A line is the right unit because it is tied to the content. It is enough to
+ * stop the pixel-perfect hunt, and it cannot swallow a section, because no
+ * section is shorter than one line. Taken from the editor's own measured line
+ * height rather than a constant, so it follows the font size and line height
+ * from settings instead of drifting away from them.
+ */
+function activeHeadingOffset(view: EditorView): number {
+  return view.defaultLineHeight;
+}
+
 /** The list, as a pure function so what the sidebar shows is testable alone. */
 export function buildOutline(
   headings: readonly Heading[],
@@ -275,6 +299,8 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
   let headings: Heading[] = [];
   /** Index of the highlighted item, or -1 above the first heading. */
   let active = -1;
+  /** Set for one frame after a click, so the jump's own scroll cannot undo it. */
+  let jumpGuard: number | null = null;
 
   const column = document.createElement('div');
   column.className = 'outline-column';
@@ -337,6 +363,25 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
       selection: { anchor: pos },
       effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 0 }),
     });
+
+    // **Pinned, because `ACTIVE_HEADING_BAND` would otherwise undo the click.**
+    // The jump puts the heading at the very top and the highlight is derived
+    // from where the viewport lands -- but the band now samples a quarter of a
+    // screen lower, so for any section shorter than that the derived answer is
+    // the *next* heading. Clicking one item and watching a different one light
+    // up is the same defect G.3b already fixed once, arriving by a new route.
+    //
+    // Held only until the next frame, the same shape as the pane's echo guard:
+    // `scrollIntoView` produces a scroll event of its own, and that is the one
+    // that must not overwrite this. Real scrolling afterwards is a genuine
+    // answer and takes over immediately.
+    active = activeHeadingIndex(headings, line);
+    setActiveHeading(nav, active);
+    if (jumpGuard !== null) cancelAnimationFrame(jumpGuard);
+    jumpGuard = requestAnimationFrame(() => {
+      jumpGuard = null;
+    });
+
     view.focus();
   }
 
@@ -358,7 +403,7 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
    */
   function topSourceLine(): number {
     const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
-    const block = view.lineBlockAtHeight(height + BOUNDARY_NUDGE);
+    const block = view.lineBlockAtHeight(height + activeHeadingOffset(view) + BOUNDARY_NUDGE);
     return view.state.doc.lineAt(block.from).number;
   }
 
@@ -370,7 +415,13 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
    * short list, and the write is what would cost something.
    */
   function refreshActive(): void {
-    const next = activeHeadingIndex(headings, topSourceLine());
+    // A click just set the answer; this call is that jump's own scroll event.
+    if (jumpGuard !== null) return;
+    // The preview's reader wins when one is registered (design §4.27): in
+    // reading mode there is no visible editor, so following its scroll position
+    // would pin the highlight to something nobody can see. `??`, not `||` -- a
+    // legitimate answer of line 0 must not fall through to the editor.
+    const next = activeHeadingIndex(headings, readTopSourceLine() ?? topSourceLine());
     if (next === active) return;
     active = next;
     setActiveHeading(nav, active);
@@ -487,12 +538,24 @@ export function mountOutline(parent: HTMLElement, view: EditorView): OutlineHand
   // The editor's scroller outlives this sidebar, so unlike the elements above
   // this listener is a real leak if `destroy` forgets it.
   view.scrollDOM.addEventListener('scroll', refreshActive, { passive: true });
+  // In reading mode the editor never scrolls, so the listener above never
+  // fires and the highlight would sit frozen while the preview moves under it.
+  // This is how the pane's scroll handler reaches us without either module
+  // importing the other -- see `setTopSourceLineReader`.
+  setTopSourceLineListener(refreshActive);
   refreshActive();
 
   return {
     destroy(): void {
       unsubscribe();
       view.scrollDOM.removeEventListener('scroll', refreshActive);
+      // A listener outliving the sidebar would have the pane calling into a
+      // closure over removed DOM on every preview scroll.
+      setTopSourceLineListener(null);
+      if (jumpGuard !== null) {
+        cancelAnimationFrame(jumpGuard);
+        jumpGuard = null;
+      }
       endDrag?.();
       if (saveTimer !== null) {
         clearTimeout(saveTimer);

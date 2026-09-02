@@ -106,10 +106,14 @@ export function parseStatusCommand(
   return null;
 }
 
+// `Record<Document['viewMode'], …>` rather than a partial map: adding a mode to
+// the union makes this a compile error rather than a segment that silently
+// reads blank. That is how `'preview'` was found here at all.
 const VIEW_MODE_LABELS: Record<Document['viewMode'], string> = {
   source: 'Source',
   live: 'Live',
   split: 'Split',
+  preview: 'Preview',
 };
 
 export function statusBarModel(state: AppState): StatusBarModel {

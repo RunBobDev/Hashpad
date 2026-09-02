@@ -47,7 +47,9 @@ export const store: Store<AppState> = createStore<AppState>({
   // Go's `DefaultSettings()` value, like `syncScroll` above -- and also what
   // bootstrap leaves in place when the settings load throws, so a fresh install
   // and a broken settings file both open in source mode.
-  defaultViewMode: 'source',
+  defaultViewMode: 'last',
+  openedViewMode: 'preview',
+  recentViewModes: [],
   // Go's `DefaultSettings()` again, and the encoding a new file gets when
   // settings cannot be read -- the safe answer, since UTF-8 without a BOM is
   // what the rest of the toolchain assumes.
@@ -87,4 +89,58 @@ export function getEditorView(): EditorView {
     );
   }
   return editorView;
+}
+
+/**
+ * Where the outline's "current section" highlight reads its line number from,
+ * when something other than the editor should answer (design §4.27).
+ *
+ * **Two module-level slots rather than an import, and that is the whole point.**
+ * In reading mode the highlight must follow the *preview's* scroll position, and
+ * `preview/scrollsync.ts` already has the mapping (`lineForOffset`). The obvious
+ * implementation is for `ui/outline.ts` to call it -- which is forbidden: the
+ * preview is lazily loaded and the outline is in the entry bundle, so that
+ * import would pull markdown-it and DOMPurify into startup and spend Checkpoint
+ * F's measured 1.03 kB split on a mode most launches never enter.
+ *
+ * So the dependency runs the other way. The pane pushes a reader in when it
+ * mounts in reading mode and withdraws it on `hide()`; the outline registers a
+ * listener and keeps its own editor-based implementation as the default. Same
+ * settable-slot shape as `setEditorView` above.
+ */
+let topSourceLineReader: (() => number | null) | null = null;
+let topSourceLineListener: (() => void) | null = null;
+
+/**
+ * Set by `preview/pane.ts` while it is showing a document in reading mode, and
+ * cleared with `null` on hide. Notifies immediately so the highlight is right
+ * the moment the mode changes rather than at the next scroll.
+ *
+ * A reader left registered after the pane is gone would pin the highlight to a
+ * pane nobody can see, which is why `hide()` clearing this is not optional.
+ */
+export function setTopSourceLineReader(reader: (() => number | null) | null): void {
+  topSourceLineReader = reader;
+  topSourceLineListener?.();
+}
+
+/** `null` means "nothing is overriding" -- the outline then asks the editor. */
+export function readTopSourceLine(): number | null {
+  return topSourceLineReader?.() ?? null;
+}
+
+/**
+ * Set by `ui/outline.ts` on mount and cleared on destroy.
+ *
+ * The reader alone is not enough: in reading mode the editor never scrolls, so
+ * nothing the outline already listens to would fire. The preview's scroll
+ * handler calls `topSourceLineChanged` and this is what it reaches.
+ */
+export function setTopSourceLineListener(listener: (() => void) | null): void {
+  topSourceLineListener = listener;
+}
+
+/** Called by the pane on every preview scroll while it owns the reader. */
+export function topSourceLineChanged(): void {
+  topSourceLineListener?.();
 }

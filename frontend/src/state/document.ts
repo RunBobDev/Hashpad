@@ -16,11 +16,20 @@ export interface Document {
   filePath: string | null;
   editorState: EditorState;
   savedDoc: Text;
-  viewMode: 'source' | 'live' | 'split';
+  /**
+   * `'preview'` is the rendered pane at full width with no editor beside it
+   * (design §4.27). `'live'` remains reserved for SPEC §7.1 and still renders
+   * identically to `'source'` -- filling that slot with preview-only would have
+   * left Phase 2's headline feature nowhere to land.
+   */
+  viewMode: 'source' | 'live' | 'split' | 'preview';
   /**
    * The mode to return to when the preview is toggled off. A document opened
    * under `editor.defaultViewMode: "live"` must come back as `'live'` rather
    * than being silently downgraded to `'source'`.
+   *
+   * Narrower than `viewMode` on purpose: the two modes that *show* a pane are
+   * not answers to "what was showing before the pane", so neither belongs here.
    */
   previousViewMode: 'source' | 'live';
   /**
@@ -142,23 +151,141 @@ export function clampTabSize(value: number): number {
  * encoding enums. Checked rather than cast, for the same reason the widths are
  * clamped: settings.json is hand-editable, and an unrecognised value would put
  * a mode nothing renders into every document the app opens.
+ *
+ * **Narrower than `Document['viewMode']`, and named for the setting rather than
+ * for the union to say so.** It deliberately rejects `'preview'`, which is a
+ * real mode (design §4.27) but not one a *new* document may open in: reading
+ * mode has no editor, so `defaultViewMode: "preview"` would make File > New
+ * hand you a blank page you cannot type into, and the startup tab the same.
+ * The trap arrives through a hand-edited file rather than through the UI, which
+ * is exactly the kind this function exists to stop. Reading mode is reached per
+ * document, from the View menu, and is not a preference.
+ */
+export function isDefaultViewMode(value: string): value is Exclude<ViewModeSetting, 'preview'> {
+  return value === 'source' || value === 'live' || value === 'split' || value === 'last';
+}
+
+/**
+ * `settings.editor.openedViewMode` -- what a file that *launched* Hashpad
+ * opens in (design §4.27).
+ *
+ * Wider than `isDefaultViewMode` by exactly one value, and that one value is the
+ * point: a file arriving from Explorer has something to read, so `'preview'` is
+ * legal here where it is refused for a new document. Two validators rather than
+ * one with a flag, because the difference is a fact about each setting rather
+ * than a decision a caller makes.
+ */
+export function isOpenedViewMode(value: string): value is ViewModeSetting {
+  return isDefaultViewMode(value) || value === 'preview';
+}
+
+/**
+ * Whether `mode` puts the rendered pane on screen.
+ *
+ * **The one question, asked in one place.** Three sites used to spell this
+ * `viewMode === 'split'`: the subscription that mounts and unmounts the pane,
+ * and the two guards in `preview/pane.ts` that skip work for a document not
+ * showing one. With `'preview'` added (design §4.27) that equality became a
+ * *wrong* question rather than an incomplete one -- and a wrong question copied
+ * three times is how one copy gets missed. The symptom would be a pane that
+ * mounts and renders nothing, or renders and never mounts.
+ *
+ * Named for what callers want to know rather than for the values it happens to
+ * match, so adding a fifth mode is one edit here instead of a search.
+ */
+/**
+ * What a view-mode *setting* may say: any real mode, or `'last'` meaning "look
+ * at what was used recently" (design §4.27).
+ */
+export type ViewModeSetting = Document['viewMode'] | 'last';
+
+/**
+ * How many modes are remembered, and **two is a correctness requirement rather
+ * than a nicety.**
+ *
+ * With one, closing a document in reading mode would leave `'last'` with no
+ * legal answer for the next new document, since a new document may not open in
+ * reading mode. With two distinct entries at most one can be `'preview'`, so
+ * there is always something behind it to fall back to.
+ */
+export const MAX_RECENT_VIEW_MODES = 2;
+
+/**
+ * Records `mode` as the most recently used, keeping the list distinct.
+ *
+ * The dedupe is what makes `MAX_RECENT_VIEW_MODES` mean "two different modes"
+ * rather than "two entries" -- re-entering the mode already at the front would
+ * otherwise push a duplicate and leave the fallback with nowhere to fall back to.
+ */
+export function pushRecentViewMode(
+  recent: readonly string[],
+  mode: Document['viewMode'],
+): Document['viewMode'][] {
+  const kept = recent.filter((each): each is Document['viewMode'] => each !== mode && isViewMode(each));
+  return [mode, ...kept].slice(0, MAX_RECENT_VIEW_MODES);
+}
+
+/**
+ * Every real mode, as opposed to the settings vocabulary that adds `'last'`.
+ *
+ * Not to be confused with `isDefaultViewMode`, which validates a *setting* and
+ * is deliberately narrower -- this one is the union itself.
  */
 export function isViewMode(value: string): value is Document['viewMode'] {
-  return value === 'source' || value === 'live' || value === 'split';
+  return value === 'source' || value === 'live' || value === 'split' || value === 'preview';
+}
+
+/**
+ * Turns a setting into the mode a document actually opens in.
+ *
+ * `allowPreview` is the difference between the two callers, and the reason this
+ * is one function rather than two: a file being opened has something to read, a
+ * brand-new empty document does not. Everything else about the resolution is
+ * identical, and splitting it would mean the fallback rule existing twice.
+ *
+ * Never returns `'preview'` when `allowPreview` is false, whatever the setting
+ * or the history says -- including a hand-edited `"preview"` that got past the
+ * validator, because this is the last thing between a settings file and a blank
+ * page nobody can type into.
+ */
+export function resolveViewMode(
+  setting: string,
+  recent: readonly string[],
+  allowPreview: boolean,
+): Document['viewMode'] {
+  if (setting !== 'last') {
+    if (!isViewMode(setting)) return 'source';
+    return !allowPreview && setting === 'preview' ? 'source' : setting;
+  }
+
+  for (const mode of recent) {
+    if (!isViewMode(mode)) continue;
+    if (allowPreview || mode !== 'preview') return mode;
+  }
+  return 'source';
+}
+
+export function showsPreview(mode: Document['viewMode']): boolean {
+  return mode === 'split' || mode === 'preview';
 }
 
 /**
  * What toggling the preview off should return to, for a document that opened
  * in `mode`.
  *
- * `'split'` is the one that needs saying: a document that opened straight into
- * split has no earlier mode to go back to, so it falls back to source. The
- * other two are their own answer -- a document opened under
+ * `'split'` and `'preview'` are the ones that need saying: a document that
+ * opened straight into either has no earlier mode to go back to, so both fall
+ * back to source. The other two are their own answer -- a document opened under
  * `defaultViewMode: "live"` must come back as `'live'`, not be silently
  * downgraded (see `previousViewMode`).
+ *
+ * Written as "the modes that show a pane" rather than as two equality checks,
+ * because the return type is what actually forces it: `previousViewMode` cannot
+ * hold `'preview'`, so a version that tested only `'split'` would not compile
+ * rather than quietly returning a mode with no editor in it.
  */
 export function previousViewModeFor(mode: Document['viewMode']): Document['previousViewMode'] {
-  return mode === 'split' ? 'source' : mode;
+  return mode === 'split' || mode === 'preview' ? 'source' : mode;
 }
 
 /**
@@ -285,8 +412,28 @@ export interface AppState {
    * app, and it was gone. Both creation sites minted documents with a
    * hard-coded `'source'`, and this setting was dead on both sides of the
    * bridge (see .superpowers/sdd/progress.md's dead-field list).
+   *
+   * **The raw setting, not a resolved mode** (design §4.27). It may say
+   * `'last'`, which only means something together with `recentViewModes` and
+   * with knowing whether the document being built is new or opened -- so
+   * resolution happens at each creation site through `resolveViewMode`, not
+   * here. Storing a resolved value instead would have to pick one of those
+   * answers at load time and be wrong for the other.
    */
-  defaultViewMode: Document['viewMode'];
+  defaultViewMode: ViewModeSetting;
+  /**
+   * What a file that *launched* Hashpad opens in -- double-click, "Open with",
+   * or a path on the command line. Ctrl+O and drag-drop deliberately use
+   * `defaultViewMode` instead: you are already in the app and already working,
+   * and landing in a view you cannot type into is a surprise there in a way it
+   * is not when opening a document is the whole reason the app started.
+   */
+  openedViewMode: ViewModeSetting;
+  /**
+   * The last two *distinct* modes used, most recent first -- what `'last'`
+   * resolves against. Written by the view-mode toggles, never by the dropdowns.
+   */
+  recentViewModes: Document['viewMode'][];
   /**
    * SPEC §6.13's `files.defaultEncoding` — what a document that has never been
    * read from disk is written as.

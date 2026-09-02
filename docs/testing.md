@@ -1889,3 +1889,92 @@ filling rather than a real spread.
 Checkpoint C".** Tabs shipped long ago; the note is stale and the script has not
 been taught to open five. The five-tab figure in design 4.21 was measured by
 hand instead.
+
+## Checkpoint J.1 — reading view, and the two view-mode settings
+
+Phase 2's first checkpoint. A fourth `viewMode`, `'preview'`: the rendered pane
+at full width with the editor still laid out underneath it but `inert`.
+
+jsdom has no layout engine, so everything about how this *looks* is here rather
+than in the suite. Two things it can see, unusually, and both are covered by
+tests: the editor being made unreachable (`inert` is an attribute, not a
+rendering) and the one-line outline offset (`defaultLineHeight` is non-zero under
+jsdom where `clientHeight` is not).
+
+**Reading view.**
+
+- [ ] **View > Reading View** fills the window with the rendered document — no
+      editor, no divider. Toggling it off returns to exactly where you were,
+      caret and scroll position intact.
+- [ ] **Press Tab repeatedly while in reading view.** Focus must never land in
+      the hidden editor. This is what `inert` is for, and it is invisible to
+      anyone using a mouse.
+- [ ] **Narrator (Win+Ctrl+Enter) in reading view** does not read out the
+      editor's contents. Same guard, the half a sighted check cannot see.
+- [ ] **Ctrl+S, Ctrl+O, Ctrl+W and Ctrl+Tab still work** with no visible editor.
+      G.2's shortcut forwarder is what makes this true and this is its hardest
+      case.
+- [ ] **Open the preview (Ctrl+Shift+P), drag the divider well off centre, then
+      switch to reading view and back.** The divider returns where you left it.
+- [ ] **Ctrl+Shift+P still means source↔split** and never cycles into reading
+      view. Reading view has no chord, deliberately (design §4.27).
+
+**The outline in reading view.**
+
+- [ ] **Scroll the preview with the outline open.** The highlighted heading
+      keeps up. Before J.1 it followed the editor, which in this mode is a pane
+      you cannot see, so it sat frozen.
+- [ ] **The offset feels right.** A heading one line below the top of the pane
+      already counts as the current section — you should not have to land on it
+      exactly. It must **not** skip a short section: with two headings a few
+      lines apart, each should take its turn.
+- [ ] **Click a heading in the outline.** *That* heading is marked, not the one
+      after it. Worth trying on a heading whose section is empty (a `###`
+      directly under a `##`), which is the case the offset gets wrong when the
+      answer is derived rather than pinned.
+- [ ] **Turn scroll sync off** (Settings > Scroll the preview with the editor).
+      The outline must still follow the preview in reading view — they are two
+      features sharing one event, not one feature.
+
+**The two settings.** Settings > Editor.
+
+- [ ] **"New documents open in" offers Editor only, Editor and preview, and Last
+      used** — and no Reading view. A new document has nothing to read.
+- [ ] **"Existing documents open in" offers all four**, Reading view included.
+- [ ] **Set it to Reading view, then open a file every way there is**: Ctrl+O,
+      File > Open, dropping one on the window, Ctrl+Shift+T, and a double-click
+      in Explorer. All five arrive in reading view -- they are one question with
+      one answer, and any route behaving differently is the bug.
+- [ ] **Ctrl+N is unaffected** and opens in the editor. That is the distinction
+      the two settings exist for.
+- [ ] **With the preview never opened this session, open a file while
+      "Existing documents open in" says Editor and preview.** The pane appears.
+      The lazy chunk has to be fetched on demand here, and the document carrying
+      the right mode over an editor with nothing beside it is what failure looks
+      like.
+- [ ] **Set "New documents open in" to Last used**, put a document in split,
+      then File > New. The new tab is split. Now put one in reading view and
+      File > New again: the new tab is **not** reading view — it falls back to
+      the mode behind it in the history.
+- [ ] **Double-click two `.md` files at once.** Both open in the launch mode, not
+      just the one in front.
+
+**The migration.** Settings version 2 → 3.
+
+- [ ] **Your existing settings.json is translated, not reset.** After the first
+      launch on this build, `editor.defaultViewMode` reads `"last"` and
+      `editor.recentViewModes` holds what that field used to say. Everything
+      else — theme, accent, fonts, window size, pinned toolbar — is untouched.
+- [ ] **Opening a preview no longer rewrites `defaultViewMode`.** Choose
+      "Editor only", toggle the preview a few times, reopen Settings: it still
+      says Editor only. Before v3 the toggle overwrote it, which is why it could
+      not be a preference.
+- [ ] **A hand-edited `"defaultViewMode": "preview"`** falls back to the editor
+      rather than opening a blank page you cannot type into.
+
+**Code blocks.**
+
+- [ ] **A fenced block's tinted box hugs its widest line** rather than spanning
+      the pane, with a comfortable margin of tint around the text. A long line
+      still scrolls inside the block, and the pane itself never scrolls
+      sideways.

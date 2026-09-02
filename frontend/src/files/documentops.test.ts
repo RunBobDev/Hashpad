@@ -84,6 +84,8 @@ beforeEach(() => {
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    openedViewMode: 'preview',
+    recentViewModes: [],
     defaultEncoding: 'utf-8',
     autosave: false,
     autosaveDelayMs: 2000,
@@ -229,6 +231,8 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -257,6 +261,8 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -285,6 +291,8 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -316,6 +324,8 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -350,6 +360,8 @@ describe('switchToDocument', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -404,8 +416,17 @@ describe('openDocumentInNewTab', () => {
    * and fixing only the route the report happened to name is exactly the bug
    * coming back through the other door.
    */
-  it('opens in the store’s default view mode', () => {
-    store.setState((prev) => ({ ...prev, defaultViewMode: 'split' }));
+  /**
+   * `openedViewMode`, not `defaultViewMode` -- an existing document has
+   * something to read (design §4.27a). Both are set here, to different values,
+   * so a version reading the wrong one fails rather than passing by coincidence.
+   */
+  it('opens in the store’s mode for existing documents, not the one for new ones', () => {
+    store.setState((prev) => ({
+      ...prev,
+      defaultViewMode: 'source',
+      openedViewMode: 'split',
+    }));
 
     openDocumentInNewTab({
       path: 'C:/notes/opened.md',
@@ -417,6 +438,24 @@ describe('openDocumentInNewTab', () => {
     const doc = activeDocument(store.getState())!;
     expect(doc.viewMode).toBe('split');
     expect(doc.previousViewMode).toBe('source');
+  });
+
+  /**
+   * Reading mode reaches an opened document and is refused for a new one. This
+   * is the asymmetry the two settings exist for, asserted on the side that
+   * allows it -- `makeUntitledDocument`'s own test covers the refusal.
+   */
+  it('opens an existing document in reading mode when that is the setting', () => {
+    store.setState((prev) => ({ ...prev, openedViewMode: 'preview' }));
+
+    openDocumentInNewTab({
+      path: 'C:/notes/read.md',
+      content: 'hello',
+      encoding: 'utf-8',
+      lineEnding: 'lf',
+    });
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('preview');
   });
 
   /**
@@ -483,6 +522,8 @@ describe('openDocumentInNewTab', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -527,6 +568,8 @@ describe('openDocumentInNewTab', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -565,6 +608,8 @@ describe('opening a document over the startup tab', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -621,6 +666,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -650,6 +697,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -678,6 +727,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -709,6 +760,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -739,6 +792,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -774,6 +829,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -813,6 +870,8 @@ describe('closeDocumentWithPrompt', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -849,6 +908,8 @@ describe('reopenLastClosed', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -877,6 +938,8 @@ describe('reopenLastClosed', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,
@@ -913,6 +976,8 @@ describe('reopenLastClosed', () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       autosave: false,
       autosaveDelayMs: 2000,

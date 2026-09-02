@@ -26,6 +26,8 @@ import { setEditorBehaviour, setWordWrap } from '../editor/extensions';
 import { getEditorView, store } from '../state/appcontext';
 import {
   clampAutosaveDelay,
+  pushRecentViewMode,
+  type ViewModeSetting,
   type Document,
   type EditorBehaviour,
   type Encoding,
@@ -98,18 +100,52 @@ export async function setBehaviourSetting(change: Partial<EditorBehaviour>): Pro
 }
 
 /**
- * SPEC §6.13's `editor.defaultViewMode` — the mode a document opens in.
+ * Records that `mode` was just used, for `'last'` to resolve against later
+ * (design §4.27).
  *
- * Two destinations, both needed. The store field is what the *next tab in this
- * session* reads (documentops.ts); the settings file is what the next launch
- * reads. Written by View > Preview as well as by the dialog, which is what
- * makes the preview stick across tabs and launches.
+ * **This is what the view-mode toggles call now, in place of
+ * `setDefaultViewModeSetting`.** Through v2, toggling the preview wrote
+ * `defaultViewMode` directly, which worked only because that field was memory
+ * rather than a preference. Now that a person can choose it in the settings
+ * dialog, a toggle writing there would silently overwrite their choice the next
+ * time they opened a preview -- a setting that refuses to stay set.
  *
- * Note that this changes no *existing* document. `viewMode` is per document by
- * design (Checkpoint F), so switching the default while three tabs are open
- * leaves all three as they are, and the fourth gets the new value.
+ * The history is deduplicated and two long; see `pushRecentViewMode` for why
+ * two specifically.
  */
-export async function setDefaultViewModeSetting(mode: Document['viewMode']): Promise<void> {
+export async function recordViewModeUsed(mode: Document['viewMode']): Promise<void> {
+  const recentViewModes = pushRecentViewMode(store.getState().recentViewModes, mode);
+  store.setState((prev) => ({ ...prev, recentViewModes }));
+
+  await persistSettings('recent-view-modes', (settings) => {
+    settings.editor.recentViewModes = recentViewModes;
+  });
+}
+
+/**
+ * SPEC §6.13's `editor.defaultViewMode` — the mode a *new* document opens in.
+ *
+ * Two destinations, both needed. The store field is what the next tab in this
+ * session reads (documentops.ts); the settings file is what the next launch
+ * reads.
+ *
+ * **Written only by the settings dialog now**, not by the preview toggle. It
+ * became a preference in v3 and `recordViewModeUsed` above carries the memory
+ * that used to live here.
+ *
+ * Narrower than `Document['viewMode']`, matching `isDefaultViewMode` on the
+ * reading side: `'preview'` is a real mode but not one a new document may open
+ * in (design §4.27), so writing it would produce a settings file whose own
+ * validator rejects it on the next launch. The two halves of that guard have to
+ * agree, and a type is how they are made to.
+ *
+ * Changes no *existing* document: `viewMode` is per document by design
+ * (Checkpoint F), so switching this with three tabs open leaves all three alone
+ * and the fourth gets the new value.
+ */
+export async function setDefaultViewModeSetting(
+  mode: Exclude<ViewModeSetting, 'preview'>,
+): Promise<void> {
   store.setState((prev) => ({ ...prev, defaultViewMode: mode }));
 
   await persistSettings('view-mode', (settings) => {
@@ -179,5 +215,23 @@ export async function setAutosaveDelaySetting(delayMs: number): Promise<void> {
 
   await persistSettings('autosave-delay', (settings) => {
     settings.files.autosaveDelayMs = clamped;
+  });
+}
+
+/**
+ * `settings.editor.openedViewMode` -- what a file that *launched* Hashpad
+ * opens in (design §4.27).
+ *
+ * Its own setter beside `setDefaultViewModeSetting` rather than a shared one
+ * taking a key: the two accept different values. This one allows `'preview'`,
+ * which the other must refuse, and a shared setter would have to take the
+ * widest type and lose exactly the distinction that keeps a new document out of
+ * a view it cannot be typed into.
+ */
+export async function setOpenedViewModeSetting(mode: ViewModeSetting): Promise<void> {
+  store.setState((prev) => ({ ...prev, openedViewMode: mode }));
+
+  await persistSettings('open-with-view-mode', (settings) => {
+    settings.editor.openedViewMode = mode;
   });
 }

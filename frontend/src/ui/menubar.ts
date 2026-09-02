@@ -220,6 +220,17 @@ const MENUS: Menu[] = [
         separatorBefore: true,
         toggle: 'check',
       },
+      // Reading view (design §4.27) -- the rendered pane at full width, no
+      // editor. Directly below Preview because they are the same pane in two
+      // arrangements, and a `check` rather than a `radio` beside Preview even
+      // though only one can be on: a radio group implies "pick one of these",
+      // and both being off is not only legal but the normal state.
+      //
+      // **No shortcut, deliberately.** Ctrl+Shift+P keeps meaning source-split;
+      // a three-way cycle would make the common toggle worse to serve the
+      // occasional one. Adding a chord later costs a line, taking one back
+      // costs muscle memory.
+      { id: 'view.readingMode', label: 'Reading View', enabled: true, toggle: 'check' },
       {
         id: 'view.outline',
         label: 'Outline',

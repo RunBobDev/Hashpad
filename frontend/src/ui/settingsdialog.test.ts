@@ -57,6 +57,8 @@ vi.mock('../state/appcontext', async () => {
       wordWrap: true,
       editorBehaviour: DEFAULT_BEHAVIOUR,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
       defaultEncoding: 'utf-8',
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
@@ -85,6 +87,8 @@ function settingsFixture(overrides: Partial<app.AppearanceSettings> = {}): app.S
       tabSize: 2,
       insertSpaces: true,
       defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
     },
     preview: { fontFamily: 'Segoe UI', fontSize: 15, syncScroll: true },
     files: {
@@ -531,6 +535,8 @@ describe('the Editor group', () => {
       wordWrap: false,
       editorBehaviour: { showLineNumbers: true, tabSize: 8, insertSpaces: false },
       defaultViewMode: 'split',
+      openedViewMode: 'preview',
+      recentViewModes: [],
     }));
 
     const scope = editor(mount());
@@ -676,15 +682,39 @@ describe('the Editor group', () => {
   });
 
   /**
+   * Two exclusions, for two different reasons, and both matter.
+   *
    * `'live'` is in the `viewMode` union and renders exactly like source -- there
-   * is no live-preview mode yet. Offering it would be a control wired to
+   * is no live-preview mode yet -- so offering it would be a control wired to
    * nothing, which is what `PreviewSettings`'s `loadRemoteImages` comment exists
    * to warn against.
+   *
+   * `'preview'` **does** something, and is excluded anyway: reading mode has no
+   * editor, so a new document opening in it would be a blank page nobody can
+   * type into (design §4.27). That is the one a future change is most likely to
+   * add for symmetry with the dropdown below it, which is why it is named here
+   * rather than left to the type.
    */
-  it('offers only the two modes that do something', () => {
+  it('offers no mode a new document cannot usefully open in', () => {
     const mode = byLabel<HTMLSelectElement>(editor(mount()), 'New documents open in');
 
-    expect([...mode.options].map((option) => option.value)).toEqual(['source', 'split']);
+    expect([...mode.options].map((option) => option.value)).toEqual(['source', 'split', 'last']);
+  });
+
+  /**
+   * The one place `'preview'` is legal: a document that already exists has
+   * something to read. If these two lists ever become the same list, the
+   * distinction this checkpoint exists to draw has been lost.
+   */
+  it('offers reading view for an existing document, where a new one may not', () => {
+    const mode = byLabel<HTMLSelectElement>(editor(mount()), 'Existing documents open in');
+
+    expect([...mode.options].map((option) => option.value)).toEqual([
+      'source',
+      'split',
+      'preview',
+      'last',
+    ]);
   });
 });
 

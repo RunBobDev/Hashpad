@@ -61,6 +61,8 @@ function seed(documents: Document[], overrides: Record<string, unknown> = {}): v
     wordWrap: true,
     editorBehaviour: DEFAULT_BEHAVIOUR,
     defaultViewMode: 'source',
+    openedViewMode: 'preview',
+    recentViewModes: [],
     defaultEncoding: 'utf-8',
     autosave: true,
     autosaveDelayMs: 200,

@@ -11,8 +11,11 @@ import {
   clampTabSize,
   DEFAULT_BEHAVIOUR,
   isEncoding,
-  isViewMode,
+  isDefaultViewMode,
   previousViewModeFor,
+  showsPreview,
+  pushRecentViewMode,
+  resolveViewMode,
 } from './document';
 
 describe('isDirty', () => {
@@ -215,27 +218,40 @@ describe('clampTabSize', () => {
  * cannot reject a hand-edited value the way it rejects a non-boolean, and
  * `wailsjs/go/models.ts` widens it to `string` on this side too.
  */
-describe('isViewMode', () => {
-  it.each([['source'], ['live'], ['split']])('accepts %s', (value) => {
-    expect(isViewMode(value)).toBe(true);
+describe('isDefaultViewMode', () => {
+  it.each([['source'], ['live'], ['split'], ['last']])('accepts %s', (value) => {
+    expect(isDefaultViewMode(value)).toBe(true);
   });
 
   /**
    * `''` and the near-misses matter more than the obvious garbage: a settings
-   * file written by hand is far likelier to say "preview" or "Split" than
+   * file written by hand is far likelier to say "Split" or a misspelling than
    * something no one would type. Any of them reaching the store would put a
    * mode nothing renders on every document the app opens.
    */
-  it.each([[''], ['preview'], ['Split'], ['SOURCE'], ['source '], ['null']])(
-    'rejects %s',
-    (value) => {
-      expect(isViewMode(value)).toBe(false);
-    },
-  );
+  it.each([[''], ['Split'], ['SOURCE'], ['source '], ['null']])('rejects %s', (value) => {
+    expect(isDefaultViewMode(value)).toBe(false);
+  });
+
+  /**
+   * **`'preview'` is rejected even though it is a real view mode** (design
+   * §4.27), and this is the case worth keeping: it is the one a person has an
+   * actual reason to type, having just used reading mode and gone looking for a
+   * way to make it the default.
+   *
+   * Reading mode has no editor. Accepting it here would make the startup tab and
+   * every File > New a blank page that cannot be typed into -- a trap reachable
+   * only by hand-editing the file, which is exactly the class this guard exists
+   * for. The narrower return type is what makes the restriction structural
+   * rather than a convention someone widens later by accident.
+   */
+  it('rejects preview, which is a mode but not a default', () => {
+    expect(isDefaultViewMode('preview')).toBe(false);
+  });
 
   /** A key missing from a hand-edited file reads as `undefined`, not as ''. */
   it('rejects a missing value', () => {
-    expect(isViewMode(undefined as unknown as string)).toBe(false);
+    expect(isDefaultViewMode(undefined as unknown as string)).toBe(false);
   });
 });
 
@@ -249,6 +265,18 @@ describe('previousViewModeFor', () => {
   });
 
   /**
+   * Preview-only has no earlier mode either, for the same reason split does not
+   * (design §4.27). Worth its own case rather than folding into the one above:
+   * they arrive at `'source'` by the same rule but are different inputs, and an
+   * implementation that special-cased `'split'` alone would leave `'preview'`
+   * falling through to the branch that returns the mode unchanged -- putting a
+   * mode with no editor into a field typed as `'source' | 'live'`.
+   */
+  it('sends preview back to source', () => {
+    expect(previousViewModeFor('preview')).toBe('source');
+  });
+
+  /**
    * The reason `previousViewMode` exists: a document opened under
    * `defaultViewMode: "live"` must come back as `'live'`, not be silently
    * downgraded. Returning a hard-coded `'source'` for everything would pass the
@@ -256,6 +284,103 @@ describe('previousViewModeFor', () => {
    */
   it.each([['source'], ['live']] as const)('leaves %s alone', (mode) => {
     expect(previousViewModeFor(mode)).toBe(mode);
+  });
+});
+
+/**
+ * The one question three separate places used to ask as `=== 'split'`: the
+ * subscription in `main.ts` that mounts and unmounts the pane, and the two
+ * guards in `preview/pane.ts` that skip rendering for a document that is not
+ * showing one. Adding a second mode that shows the pane turned that equality
+ * into a wrong question rather than an incomplete one, and three copies of a
+ * wrong question is how one of them gets missed (design §4.27).
+ */
+/**
+ * The two-slot memory (design §4.27). One remembered mode is unusable as a
+ * default for new documents -- close a document in reading mode and "last used"
+ * would hand the next new one a page it cannot type into. Two *distinct* modes
+ * fixes it structurally: deduplicating means both entries can never be equal, so
+ * at most one can be `'preview'` and there is always a non-reading fallback.
+ */
+describe('pushRecentViewMode', () => {
+  it('puts the newest first', () => {
+    expect(pushRecentViewMode(['source'], 'split')).toEqual(['split', 'source']);
+  });
+
+  it('keeps only two', () => {
+    expect(pushRecentViewMode(['split', 'source'], 'preview')).toEqual(['preview', 'split']);
+  });
+
+  /**
+   * The load-bearing one. Without the dedupe, toggling between source and split
+   * a few times fills both slots with the same pair in a different order --
+   * fine -- but re-entering the mode already at the front pushes a duplicate,
+   * and two equal entries mean the fallback has nowhere to fall back to.
+   */
+  it('never stores the same mode twice', () => {
+    expect(pushRecentViewMode(['split', 'source'], 'split')).toEqual(['split', 'source']);
+    expect(pushRecentViewMode(['preview', 'split'], 'preview')).toEqual(['preview', 'split']);
+  });
+
+  it('starts from nothing', () => {
+    expect(pushRecentViewMode([], 'split')).toEqual(['split']);
+  });
+});
+
+describe('resolveViewMode', () => {
+  it('returns a named mode unchanged', () => {
+    expect(resolveViewMode('split', [], true)).toBe('split');
+    expect(resolveViewMode('source', ['preview'], false)).toBe('source');
+  });
+
+  it('reads the most recent mode for "last"', () => {
+    expect(resolveViewMode('last', ['split', 'source'], false)).toBe('split');
+  });
+
+  /**
+   * **The rule this whole design exists for.** A new document may not open in
+   * reading mode, so when the most recent *is* reading the answer is the one
+   * behind it -- which the dedupe guarantees is something else.
+   */
+  it('skips reading mode for a new document and takes the one behind it', () => {
+    expect(resolveViewMode('last', ['preview', 'split'], false)).toBe('split');
+    expect(resolveViewMode('last', ['preview', 'source'], false)).toBe('source');
+  });
+
+  /** A file opened from Explorer has something to read, so it may. */
+  it('allows reading mode when the caller says it is a file being opened', () => {
+    expect(resolveViewMode('last', ['preview', 'split'], true)).toBe('preview');
+  });
+
+  /** A fresh install, and the only path with no history at all. */
+  it('falls back to source with no history', () => {
+    expect(resolveViewMode('last', [], true)).toBe('source');
+    expect(resolveViewMode('last', ['preview'], false)).toBe('source');
+  });
+
+  /**
+   * Belt and braces against a hand-edited file: `isDefaultViewMode` already
+   * refuses `'preview'` there, but this function is what the new-document path
+   * actually calls, and it must not depend on a validator upstream having run.
+   */
+  it('refuses a named preview for a new document', () => {
+    expect(resolveViewMode('preview', ['split'], false)).toBe('source');
+  });
+});
+
+describe('showsPreview', () => {
+  it.each([['split'], ['preview']] as const)('is true for %s', (mode) => {
+    expect(showsPreview(mode)).toBe(true);
+  });
+
+  /**
+   * `'live'` is the one worth stating. It is reserved for SPEC §7.1 and renders
+   * identically to source until then, so it must not mount a pane -- and it is
+   * the value most likely to be swept in by an implementation that asks "is
+   * this mode not source?" instead of naming the two that show a pane.
+   */
+  it.each([['source'], ['live']] as const)('is false for %s', (mode) => {
+    expect(showsPreview(mode)).toBe(false);
   });
 });
 
