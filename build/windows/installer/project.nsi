@@ -364,22 +364,21 @@ Function OptionsPageCreate
     Pop $AssociateCheckbox
     ${NSD_SetState} $AssociateCheckbox $AssociateFiles
 
-    ## Directly under the markdown one, and phrased as an addition, because that
-    ## is what it is: the same capability, aimed at a file type Hashpad already
-    ## opens perfectly well but does not claim by default.
+    ## **Says "offer", not "open", and the wording is the honest part.** Windows
+    ## protects an established default with a hash and will not let an installer
+    ## take it, so ticking this cannot make Hashpad open .txt files on a
+    ## double-click -- only the user can, from Open with or Default apps. The
+    ## first version of this box promised exactly that and did not deliver it.
     ${NSD_CreateCheckBox} 0 68u 100% 12u \
-        "Open .txt files with Hashpad as well"
+        "Offer Hashpad for .txt files, in the Open with list"
     Pop $TextCheckbox
     ${NSD_SetState} $TextCheckbox $AssociateTextFiles
 
-    ## Notepad is named. "Whatever program currently opens those files" is true
-    ## and useless for .txt, where everyone knows the answer and deserves to be
-    ## told what they are giving up.
-    ${NSD_CreateLabel} 12u 82u 95% 24u \
-        "Leave these unticked to keep whatever program currently opens those files -- for .txt that is usually Notepad. Either can be changed later in Windows Settings, under Default apps."
+    ${NSD_CreateLabel} 12u 82u 95% 32u \
+        "Windows will not let an installer take over .txt from Notepad, so this only adds Hashpad to the list you can choose from. To make it the default: right-click a .txt file, Open with, Choose another app, pick Hashpad and tick Always. Both boxes can be changed later in Settings, under Default apps."
     Pop $0
 
-    ${NSD_CreateCheckBox} 0 110u 100% 12u "Create a desktop shortcut"
+    ${NSD_CreateCheckBox} 0 118u 100% 12u "Create a desktop shortcut"
     Pop $DesktopCheckbox
     ${NSD_SetState} $DesktopCheckbox $CreateDesktopShortcut
 
@@ -479,10 +478,47 @@ Section
     ## reimplemented -- it records whichever file class held `.txt` before, and
     ## `APP_UNASSOCIATE` in the uninstaller puts that back. Taking Notepad's
     ## extension is only defensible because giving it back is automatic.
+    ## **Offered, not seized -- and that is Windows' rule, not a choice made
+    ## here.**
+    ##
+    ## The first version used `APP_ASSOCIATE`, which writes the default value of
+    ## `Software\Classes\.txt`. Reported: after ticking the box, double-clicking
+    ## a .txt still opened Notepad. That mechanism is legacy and is overridden by
+    ## `HKCU\...\Explorer\FileExts\.txt\UserChoice`, whose contents are protected
+    ## by a hash Windows checks -- deliberately, so that installers cannot take a
+    ## default the user has set. `.md` works because nothing had ever claimed it,
+    ## so no UserChoice exists to lose to; `.txt` has had one since Notepad.
+    ##
+    ## Tools exist that forge that hash. Using one would defeat a security
+    ## measure on purpose, break whenever the algorithm changes, and put
+    ## hash-forging code inside an installer, which is what antivirus heuristics
+    ## are for. So Hashpad registers as an *available* handler and the user
+    ## chooses, which is the arrangement Microsoft intends.
+    ##
+    ## It is also strictly safer than what it replaces: nothing here writes the
+    ## `.txt` default at all, so there is no previous value to clobber and none
+    ## to restore. `APP_ASSOCIATE` would have overwritten it for any user who had
+    ## no UserChoice -- ineffective for most people and rude to the rest.
     ${If} $AssociateTextFiles == 1
         File "..\txticon.ico"
-        !insertmacro APP_ASSOCIATE "txt" "Hashpad.Text" "Text Document" \
-            "$INSTDIR\txticon.ico" "Open with ${INFO_PRODUCTNAME}" \
+
+        ## What Hashpad can do with a text file.
+        WriteRegStr SHELL_CONTEXT "Software\Classes\Hashpad.Text" "" "Text Document"
+        WriteRegStr SHELL_CONTEXT "Software\Classes\Hashpad.Text\DefaultIcon" "" "$INSTDIR\txticon.ico"
+        WriteRegStr SHELL_CONTEXT "Software\Classes\Hashpad.Text\shell" "" "open"
+        WriteRegStr SHELL_CONTEXT "Software\Classes\Hashpad.Text\shell\open" "" "Open with ${INFO_PRODUCTNAME}"
+        WriteRegStr SHELL_CONTEXT "Software\Classes\Hashpad.Text\shell\open\command" "" \
+            "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+
+        ## The two keys that put Hashpad in the "Open with" list and in Settings >
+        ## Default apps, without claiming to be the default.
+        WriteRegStr SHELL_CONTEXT "Software\Classes\.txt\OpenWithProgids" "Hashpad.Text" ""
+        WriteRegStr SHELL_CONTEXT \
+            "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\SupportedTypes" ".txt" ""
+        WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}" \
+            "FriendlyAppName" "${INFO_PRODUCTNAME}"
+        WriteRegStr SHELL_CONTEXT \
+            "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\shell\open\command" "" \
             "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
     ${EndIf}
 
@@ -622,10 +658,16 @@ Section "uninstall"
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
     ## Unconditional for the same reason as the macros above: the uninstaller
-    ## does not know whether `.txt` was taken, and restoring a backup that was
-    ## never made is a no-op. Leaving Notepad's extension pointed at a program
-    ## that is no longer on disk would not be.
-    !insertmacro APP_UNASSOCIATE "txt" "Hashpad.Text"
+    ## does not know whether `.txt` was offered, and deleting a key that was
+    ## never written is a no-op.
+    ##
+    ## Nothing is *restored* here, because nothing was taken -- the install side
+    ## only ever added Hashpad to the list of programs that can open a .txt. If
+    ## the user went on to make Hashpad the default, Windows drops back to its
+    ## own next choice once the handler disappears.
+    DeleteRegValue SHELL_CONTEXT "Software\Classes\.txt\OpenWithProgids" "Hashpad.Text"
+    DeleteRegKey SHELL_CONTEXT "Software\Classes\Hashpad.Text"
+    DeleteRegKey SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
     SetRegView 64

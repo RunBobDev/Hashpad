@@ -2051,17 +2051,33 @@ fine; only the registration was missing.
       default, with the `.txt` one directly under the markdown one and the
       explanation naming Notepad. Nothing is clipped -- the page grew by a row
       and the desktop shortcut moved down with it.
-- [ ] **Tick only the markdown box.** `.md` opens in Hashpad; `.txt` still opens
-      in whatever had it. The two must be genuinely independent, which is the
-      whole reason `.txt` is registered outside wails.json.
-- [ ] **Tick only the `.txt` box.** The reverse: `.txt` files show the ".TXT"
-      icon and open in Hashpad, `.md` files are untouched.
-- [ ] **A `.txt` file opens with its content intact**, and the status bar reports
-      its encoding and line endings like any other file.
-- [ ] **Uninstall gives `.txt` back to Notepad**, not to nothing. `APP_UNASSOCIATE`
-      restores whichever file class held it before, and this is the check that
-      the backup was actually taken -- taking Notepad's extension is only
-      defensible because giving it back is automatic.
+**Read the checkbox before testing this one.** It says *offer*, not *open*, and
+that is the whole behaviour: **Windows will not let an installer take `.txt` from
+Notepad.** The user's default is recorded under
+`HKCU\...\Explorer\FileExts\.txt\UserChoice` behind a hash the shell verifies,
+precisely so an installer cannot do this. `.md` works because nothing ever
+claimed it, so there is no UserChoice to lose to. The first version of this
+feature wrote the extension's default the way the markdown ones do, and
+double-clicking a `.txt` went on opening Notepad -- correctly.
+
+- [ ] **Tick only the markdown box.** `.md` opens in Hashpad; `.txt` is
+      untouched and Hashpad does *not* appear in its Open with list. The two are
+      genuinely independent, which is why `.txt` is registered outside
+      wails.json.
+- [ ] **Tick only the `.txt` box.** Right-click a `.txt` file: **Hashpad is in
+      the Open with list**, by name, with the ".TXT" icon. `.md` files are
+      untouched. Double-clicking still opens Notepad -- that is correct, not a
+      failure.
+- [ ] **Choose Hashpad from Open with and tick "Always use this app".** Now a
+      double-click opens Hashpad, the content is intact, and the status bar
+      reports encoding and line endings like any other file. This is the only
+      route to the default and it is the user's to take.
+- [ ] **Hashpad appears under Settings > Apps > Default apps** as something that
+      can open `.txt` -- that is `SupportedTypes` and `FriendlyAppName` working.
+- [ ] **Uninstall removes Hashpad from the Open with list**, and `.txt` opens in
+      whatever it did before. Nothing is *restored*, because nothing was taken:
+      the install only ever added a handler. If Hashpad had been made the
+      default, Windows falls back to its own next choice.
 - [ ] **Repair remembers the choice.** Tick `.txt`, finish, run the installer
       again and choose "Change options": the box is still ticked. It is recorded
       as `TextAssociations` beside the other two.

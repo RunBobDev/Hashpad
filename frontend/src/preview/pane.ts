@@ -37,12 +37,7 @@ import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { documentDirOf } from '../files/documentops';
 import { confirmOpenLink } from '../ui/confirmdialog';
 import { setTopSourceLineReader, store, topSourceLineChanged } from '../state/appcontext';
-import {
-  clampSplitRatio,
-  MAX_SPLIT_RATIO,
-  MIN_SPLIT_RATIO,
-  showsPreview,
-} from '../state/document';
+import { clampSplitRatio, MAX_SPLIT_RATIO, MIN_SPLIT_RATIO, showsPreview } from '../state/document';
 import { activeDocument } from '../state/documents';
 import { onLanguageLoaded } from './codehighlight';
 import { renderMarkdown } from './render';

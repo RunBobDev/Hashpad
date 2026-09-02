@@ -221,7 +221,9 @@ export function pushRecentViewMode(
   recent: readonly string[],
   mode: Document['viewMode'],
 ): Document['viewMode'][] {
-  const kept = recent.filter((each): each is Document['viewMode'] => each !== mode && isViewMode(each));
+  const kept = recent.filter(
+    (each): each is Document['viewMode'] => each !== mode && isViewMode(each),
+  );
   return [mode, ...kept].slice(0, MAX_RECENT_VIEW_MODES);
 }
 

@@ -157,10 +157,13 @@ it('associates only extensions Hashpad will actually open, including the install
     'utf8',
   );
 
-  // `!insertmacro APP_ASSOCIATE "txt" ...` -- the first argument is the
-  // extension, without its dot.
-  const registered = [...script.matchAll(/!insertmacro\s+APP_ASSOCIATE\s+"([^"]+)"/g)].map(
-    (match) => `.${match[1]}`,
+  // `Software\Classes\.txt\OpenWithProgids` -- the key that puts Hashpad in the
+  // Open with list. Matched rather than `APP_ASSOCIATE`, which the installer no
+  // longer uses for these: writing an extension's *default* is the legacy
+  // mechanism, and Windows overrides it for anything the user has already
+  // chosen a handler for.
+  const registered = [...script.matchAll(/Software\\Classes\\(\.[a-z0-9]+)\\OpenWithProgids/g)].map(
+    (match) => match[1]!,
   );
 
   // Vacuous the day the installer stops registering anything directly, which is
