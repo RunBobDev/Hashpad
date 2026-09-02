@@ -1547,8 +1547,8 @@ The file associations are *declared* here and *registered* in I.3, so nothing in
 Explorer changes yet — the installer does that.
 
 - [x] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
-      Product name **Hashpad**, Product version **0.1.0**, File version
-      **0.1.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
+      Product name **Hashpad**, Product version **0.2.0**, File version
+      **0.2.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
       description **Hashpad**. Blank fields here mean the version resource did
       not link.
       *Confirmed 2026-08-31, measured: all six strings read back through
@@ -1691,7 +1691,7 @@ checks as well** — a half-tested uninstaller is how a machine collects debris.
       that unticked.
       *Confirmed 2026-08-31, owner.*
 - [ ] **Settings → Apps → Installed apps lists Hashpad**, with a version of
-      0.1.0 and a publisher of Hashpad.
+      0.2.0 and a publisher of Hashpad.
       *The entry exists -- the uninstall below was reached through it. The
       version and publisher strings shown there were not read.*
 
