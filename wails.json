@@ -20,28 +20,28 @@
         "ext": "md",
         "name": "Hashpad.Markdown",
         "description": "Markdown Document",
-        "iconName": "appicon",
+        "iconName": "mdicon",
         "role": "Editor"
       },
       {
         "ext": "markdown",
         "name": "Hashpad.Markdown",
         "description": "Markdown Document",
-        "iconName": "appicon",
+        "iconName": "mdicon",
         "role": "Editor"
       },
       {
         "ext": "mdown",
         "name": "Hashpad.Markdown",
         "description": "Markdown Document",
-        "iconName": "appicon",
+        "iconName": "mdicon",
         "role": "Editor"
       },
       {
         "ext": "mkd",
         "name": "Hashpad.Markdown",
         "description": "Markdown Document",
-        "iconName": "appicon",
+        "iconName": "mdicon",
         "role": "Editor"
       }
     ]

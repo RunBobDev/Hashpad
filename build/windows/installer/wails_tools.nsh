@@ -239,21 +239,21 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macro wails.associateFiles
     ; Create file associations
     
-      !insertmacro APP_ASSOCIATE "md" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\appicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+      !insertmacro APP_ASSOCIATE "md" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\mdicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
-      File "..\appicon.ico"
+      File "..\mdicon.ico"
     
-      !insertmacro APP_ASSOCIATE "markdown" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\appicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+      !insertmacro APP_ASSOCIATE "markdown" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\mdicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
-      File "..\appicon.ico"
+      File "..\mdicon.ico"
     
-      !insertmacro APP_ASSOCIATE "mdown" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\appicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+      !insertmacro APP_ASSOCIATE "mdown" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\mdicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
-      File "..\appicon.ico"
+      File "..\mdicon.ico"
     
-      !insertmacro APP_ASSOCIATE "mkd" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\appicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+      !insertmacro APP_ASSOCIATE "mkd" "Hashpad.Markdown" "Markdown Document" "$INSTDIR\mdicon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
-      File "..\appicon.ico"
+      File "..\mdicon.ico"
     
 !macroend
 
@@ -262,19 +262,19 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
     
       !insertmacro APP_UNASSOCIATE "md" "Hashpad.Markdown"
 
-      Delete "$INSTDIR\appicon.ico"
+      Delete "$INSTDIR\mdicon.ico"
     
       !insertmacro APP_UNASSOCIATE "markdown" "Hashpad.Markdown"
 
-      Delete "$INSTDIR\appicon.ico"
+      Delete "$INSTDIR\mdicon.ico"
     
       !insertmacro APP_UNASSOCIATE "mdown" "Hashpad.Markdown"
 
-      Delete "$INSTDIR\appicon.ico"
+      Delete "$INSTDIR\mdicon.ico"
     
       !insertmacro APP_UNASSOCIATE "mkd" "Hashpad.Markdown"
 
-      Delete "$INSTDIR\appicon.ico"
+      Delete "$INSTDIR\mdicon.ico"
     
 !macroend
 
