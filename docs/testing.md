@@ -1547,8 +1547,8 @@ The file associations are *declared* here and *registered* in I.3, so nothing in
 Explorer changes yet — the installer does that.
 
 - [x] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
-      Product name **Hashpad**, Product version **0.2.0**, File version
-      **0.2.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
+      Product name **Hashpad**, Product version **0.3.0**, File version
+      **0.3.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
       description **Hashpad**. Blank fields here mean the version resource did
       not link.
       *Confirmed 2026-08-31, measured: all six strings read back through
@@ -1691,7 +1691,7 @@ checks as well** — a half-tested uninstaller is how a machine collects debris.
       that unticked.
       *Confirmed 2026-08-31, owner.*
 - [ ] **Settings → Apps → Installed apps lists Hashpad**, with a version of
-      0.2.0 and a publisher of Hashpad.
+      0.3.0 and a publisher of Hashpad.
       *The entry exists -- the uninstall below was reached through it. The
       version and publisher strings shown there were not read.*
 
@@ -2043,6 +2043,32 @@ Windows of nothing at all. It is unconditional now, last in the install section.
       running and offers Retry; closing the app and choosing Retry carries on.
       It must not report a successful install having left the old executable in
       place, which is what NSIS's own Ignore does.
+**Associating `.txt`, added in 0.3.0.** A second checkbox directly under the
+markdown one. `.txt` was already in `SUPPORTED_EXTENSIONS` and already opened
+fine; only the registration was missing.
+
+- [ ] **The options page shows two association checkboxes**, both unticked by
+      default, with the `.txt` one directly under the markdown one and the
+      explanation naming Notepad. Nothing is clipped -- the page grew by a row
+      and the desktop shortcut moved down with it.
+- [ ] **Tick only the markdown box.** `.md` opens in Hashpad; `.txt` still opens
+      in whatever had it. The two must be genuinely independent, which is the
+      whole reason `.txt` is registered outside wails.json.
+- [ ] **Tick only the `.txt` box.** The reverse: `.txt` files show the ".TXT"
+      icon and open in Hashpad, `.md` files are untouched.
+- [ ] **A `.txt` file opens with its content intact**, and the status bar reports
+      its encoding and line endings like any other file.
+- [ ] **Uninstall gives `.txt` back to Notepad**, not to nothing. `APP_UNASSOCIATE`
+      restores whichever file class held it before, and this is the check that
+      the backup was actually taken -- taking Notepad's extension is only
+      defensible because giving it back is automatic.
+- [ ] **Repair remembers the choice.** Tick `.txt`, finish, run the installer
+      again and choose "Change options": the box is still ticked. It is recorded
+      as `TextAssociations` beside the other two.
+- [ ] **Upgrading from 0.2.0 leaves `.txt` alone.** That install has no
+      `TextAssociations` value at all, which must read as "not taken" rather than
+      as an empty string doing something surprising.
+
 - [ ] **Only one `hashpad-icon-*.ico` is in the install folder** after
       upgrading. They are stamped per build and the installer deletes the
       previous one; a folder collecting them means the wildcard delete broke.

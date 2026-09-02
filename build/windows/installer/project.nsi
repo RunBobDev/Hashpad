@@ -92,10 +92,17 @@ ManifestDPIAware true
 Var ScopeAllUsersRadio
 Var ScopeCurrentUserRadio
 Var AssociateCheckbox
+Var TextCheckbox
 Var DesktopCheckbox
 
 Var InstallForAllUsers
 Var AssociateFiles
+## Kept apart from `$AssociateFiles` rather than folded into it, because taking
+## `.txt` is a different proposition from taking `.md`. Markdown files have no
+## default owner worth defending; `.txt` belongs to Notepad, is on every Windows
+## machine, and someone who wants Hashpad for their notes may well not want it
+## for every log and readme they double-click. Two questions, two checkboxes.
+Var AssociateTextFiles
 Var CreateDesktopShortcut
 
 ## Set when an existing installation is found, which turns the maintenance page
@@ -154,6 +161,7 @@ Function .onInit
     ## SPEC 9: associations are opt-in, "never forced". Unticked by default is
     ## what makes that true rather than merely available.
     StrCpy $AssociateFiles 0
+    StrCpy $AssociateTextFiles 0
     StrCpy $CreateDesktopShortcut 0
     StrCpy $ExistingInstall 0
     StrCpy $MaintenanceChoice "change"
@@ -175,6 +183,7 @@ Function .onInit
         ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation"
         ReadRegDWORD $2 HKLM "${UNINST_KEY}" "Associations"
         ReadRegDWORD $3 HKLM "${UNINST_KEY}" "DesktopShortcut"
+        ReadRegDWORD $4 HKLM "${UNINST_KEY}" "TextAssociations"
     ${Else}
         ReadRegStr $0 HKCU "${UNINST_KEY}" "UninstallString"
         ${If} $0 != ""
@@ -183,12 +192,21 @@ Function .onInit
             ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
             ReadRegDWORD $2 HKCU "${UNINST_KEY}" "Associations"
             ReadRegDWORD $3 HKCU "${UNINST_KEY}" "DesktopShortcut"
+            ReadRegDWORD $4 HKCU "${UNINST_KEY}" "TextAssociations"
         ${EndIf}
     ${EndIf}
 
     ${If} $ExistingInstall == 1
         StrCpy $AssociateFiles $2
         StrCpy $CreateDesktopShortcut $3
+        ## Absent from a pre-0.3.0 install, where ReadRegDWORD leaves the value
+        ## empty rather than zero. Read as "not taken", which is both the safe
+        ## reading and the true one: that install never registered .txt.
+        ${If} $4 == ""
+            StrCpy $AssociateTextFiles 0
+        ${Else}
+            StrCpy $AssociateTextFiles $4
+        ${EndIf}
         ## Reinstall where it already lives. Offering to move it would leave the
         ## old copy behind with its own uninstall entry.
         ${If} $1 != ""
@@ -346,11 +364,22 @@ Function OptionsPageCreate
     Pop $AssociateCheckbox
     ${NSD_SetState} $AssociateCheckbox $AssociateFiles
 
-    ${NSD_CreateLabel} 12u 68u 95% 20u \
-        "Leave this unticked to keep whatever program currently opens those files. You can change it later in Windows Settings, under Default apps."
+    ## Directly under the markdown one, and phrased as an addition, because that
+    ## is what it is: the same capability, aimed at a file type Hashpad already
+    ## opens perfectly well but does not claim by default.
+    ${NSD_CreateCheckBox} 0 68u 100% 12u \
+        "Open .txt files with Hashpad as well"
+    Pop $TextCheckbox
+    ${NSD_SetState} $TextCheckbox $AssociateTextFiles
+
+    ## Notepad is named. "Whatever program currently opens those files" is true
+    ## and useless for .txt, where everyone knows the answer and deserves to be
+    ## told what they are giving up.
+    ${NSD_CreateLabel} 12u 82u 95% 24u \
+        "Leave these unticked to keep whatever program currently opens those files -- for .txt that is usually Notepad. Either can be changed later in Windows Settings, under Default apps."
     Pop $0
 
-    ${NSD_CreateCheckBox} 0 94u 100% 12u "Create a desktop shortcut"
+    ${NSD_CreateCheckBox} 0 110u 100% 12u "Create a desktop shortcut"
     Pop $DesktopCheckbox
     ${NSD_SetState} $DesktopCheckbox $CreateDesktopShortcut
 
@@ -360,6 +389,7 @@ FunctionEnd
 Function OptionsPageLeave
     ${NSD_GetState} $ScopeAllUsersRadio $InstallForAllUsers
     ${NSD_GetState} $AssociateCheckbox $AssociateFiles
+    ${NSD_GetState} $TextCheckbox $AssociateTextFiles
     ${NSD_GetState} $DesktopCheckbox $CreateDesktopShortcut
     Call ApplyInstallDir
 FunctionEnd
@@ -440,6 +470,22 @@ Section
         !insertmacro wails.associateCustomProtocols
     ${EndIf}
 
+    ## `.txt` is registered here rather than through wails.json's
+    ## fileAssociations, and that is the whole reason it can have a checkbox of
+    ## its own: `wails.associateFiles` takes every association in that file at
+    ## once, so anything listed there is bound to the markdown box.
+    ##
+    ## `APP_ASSOCIATE` is wails_tools.nsh's own macro, used rather than
+    ## reimplemented -- it records whichever file class held `.txt` before, and
+    ## `APP_UNASSOCIATE` in the uninstaller puts that back. Taking Notepad's
+    ## extension is only defensible because giving it back is automatic.
+    ${If} $AssociateTextFiles == 1
+        File "..\txticon.ico"
+        !insertmacro APP_ASSOCIATE "txt" "Hashpad.Text" "Text Document" \
+            "$INSTDIR\txticon.ico" "Open with ${INFO_PRODUCTNAME}" \
+            "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    ${EndIf}
+
     ## Replaces `wails.writeUninstaller`, which picks HKCU or HKLM from a
     ## compile-time define. SHELL_CONTEXT resolves at run time and so lands in
     ## the hive matching the scope actually chosen. Which hive holds the key is
@@ -458,6 +504,7 @@ Section
     ## .onInit.
     WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "Associations" $AssociateFiles
     WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "DesktopShortcut" $CreateDesktopShortcut
+    WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "TextAssociations" $AssociateTextFiles
     ## `NoModify` and `NoRepair` stay set, and that is not an oversight now that
     ## re-running the installer offers repair and change. Those flags describe
     ## what *Add/Remove Programs* can do, and its Modify button runs whatever
@@ -574,6 +621,11 @@ Section "uninstall"
     ## replaced executable showing its old icon.
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
+    ## Unconditional for the same reason as the macros above: the uninstaller
+    ## does not know whether `.txt` was taken, and restoring a backup that was
+    ## never made is a no-op. Leaving Notepad's extension pointed at a program
+    ## that is no longer on disk would not be.
+    !insertmacro APP_UNASSOCIATE "txt" "Hashpad.Text"
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 
     SetRegView 64

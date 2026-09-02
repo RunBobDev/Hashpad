@@ -139,6 +139,40 @@ it('associates only extensions Hashpad will actually open', () => {
 });
 
 /**
+ * The same guard as above, for the extensions the installer registers *itself*.
+ *
+ * `.txt` is deliberately not in wails.json: `wails.associateFiles` takes every
+ * association in that file at once, so anything listed there is bound to the
+ * markdown checkbox, and `.txt` needed its own. The cost is that it escapes the
+ * check above — a second `APP_ASSOCIATE` for an extension Hashpad cannot open
+ * would register happily, launch the app on a double-click, and open nothing.
+ *
+ * Parsed out of the installer script rather than duplicated as a list here,
+ * because a list would be a third place to keep in step and the failure it is
+ * guarding against is exactly two places disagreeing.
+ */
+it('associates only extensions Hashpad will actually open, including the installer’s own', () => {
+  const script = readFileSync(
+    new URL('../../../build/windows/installer/project.nsi', import.meta.url),
+    'utf8',
+  );
+
+  // `!insertmacro APP_ASSOCIATE "txt" ...` -- the first argument is the
+  // extension, without its dot.
+  const registered = [...script.matchAll(/!insertmacro\s+APP_ASSOCIATE\s+"([^"]+)"/g)].map(
+    (match) => `.${match[1]}`,
+  );
+
+  // Vacuous the day the installer stops registering anything directly, which is
+  // a legitimate change -- but then this test should be deleted, not silently
+  // pass.
+  expect(registered.length).toBeGreaterThan(0);
+  for (const ext of registered) {
+    expect(SUPPORTED_EXTENSIONS).toContain(ext);
+  }
+});
+
+/**
  * `iconName` names a file Wails looks for at `build/windows/<name>.ico`, and it
  * is a plain string in a JSON file — nothing checks it. A typo, or the icon
  * being renamed or deleted, is not a build error: the association registers with

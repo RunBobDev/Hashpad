@@ -265,3 +265,11 @@ Write-Ico -path '..\build\windows\appicon.ico' -text 'H' -style 'lean'
 Write-Output 'document icon (.MD):'
 Write-Png -path '..\build\mdicon.png' -text '.MD' -style 'text'
 Write-Ico -path '..\build\windows\mdicon.ico' -text '.MD' -style 'text'
+
+# No PNG for this one: `.txt` is registered by project.nsi directly rather than
+# through wails.json's fileAssociations, so Wails never asks for a source image.
+# Taking .txt is a bigger imposition than taking .md -- it is Notepad's -- which
+# is why it is a separate opt-in with its own icon rather than being folded in
+# with the markdown extensions.
+Write-Output 'document icon (.TXT):'
+Write-Ico -path '..\build\windows\txticon.ico' -text '.TXT' -style 'text'
