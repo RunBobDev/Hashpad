@@ -197,7 +197,7 @@ Function MaintenancePageCreate
     ${NSD_CreateLabel} 0 0 100% 20u "Hashpad is installed at:$\r$\n$INSTDIR"
     Pop $0
 
-    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair - install the same files again, keeping the current options"
+    ${NSD_CreateRadioButton} 8u 28u 95% 12u "Repair or update - install this version, keeping the current options"
     Pop $RepairRadio
     ${NSD_AddStyle} $RepairRadio ${WS_GROUP}
 
@@ -209,8 +209,12 @@ Function MaintenancePageCreate
 
     ${NSD_SetState} $RepairRadio ${BST_CHECKED}
 
-    ${NSD_CreateLabel} 12u 76u 95% 20u \
-        "Repair and Change both install over the existing copy in the same place, and neither touches your settings."
+    ## 34u, not the 20u this started at: the text grew when "Repair" became
+    ## "Repair or update" and had to say what updating means. A clipped
+    ## explanation is worse than none, and nsDialogs gives no warning -- it just
+    ## draws what fits. The three radios end at 68u, so there is room.
+    ${NSD_CreateLabel} 12u 76u 95% 34u \
+        "Repair or update is how you move to a newer Hashpad: it replaces every installed file with the ones in this installer. It and Change both install over the existing copy in the same place, and neither touches your settings."
     Pop $0
 
     nsDialogs::Show
@@ -351,6 +355,36 @@ Section
 
     !insertmacro wails.webview2runtime
 
+    ## **Refuse to install over a running Hashpad, and say why.**
+    ##
+    ## Windows will not let an executable be overwritten while it is loaded. NSIS
+    ## meets that with an Abort/Retry/Ignore box of its own, and Ignore is the
+    ## outcome to worry about: the install runs to completion, reports success,
+    ## and leaves the *old* binary in place. An update that silently did not
+    ## update is worse than one that refused, and this is the update path -- the
+    ## maintenance page's "Repair or update" comes through here.
+    ##
+    ## Tested by opening the file for append rather than by hunting for a window
+    ## or a process name: it asks the exact question that matters, which is
+    ## whether the next line can write. Renaming would not do -- Windows allows a
+    ## running executable to be renamed, and only refuses the write.
+    ##
+    ## The Retry loop is what makes this a prompt rather than a dead end: close
+    ## Hashpad, click Retry, carry on. No plugin, so nothing is added to the
+    ## build for it.
+    check_running:
+    IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" 0 not_running
+    ClearErrors
+    FileOpen $0 "$INSTDIR\${PRODUCT_EXECUTABLE}" a
+    IfErrors 0 close_probe
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION \
+        "Hashpad is running, so its files cannot be replaced.$\n$\nClose Hashpad and choose Retry." \
+        IDRETRY check_running
+    Abort "Installation cancelled: Hashpad was still running."
+    close_probe:
+    FileClose $0
+    not_running:
+
     SetOutPath $INSTDIR
     !insertmacro wails.files
 
@@ -363,9 +397,6 @@ Section
     ${If} $AssociateFiles == 1
         !insertmacro wails.associateFiles
         !insertmacro wails.associateCustomProtocols
-        ## Tell the shell its cached associations are stale, or Explorer keeps
-        ## showing the old icon and old default until the next sign-in.
-        System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
     ${EndIf}
 
     ## Replaces `wails.writeUninstaller`, which picks HKCU or HKLM from a
@@ -400,6 +431,28 @@ Section
     ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
     IntFmt $0 "0x%08X" $0
     WriteRegDWORD SHELL_CONTEXT "${UNINST_KEY}" "EstimatedSize" "$0"
+
+    ## **Unconditional, and it lived inside the associations branch until now.**
+    ##
+    ## SHCNE_ASSOCCHANGED is how a program tells the shell that its cached icons
+    ## and associations are stale. Placed under `$AssociateFiles`, it only ever
+    ## fired for someone who ticked that box -- so an install or a repair that
+    ## left associations alone told Windows nothing at all, and Explorer, the
+    ## taskbar and the Start menu kept drawing whatever icon they had cached for
+    ## `$INSTDIR\${PRODUCT_EXECUTABLE}`.
+    ##
+    ## That is not a hypothetical. Changing the application icon from Wails' "W"
+    ## to Hashpad's "H" and reinstalling left the old icon on screen, on a
+    ## machine where the executable on disk demonstrably carried the new one.
+    ## The file had been replaced; nothing had said so.
+    ##
+    ## The association case is covered by this too, which is why the call moved
+    ## rather than being duplicated: the notification is global, not per-key.
+    ##
+    ## Last in the section on purpose. The files, the shortcuts and the registry
+    ## entries are all in place by this point, so what the shell re-reads is the
+    ## finished install rather than a half-written one.
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 SectionEnd
 
 ## The uninstaller has to rediscover which scope it was installed under: it is a
@@ -446,9 +499,11 @@ Section "uninstall"
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
 
-    ## Unconditional, unlike the install side: the uninstaller does not know
-    ## whether the associations were taken, and these macros restore whatever
-    ## was there before rather than assuming Hashpad owned the extension.
+    ## Unconditional: the uninstaller does not know whether the associations
+    ## were taken, and these macros restore whatever was there before rather
+    ## than assuming Hashpad owned the extension. The install side is
+    ## unconditional too now -- it was not, and that was the bug that left a
+    ## replaced executable showing its old icon.
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'

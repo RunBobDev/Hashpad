@@ -2004,12 +2004,32 @@ jsdom where `clientHeight` is not).
 `wails init`, shipped in every build and every installer, and nobody had noticed
 because a stock logo looks like *a* logo.
 
+**Upgrading is the case that matters here, not a first install.** The reported
+defect was an installed Hashpad still showing the old icon after a reinstall, on
+a machine where the executable on disk demonstrably carried the new one. The file
+had been replaced; nothing had told the shell. `SHChangeNotify` sat inside the
+file-associations branch, so an install that left associations alone notified
+Windows of nothing at all. It is unconditional now, last in the install section.
+
 - [ ] **The window's taskbar button and Alt+Tab entry show the H.** These read
       the executable's icon rather than the shortcut's, so they are the check
       that the resource really linked.
 - [ ] **The Start menu entry and the desktop shortcut show it too.**
 - [ ] **The installer's own window shows it** -- `project.nsi` points `MUI_ICON`
       at the same `icon.ico`.
+- [ ] **Upgrade over an older install and the icon changes.** Install an older
+      build, then run this installer and choose "Repair or update". The Start
+      menu entry, the desktop shortcut and the executable in the install folder
+      must all show the new icon **without clearing any cache by hand** -- that
+      is the whole point of the fix, and running a shell command to make it look
+      right is what it exists to avoid.
+- [ ] **Repair with Hashpad still running.** The installer says Hashpad is
+      running and offers Retry; closing the app and choosing Retry carries on.
+      It must not report a successful install having left the old executable in
+      place, which is what NSIS's own Ignore does.
+- [ ] **The maintenance page's first option reads "Repair or update"**, and the
+      paragraph under the three options is not clipped -- it grew, and nsDialogs
+      silently draws only what fits.
 - [ ] **The H leans, and is legible at 16px.** It is drawn as a sheared outline
       rather than as hinted text, which is the right trade for one large glyph
       and the wrong one for three small ones -- if it looks soft in a list view,
