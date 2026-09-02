@@ -2024,6 +2024,15 @@ Windows of nothing at all. It is unconditional now, last in the install section.
       that is the whole point of the fix, and running a shell command to make it
       look right is what it exists to avoid.
 
+      **How this is actually made to work, since two attempts did not.** The
+      shortcuts point at `$INSTDIR\hashpad-icon-<buildstamp>.ico` rather than
+      inheriting the executable's icon. Windows caches a shortcut's icon against
+      the path it came from, and NSIS's own "Refresh shell icons" page documents
+      that the SHChangeNotify trick "does not work" for this -- the ICO has to be
+      *renamed*. An executable cannot be renamed, so the icon moved into a file
+      that can be. The stamp is the build time, not the product version, because
+      the icon can change without the version doing so.
+
       **The desktop shortcut is the one to look at hardest.** It is where this
       failed after the first attempt at the fix: Alt+Tab and the taskbar were
       already correct, because those read the icon out of the *running process*,
@@ -2034,6 +2043,14 @@ Windows of nothing at all. It is unconditional now, last in the install section.
       running and offers Retry; closing the app and choosing Retry carries on.
       It must not report a successful install having left the old executable in
       place, which is what NSIS's own Ignore does.
+- [ ] **Only one `hashpad-icon-*.ico` is in the install folder** after
+      upgrading. They are stamped per build and the installer deletes the
+      previous one; a folder collecting them means the wildcard delete broke.
+- [ ] **A desktop shortcut you made yourself** -- dragged from the Start menu, or
+      "Send to > Desktop" -- also picks up the new icon. It will not have been
+      recreated by the installer, so this is the notification path rather than
+      the stamped-icon path, and it is the commoner way a desktop shortcut
+      exists.
 - [ ] **The maintenance page's first option reads "Repair or update"**, and the
       paragraph under the three options is not clipped -- it grew, and nsDialogs
       silently draws only what fits.

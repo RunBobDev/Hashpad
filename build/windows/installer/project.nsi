@@ -60,6 +60,28 @@ ManifestDPIAware true
 !define MUI_UNICON "..\icon.ico"
 !define MUI_ABORTWARNING
 
+## **Windows caches a shortcut's icon against the path it came from, and no
+## notification reliably clears it.** That is documented rather than deduced:
+## NSIS's own "Refresh shell icons" page says the SHChangeNotify trick "does not
+## work" for a shortcut whose icon design changed, and that the ICO file has to
+## be *renamed* to force a refresh.
+##
+## Measured here the hard way. After an upgrade that changed the application
+## icon, Alt+Tab and the taskbar showed the new one -- those read the icon out of
+## the running process -- while the desktop shortcut kept drawing the old one,
+## through an unconditional SHChangeNotify, through per-item SHCNE_UPDATEITEM
+## calls, and through recreating the shortcut file itself. The cache is keyed on
+## the source path, and the source path had not changed.
+##
+## So the shortcuts point at an icon file whose *name* changes whenever a new
+## installer is built. A new path is a cache miss, which is the whole point. The
+## stamp is the build time rather than the product version, because the icon can
+## change without the version doing so -- which is exactly what happened.
+##
+## The previous stamped file is deleted on install, so this does not accumulate.
+!define /date ICON_STAMP "%Y%m%d%H%M%S"
+!define SHORTCUT_ICON "hashpad-icon-${ICON_STAMP}.ico"
+
 ## `MUI_FINISHPAGE_NOAUTOCLOSE` is deliberately **not** set, and was removed
 ## after it was reported as looking unfinished. With it, the progress page stops
 ## at 100% still showing a "Next" button and waits -- which reads as a step that
@@ -388,16 +410,29 @@ Section
     SetOutPath $INSTDIR
     !insertmacro wails.files
 
-    ## Deleted before being written, not simply overwritten. A shortcut the shell
-    ## has already drawn once has a cached icon against it, and rewriting the
-    ## same path in place leaves that cache entry looking current. Removing the
-    ## file first means what appears afterwards is, to the shell, a new item.
+    ## The stamped icon: a fresh path per installer build, which is the only
+    ## thing that reliably defeats the shell's icon cache. See SHORTCUT_ICON.
+    ## The wildcard clears whatever the previous install left, so exactly one of
+    ## these exists at a time.
+    Delete "$INSTDIR\hashpad-icon-*.ico"
+    File "/oname=${SHORTCUT_ICON}" "..\icon.ico"
+
+    ## Deleted before being written, not simply overwritten: a shortcut the shell
+    ## has already drawn has a cache entry against it, and rewriting the same
+    ## path leaves that entry looking current.
+    ##
+    ## The icon is named explicitly rather than inherited from the executable.
+    ## Inherited, it resolves to `$INSTDIR\Hashpad.exe` -- a path that cannot
+    ## change, because the executable has to keep its name -- and so to a cache
+    ## entry that cannot be invalidated.
     Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
-    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" \
+        "" "$INSTDIR\${SHORTCUT_ICON}" 0
 
     ${If} $CreateDesktopShortcut == 1
         Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
-        CreateShortcut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+        CreateShortcut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" \
+            "" "$INSTDIR\${SHORTCUT_ICON}" 0
     ${EndIf}
 
     ${If} $AssociateFiles == 1
@@ -474,12 +509,17 @@ Section
     ## feels like it -- an installer that exits first is how "it fixed itself
     ## after a reboot" reports happen. SHCNE_UPDATEDIR (0x1000) covers the folder
     ## the shortcut sits in, because that is what Explorer is actually painting.
+    ## The desktop is named whether or not *this* install created a shortcut
+    ## there. It was gated on `$CreateDesktopShortcut` and that was wrong: a
+    ## shortcut the user made themselves, by dragging from the Start menu or with
+    ## "Send to > Desktop", is the commonest way one exists, and it is stale in
+    ## exactly the same way. Notifying about a path that holds no shortcut costs
+    ## nothing.
     System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$INSTDIR\${PRODUCT_EXECUTABLE}", i 0)'
+    System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$INSTDIR\${SHORTCUT_ICON}", i 0)'
     System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk", i 0)'
-    ${If} $CreateDesktopShortcut == 1
-        System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$DESKTOP\${INFO_PRODUCTNAME}.lnk", i 0)'
-        System::Call 'shell32::SHChangeNotify(i 0x00001000, i 0x1005, w "$DESKTOP", i 0)'
-    ${EndIf}
+    System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$DESKTOP\${INFO_PRODUCTNAME}.lnk", i 0)'
+    System::Call 'shell32::SHChangeNotify(i 0x00001000, i 0x1005, w "$DESKTOP", i 0)'
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 SectionEnd
 
