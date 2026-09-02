@@ -388,9 +388,15 @@ Section
     SetOutPath $INSTDIR
     !insertmacro wails.files
 
+    ## Deleted before being written, not simply overwritten. A shortcut the shell
+    ## has already drawn once has a cached icon against it, and rewriting the
+    ## same path in place leaves that cache entry looking current. Removing the
+    ## file first means what appears afterwards is, to the shell, a new item.
+    Delete "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk"
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     ${If} $CreateDesktopShortcut == 1
+        Delete "$DESKTOP\${INFO_PRODUCTNAME}.lnk"
         CreateShortcut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     ${EndIf}
 
@@ -452,6 +458,28 @@ Section
     ## Last in the section on purpose. The files, the shortcuts and the registry
     ## entries are all in place by this point, so what the shell re-reads is the
     ## finished install rather than a half-written one.
+    ##
+    ## **The global notification alone was not enough**, which is the second half
+    ## of this bug. After an upgrade that changed the application icon, the
+    ## running app was right -- Alt+Tab and the taskbar read the icon straight out
+    ## of the loaded process -- while the *desktop shortcut* still drew the old
+    ## one. Those are two different sources, and only the second consults the
+    ## shell's icon cache. SHCNE_ASSOCCHANGED asks the shell to reconsider
+    ## associations; it does not reliably invalidate a cached icon for a
+    ## particular file that has been redrawn many times at the same path.
+    ##
+    ## So each item is named individually as well. SHCNE_UPDATEITEM (0x2000) with
+    ## SHCNF_PATHW (0x5) says "this exact file changed", and SHCNF_FLUSH (0x1000)
+    ## makes the shell act on it before we return rather than whenever it next
+    ## feels like it -- an installer that exits first is how "it fixed itself
+    ## after a reboot" reports happen. SHCNE_UPDATEDIR (0x1000) covers the folder
+    ## the shortcut sits in, because that is what Explorer is actually painting.
+    System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$INSTDIR\${PRODUCT_EXECUTABLE}", i 0)'
+    System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk", i 0)'
+    ${If} $CreateDesktopShortcut == 1
+        System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x1005, w "$DESKTOP\${INFO_PRODUCTNAME}.lnk", i 0)'
+        System::Call 'shell32::SHChangeNotify(i 0x00001000, i 0x1005, w "$DESKTOP", i 0)'
+    ${EndIf}
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 SectionEnd
 

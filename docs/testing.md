@@ -2019,10 +2019,17 @@ Windows of nothing at all. It is unconditional now, last in the install section.
       at the same `icon.ico`.
 - [ ] **Upgrade over an older install and the icon changes.** Install an older
       build, then run this installer and choose "Repair or update". The Start
-      menu entry, the desktop shortcut and the executable in the install folder
-      must all show the new icon **without clearing any cache by hand** -- that
-      is the whole point of the fix, and running a shell command to make it look
-      right is what it exists to avoid.
+      menu entry, the **desktop shortcut** and the executable in the install
+      folder must all show the new icon **without clearing any cache by hand** --
+      that is the whole point of the fix, and running a shell command to make it
+      look right is what it exists to avoid.
+
+      **The desktop shortcut is the one to look at hardest.** It is where this
+      failed after the first attempt at the fix: Alt+Tab and the taskbar were
+      already correct, because those read the icon out of the *running process*,
+      while the shortcut drew a cached icon for the target path. Two different
+      sources, and only one of them consults the cache -- so "the app icon is
+      right" is not evidence that the shortcut is.
 - [ ] **Repair with Hashpad still running.** The installer says Hashpad is
       running and offers Retry; closing the app and choosing Retry carries on.
       It must not report a successful install having left the old executable in
