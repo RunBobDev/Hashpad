@@ -82,19 +82,32 @@ describe('opening a file when the preview has never been mounted', () => {
     await vi.waitFor(() => expect(ShowWindow).toHaveBeenCalled());
   });
 
-  it('starts with no pane, because the startup document is in source mode', () => {
-    expect(activeDocument(store.getState())!.viewMode).toBe('source');
-    expect(document.querySelector('.preview-pane')).toBeNull();
-  });
-
   /**
-   * Both halves matter and they fail separately. The mode reaching the document
-   * is `documentops.ts` reading the right setting; the pane appearing is the
+   * **One test, not two, and that is a correctness point rather than tidiness.**
+   *
+   * The starting state -- source mode, no pane -- was its own case at first, and
+   * it is not an independent fact: the case below *opens a file*, which makes a
+   * split document active and leaves the pane mounted. Run in that order, the
+   * precondition is already gone and the assertion fails. Caught by
+   * `--sequence.shuffle`, on two runs out of three; the default order happened
+   * to be the passing one.
+   *
+   * A precondition belongs to the scenario that needs it. Asserted here so a
+   * failure still says which half broke.
+   *
+   * Both halves below fail separately, too. The mode reaching the document is
+   * `documentops.ts` reading the right setting; the pane appearing is the
    * subscription importing the chunk on demand. The first without the second is
-   * exactly the bug: a document that says split over an editor with nothing
-   * beside it.
+   * exactly the bug this file exists for: a document that says split, over an
+   * editor with nothing beside it.
    */
   it('opens the file in the mode for existing documents, and mounts the pane for it', async () => {
+    // The precondition: nothing has mounted a pane yet, because the startup
+    // document is in source mode. Without this the case below could pass
+    // against a pane some earlier work had already put on screen.
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+    expect(document.querySelector('.preview-pane')).toBeNull();
+
     vi.mocked(ShowOpenDialog).mockResolvedValue(['C:/notes/opened.md']);
     vi.mocked(ReadFile).mockResolvedValue({
       path: 'C:/notes/opened.md',
