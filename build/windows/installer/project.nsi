@@ -139,9 +139,14 @@ Page custom OptionsPageCreate OptionsPageLeave
 ## `MUI_FINISHPAGE_SHOWREADME` repurposed as a second checkbox. That is the
 ## documented way to get one on this page -- there is no README involved, and the
 ## empty target with a `_FUNCTION` is what turns it into a plain callback.
-## Unticked by default: offering is fair, pre-ticking is not.
+##
+## **Ticked by default**, which it was not at first. The reasoning that had it
+## unticked -- offering is fair, pre-ticking is not -- applies to a checkbox that
+## *does* something. This one opens a settings page and changes nothing; the
+## choice still has to be made there, by hand, in Windows' own UI. Someone who
+## ticked a file-association box has already said what they want, and making them
+## hunt for the page afterwards serves nobody.
 !define MUI_FINISHPAGE_SHOWREADME ""
-!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Choose which files open in Hashpad"
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenDefaultAppsSettings
 !insertmacro MUI_PAGE_FINISH
@@ -554,13 +559,25 @@ Section
             "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\shell\open\command" "" \
             "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
 
-        ## **Default Programs registration, which is what makes Hashpad a named
-        ## app in Settings rather than an anonymous handler.**
-        ##
-        ## It is also the prerequisite for deep-linking: the finish page's
-        ## `ms-settings:defaultapps?registeredAppUser=Hashpad` looks this name up
-        ## in `RegisteredApplications`, and without it the link falls back to the
-        ## general page. Same shape a browser uses for "make me the default".
+    ${EndIf}
+
+    ## **Default Programs registration: what makes Hashpad a named app in
+    ## Settings rather than an anonymous handler**, and the prerequisite for the
+    ## finish page's deep link -- `?registeredAppUser=Hashpad` looks this name up
+    ## in `RegisteredApplications`, and without it Settings opens on the general
+    ## page instead of Hashpad's own.
+    ##
+    ## **Outside both association branches, listing whatever was actually
+    ## taken.** It sat inside the `.txt` branch first, so Hashpad's page in
+    ## Settings offered `.txt` alone even for someone who had ticked the markdown
+    ## box -- every other type it had registered was missing from the one page
+    ## built to list them.
+    ##
+    ## The key is deleted before being rewritten, so unticking a box on a repair
+    ## removes the type from the page rather than leaving it advertised.
+    DeleteRegKey SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities"
+    ${If} $AssociateFiles == 1
+    ${OrIf} $AssociateTextFiles == 1
         WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities" \
             "ApplicationName" "${INFO_PRODUCTNAME}"
         ## Spelled out rather than reused from a define: wails_tools.nsh provides
@@ -570,10 +587,29 @@ Section
         ## `${INFO_COMMENTS}` for one build.
         WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities" \
             "ApplicationDescription" "A lightweight markdown editor for Windows."
-        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
-            ".txt" "Hashpad.Text"
         WriteRegStr SHELL_CONTEXT "Software\RegisteredApplications" \
             "${INFO_PRODUCTNAME}" "Software\${INFO_PRODUCTNAME}\Capabilities"
+    ${Else}
+        DeleteRegValue SHELL_CONTEXT "Software\RegisteredApplications" "${INFO_PRODUCTNAME}"
+    ${EndIf}
+
+    ## The four the installer actually registers, matching wails.json's
+    ## fileAssociations rather than the wider list Hashpad can *open*. Declaring
+    ## a type here that nothing handles would offer the user a choice that then
+    ## did nothing.
+    ${If} $AssociateFiles == 1
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
+            ".md" "Hashpad.Markdown"
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
+            ".markdown" "Hashpad.Markdown"
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
+            ".mdown" "Hashpad.Markdown"
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
+            ".mkd" "Hashpad.Markdown"
+    ${EndIf}
+    ${If} $AssociateTextFiles == 1
+        WriteRegStr SHELL_CONTEXT "Software\${INFO_PRODUCTNAME}\Capabilities\FileAssociations" \
+            ".txt" "Hashpad.Text"
     ${EndIf}
 
     ## Replaces `wails.writeUninstaller`, which picks HKCU or HKLM from a
