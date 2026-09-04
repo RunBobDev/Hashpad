@@ -828,3 +828,94 @@ describe('the overflow popup survives the row rebuilding under it', () => {
     expect(isPopupOpenFor(overflow)).toBe(true);
   });
 });
+
+/**
+ * **Toggling the same command twice without closing the overflow list.**
+ *
+ * The list deliberately stays open so several commands can be pinned in one
+ * visit, and it was built with a *snapshot* of the pinned set. From the second
+ * right-click onwards that snapshot described a state that no longer existed,
+ * so `!pinnedIds.has(id)` gave the same answer every time.
+ *
+ * Two things went wrong, and the invisible one was worse. The tick stayed
+ * cleared after a re-pin until the popup was closed and reopened -- which is
+ * what the owner reported. But the *event* was computed from the same stale
+ * snapshot, so a re-pin announced `toolbar.unpin:<id>`: the row showed the
+ * button, because its own list is live, while settings.json recorded it as
+ * removed. The pin was lost on the next launch.
+ *
+ * Every existing case above toggles once, which is why the whole suite passed
+ * against this.
+ */
+describe('toggling twice in the overflow list', () => {
+  function openOverflow(parent: HTMLElement): void {
+    parent.querySelector<HTMLButtonElement>('[data-overflow]')!.click();
+  }
+
+  /** Right-clicks `label` in the open overflow popup, which pins or unpins it. */
+  function rightClick(label: string): HTMLButtonElement {
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (button) => button.textContent?.includes(label),
+    );
+    expect(item, `no overflow item labelled ${label}`).toBeDefined();
+    item!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    return item!;
+  }
+
+  function mounted(): HTMLElement {
+    store.setState((prev) => ({ ...prev, activeFormats: '' }));
+    const parent = document.createElement('div');
+    document.body.append(parent);
+    mountToolbar(parent, DEFAULT_PINNED);
+    return parent;
+  }
+
+  it('announces unpin then pin, not unpin twice', () => {
+    const parent = mounted();
+    const seen = captureCommands();
+    openOverflow(parent);
+
+    rightClick('Bold');
+    rightClick('Bold');
+
+    expect(seen.filter((command) => command.endsWith(':bold'))).toEqual([
+      'toolbar.unpin:bold',
+      'toolbar.pin:bold',
+    ]);
+  });
+
+  it('leaves the button on the row after unpinning and re-pinning it', () => {
+    const parent = mounted();
+    openOverflow(parent);
+
+    rightClick('Bold');
+    expect(parent.querySelector('[data-command="bold"]')).toBeNull();
+    rightClick('Bold');
+
+    expect(parent.querySelector('[data-command="bold"]')).not.toBeNull();
+  });
+
+  /**
+   * The visible half of the same bug. The marker is on the popup item, which
+   * survives the row being rebuilt underneath it -- so it has to be updated
+   * from the toggle's own answer rather than from the snapshot.
+   */
+  it('brings the tick back when the command is pinned again', () => {
+    const parent = mounted();
+    openOverflow(parent);
+
+    // Both halves of the marker: the glyph a sighted user sees, and the
+    // accessible name a screen reader reads. `applyMarker` sets them together,
+    // and asserting only `textContent` would miss the name entirely -- these
+    // items are `menuitem`, so the state is in the name rather than in
+    // `aria-checked`.
+    const item = rightClick('Bold');
+    expect(item.querySelector('.popup-menu__check')?.textContent).toBe('');
+    expect(item.getAttribute('aria-label')).not.toContain('pinned to toolbar');
+
+    rightClick('Bold');
+
+    expect(item.querySelector('.popup-menu__check')?.textContent).toBe('✓');
+    expect(item.getAttribute('aria-label')).toContain('pinned to toolbar');
+  });
+});

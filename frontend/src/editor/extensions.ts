@@ -20,6 +20,7 @@ import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { Compartment } from '@codemirror/state';
 import { blockquoteLines } from './blockquote';
+import { livePreview } from './livepreview';
 import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
@@ -212,6 +213,10 @@ export function buildExtensions(
     // way to change them on a live view without throwing away the undo
     // history and the selection.
     behaviourCompartment.of(behaviourExtensions(behaviour)),
+    // Empty until a document asks for live mode; see `setLivePreview`. The
+    // shared constant, not a fresh `[]`, so that function's identity check
+    // recognises a freshly built state as already-off.
+    livePreviewCompartment.of(LIVE_PREVIEW_OFF),
     /**
      * SPEC §6.7 names this package. The panel is ours (`ui/findreplace.ts`):
      * the spec asks for it styled to match the app, and match highlighting is
@@ -463,4 +468,47 @@ export function setWordWrap(view: EditorView, wordWrap: boolean): void {
   view.dispatch({
     effects: wordWrapCompartment.reconfigure(wordWrap ? EditorView.lineWrapping : []),
   });
+}
+
+/**
+ * Live preview (SPEC §7.1), off in the seed and switched on by the `viewMode`
+ * subscription in `main.ts`.
+ *
+ * A compartment for the reason the other three are, and more so: `viewMode` is
+ * per *document*, so this reconfigures on every tab switch between a live-mode
+ * tab and a source-mode one. Rebuilding the state instead would throw away the
+ * undo history and the selection on each of those switches.
+ *
+ * Seeded empty rather than from a parameter, unlike `wordWrap` and `behaviour`.
+ * Those are window-wide settings known before the view exists; this one belongs
+ * to whichever document is active, which at construction time is none.
+ */
+export const livePreviewCompartment = new Compartment();
+
+/**
+ * What the compartment holds when live preview is off. A module constant, not
+ * a fresh `[]` per call, so `setLivePreview` below can recognise it by
+ * identity.
+ */
+const LIVE_PREVIEW_OFF: Extension = [];
+
+/**
+ * **Idempotent: does nothing when the view is already in the requested state.**
+ *
+ * Not an optimisation. A `dispatch` always produces a *new* `EditorState`, even
+ * when the reconfigure changes nothing -- and `switchToDocument` calls this
+ * after every tab switch, including the switch to a tab that is already in
+ * front, which `documentops.test.ts` pins as a genuine no-op ("without that
+ * this would reinitialise the view and throw away the caret and scroll
+ * position"). An unconditional dispatch here broke that test, correctly.
+ *
+ * Identity comparison rather than a length check, which is why `OFF` above is
+ * a constant: these two values are the only things ever put in this
+ * compartment, including the seed in `buildExtensions`.
+ */
+export function setLivePreview(view: EditorView, enabled: boolean): void {
+  const wanted = enabled ? livePreview : LIVE_PREVIEW_OFF;
+  if (livePreviewCompartment.get(view.state) === wanted) return;
+
+  view.dispatch({ effects: livePreviewCompartment.reconfigure(wanted) });
 }

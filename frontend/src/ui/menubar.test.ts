@@ -444,3 +444,34 @@ describe('separators', () => {
     expect(open('Edit').querySelectorAll('.menu-separator')).toHaveLength(0);
   });
 });
+
+/**
+ * Help > About Hashpad.
+ *
+ * **These exist because nothing caught it.** The item shipped `enabled: false`
+ * in Checkpoint A and stayed that way through three releases, until the owner
+ * reported the Help menu as empty -- and the whole 1400-test suite had nothing
+ * to say about it either way. A disabled item is still focusable but
+ * `activateItem` refuses to run its command, so the enabled assertion below is
+ * what makes the menu path real rather than decorative.
+ */
+describe('Help > About Hashpad', () => {
+  beforeEach(() => mountMenuBar(root, () => false));
+
+  it('is enabled, so choosing it does something', () => {
+    expect(item(open('Help'), 'About Hashpad').getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('emits help.about when chosen', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('Help'), 'About Hashpad').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['help.about']);
+  });
+});

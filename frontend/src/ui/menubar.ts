@@ -106,8 +106,10 @@ interface Menu {
  * enabled as each feature lands. They are listed anyway to fix the structure
  * and the shortcut assignments up front.
  *
- * `help.about` is disabled for the same reason: there is no About dialog yet,
- * so leaving it enabled would mean an item that does nothing when activated.
+ * `help.about` **was** disabled for the same reason, and stayed so for three
+ * releases after the About dialog was still not written -- which made Help read
+ * as an empty menu rather than as a pending one. It is enabled now that
+ * `ui/aboutdialog.ts` exists.
  * `edit.undo`/`edit.redo` are enabled: the editor ships `history()` and
  * `historyKeymap` (see editor/extensions.ts), so Ctrl+Z/Ctrl+Y already work —
  * the menu items must be reachable too, or the shortcut exists with no menu
@@ -231,6 +233,15 @@ const MENUS: Menu[] = [
       // occasional one. Adding a chord later costs a line, taking one back
       // costs muscle memory.
       { id: 'view.readingMode', label: 'Reading View', enabled: true, toggle: 'check' },
+      // Live preview (SPEC §7.1). Beside the other two because a reader
+      // scanning this menu is picking how the document is shown, and these are
+      // now the three answers -- even though this one is the odd one out
+      // mechanically: it has no pane at all, it changes the editor.
+      //
+      // **No shortcut, for the reason Reading View has none.** Ctrl+Shift+P is
+      // source-split and stays that way; a chord can be added later for a line,
+      // where taking one back costs muscle memory.
+      { id: 'view.livePreview', label: 'Live Preview', enabled: true, toggle: 'check' },
       {
         id: 'view.outline',
         label: 'Outline',
@@ -311,7 +322,10 @@ const MENUS: Menu[] = [
   },
   {
     label: 'Help',
-    items: [{ id: 'help.about', label: 'About Hashpad', enabled: false }],
+    // Enabled since the About dialog exists (`ui/aboutdialog.ts`). It shipped
+    // disabled in Checkpoint A and stayed so for three releases, which made
+    // Help read as an empty menu -- its only item greyed out.
+    items: [{ id: 'help.about', label: 'About Hashpad', enabled: true }],
   },
 ];
 

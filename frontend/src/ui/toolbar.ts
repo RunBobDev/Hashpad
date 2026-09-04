@@ -346,7 +346,7 @@ function chooseOverflowItem(id: string, anchor: HTMLElement, active: string): vo
 function buildOverflowButton(
   active: string,
   pinnedIds: ReadonlySet<string>,
-  onTogglePin?: (id: string) => void,
+  onTogglePin?: (id: string) => boolean,
 ): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -376,9 +376,12 @@ function buildOverflowButton(
       // Left-click runs the command, right-click pins it. The list stays open
       // and its tick flips in place, so pinning several is one visit rather
       // than one visit each.
+      // The tick comes from what the toggle reports, not from negating the
+      // snapshot: `!pinnedIds.has(id)` is the same answer every time this list
+      // is open, so unpinning cleared the tick and re-pinning left it cleared
+      // until the popup was closed and reopened.
       onContextMenu: (id) => {
-        choosePinItem(id, pinnedIds, onTogglePin);
-        setPopupMarker(id, { on: !pinnedIds.has(id), label: PINNED });
+        setPopupMarker(id, { on: choosePinItem(id, pinnedIds, onTogglePin), label: PINNED });
       },
       hint: 'Right-click an item to pin or unpin it',
     });
@@ -412,10 +415,24 @@ function pinPopupItems(pinnedIds: ReadonlySet<string>): PopupItem[] {
 function choosePinItem(
   id: string,
   pinnedIds: ReadonlySet<string>,
-  onTogglePin?: (id: string) => void,
-): void {
-  emitCommand(pinnedIds.has(id) ? `toolbar.unpin:${id}` : `toolbar.pin:${id}`);
-  onTogglePin?.(id);
+  onTogglePin?: (id: string) => boolean,
+): boolean {
+  // **The toggle runs first, and what it returns is the truth.**
+  //
+  // `pinnedIds` is a snapshot taken when the popup opened, and the overflow
+  // list deliberately stays open while you pin several things -- so from the
+  // second right-click onwards the snapshot describes a state that no longer
+  // exists. Deriving the event from it meant a re-pin emitted
+  // `toolbar.unpin:<id>`: the row showed the button (its own list is live) and
+  // settings.json recorded it as removed, so the pin was lost on restart.
+  //
+  // The caller owns the list, so it is the only thing that can say what the
+  // state is *after* the toggle. The snapshot survives only as the fallback
+  // for `buildToolbar` used without a callback, where nothing mutates and it
+  // cannot go stale.
+  const nowPinned = onTogglePin?.(id) ?? !pinnedIds.has(id);
+  emitCommand(nowPinned ? `toolbar.pin:${id}` : `toolbar.unpin:${id}`);
+  return nowPinned;
 }
 
 /**
@@ -507,7 +524,7 @@ export function buildToolbar(
   pinned: readonly string[],
   active: string,
   initialTabStop = 0,
-  onTogglePin?: (id: string) => void,
+  onTogglePin?: (id: string) => boolean,
 ): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'toolbar';
@@ -642,11 +659,22 @@ export function mountToolbar(
     }
   }
 
-  function togglePin(commandId: string): void {
-    pinned = pinned.includes(commandId)
-      ? pinned.filter((existing) => existing !== commandId)
-      : [...pinned, commandId];
+  /**
+   * Returns whether `commandId` is pinned *after* the toggle.
+   *
+   * This list is the running session's only live copy, so it is the only thing
+   * that can answer that -- the popups hold a snapshot from the moment they
+   * opened, and the overflow list stays open across several pins. Returning
+   * the answer is what lets `choosePinItem` emit the right event and the tick
+   * show the right state on the second and every later toggle.
+   */
+  function togglePin(commandId: string): boolean {
+    const nowPinned = !pinned.includes(commandId);
+    pinned = nowPinned
+      ? [...pinned, commandId]
+      : pinned.filter((existing) => existing !== commandId);
     rerender(store.getState().activeFormats);
+    return nowPinned;
   }
 
   store.subscribe(

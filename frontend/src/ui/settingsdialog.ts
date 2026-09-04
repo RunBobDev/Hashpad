@@ -448,12 +448,19 @@ function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
   // used", which resolves past it -- that is what the two-slot history in
   // `pushRecentViewMode` exists for.
   //
-  // No `'live'` either, for the older reason: the app renders it exactly like
-  // source, so offering it would be a control wired to nothing. A hand-edited
-  // `"live"` shows as Editor only here, which is what it behaves as.
+  // **Live preview is here from K.1, its first slice, and that is a deliberate
+  // departure from the rule above.** The standing rule is that this dialog
+  // must not offer a mode wired to nothing -- which is why `'live'` was absent
+  // until now, when it rendered exactly like source. It is wired now, but only
+  // for inline marks: choose it today and headings, links and list markers are
+  // unchanged. The owner asked for it visible from the first slice anyway, to
+  // watch it grow. Reading view stays out for the different reason above: not
+  // "incomplete" but "wrong for a new document", which no later checkpoint
+  // fixes.
   const viewMode = select(
     [
       ['source', 'Editor only'],
+      ['live', 'Live preview'],
       ['split', 'Editor and preview'],
       ['last', 'Last used'],
     ],
@@ -475,6 +482,7 @@ function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
   const openedViewMode = select(
     [
       ['source', 'Editor only'],
+      ['live', 'Live preview'],
       ['split', 'Editor and preview'],
       ['preview', 'Reading view'],
       ['last', 'Last used'],

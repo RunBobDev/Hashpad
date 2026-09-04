@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getEditorView, store } from './state/appcontext';
+import { hideInlineMarks } from './editor/livepreview';
 import { activeDocument } from './state/documents';
 import { COMMAND_EVENT } from './ui/menubar';
 import { SaveSettings, ShowWindow } from '../wailsjs/go/app/App';
@@ -537,5 +538,67 @@ describe('view.preview', () => {
 
     item.click();
     await waitForPane(true);
+  });
+});
+
+/**
+ * Live preview (SPEC §7.1, checkpoint K.1). In this file rather than beside
+ * `livepreview.test.ts` because the question is different: that one asks
+ * whether the right ranges are computed, this one asks whether the *app* ever
+ * turns the thing on. Nothing between the View menu and the compartment is
+ * covered by either the unit tests or the browser harness.
+ *
+ * `view.plugin(hideInlineMarks)` is the assertion that reaches all the way
+ * through -- a ViewPlugin instance exists only if the compartment actually
+ * holds the extension, so it fails if the menu id, the switch case, the
+ * subscription or `setLivePreview` is wrong. It says nothing about what is
+ * drawn; jsdom has no layout, which is what the harness page is for.
+ */
+describe('view.livePreview', () => {
+  afterEach(() => {
+    const active = activeDocument(store.getState());
+    // Restored explicitly, not by a second toggle: a case that failed halfway
+    // leaves an unknown mode behind, and under `--sequence.shuffle` the next
+    // file to read this document would inherit it.
+    if (active !== null && active.viewMode === 'live') setViewModeOf(active.id, 'source');
+  });
+
+  it('puts the document in live mode and hands the editor the extension', () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    expect(getEditorView()!.plugin(hideInlineMarks)).toBeNull();
+
+    emit('view.livePreview');
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('live');
+    expect(getEditorView()!.plugin(hideInlineMarks)).not.toBeNull();
+  });
+
+  it('toggles back to source and takes the extension away again', () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'live');
+
+    emit('view.livePreview');
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+    expect(getEditorView()!.plugin(hideInlineMarks)).toBeNull();
+  });
+
+  /**
+   * **Live mode is not a pane, and this is the line that says so.** Both other
+   * view modes reach `showsPreview` and mount the lazy chunk; this one must
+   * not, or every live-mode document pays markdown-it's download for a pane it
+   * never shows. A `showsPreview` that grew a `|| mode === 'live'` would fail
+   * here and nowhere else.
+   */
+  it('mounts no preview pane', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+
+    emit('view.livePreview');
+    // A tick, so a pane mounted through the lazy import would have arrived.
+    await Promise.resolve();
+
+    expect(document.querySelector('.preview-pane')).toBeNull();
   });
 });

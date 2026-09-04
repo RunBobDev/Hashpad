@@ -13,7 +13,12 @@
  */
 import { EditorState } from '@codemirror/state';
 import { ReadFile } from '../../wailsjs/go/app/App';
-import { buildExtensions, publishActiveFormats, publishStatus } from '../editor/extensions';
+import {
+  buildExtensions,
+  publishActiveFormats,
+  publishStatus,
+  setLivePreview,
+} from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
 import {
   createUntitledDocument,
@@ -162,6 +167,25 @@ export function switchToDocument(id: string): void {
     // whatever `activeDocumentId` now points at.
     view.setState(incoming.editorState);
     if (incoming.scrollSnapshot) view.dispatch({ effects: incoming.scrollSnapshot });
+
+    // **Live preview has to be re-applied here, and only here.** `setState`
+    // rebuilds the view's configuration from the incoming state's own
+    // extension list, which seeds `livePreviewCompartment` empty -- a
+    // document's `EditorState` is minted before anyone knows which mode it
+    // will be shown in, so it cannot seed anything else.
+    //
+    // Word wrap and the editor behaviours survive the same call because
+    // `makeUntitledDocument` and `openDocumentInNewTab` pass the store's
+    // current values into `buildExtensions`. The view mode is per document
+    // rather than per window, so it has no equivalent.
+    //
+    // `main.ts`'s `viewMode` subscription does not cover this, twice over. It
+    // fires on the *store* write above, a line before `setState` throws the
+    // result away; and when the outgoing and incoming documents share a mode
+    // -- the normal case once both view-mode settings say `'live'` -- the
+    // selected value never changes, so it does not fire at all. The symptom
+    // was a ticked View > Live Preview over an editor rendering as source.
+    setLivePreview(view, incoming.viewMode === 'live');
 
     // The other side of that same coin: `syncActiveFormats` and `syncStatus`
     // are updateListeners too, so neither fires here -- and unlike

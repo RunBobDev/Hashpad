@@ -108,6 +108,28 @@
   font-size: 1.2em;
 }
 
+/* h4 to h6 had no rule at all, so they fell through to the browser's defaults
+   -- which size h5 at 0.83em and h6 at 0.67em, i.e. *smaller than body text*.
+   A heading that reads as less important than the paragraph under it is a bug
+   rather than a subtle hierarchy, and the editor never had it: highlight.ts
+   sizes them 1.17 / 1.08 / 1.0. These match the editor's, so the same document
+   steps down the same way in both views.
+
+   Markdown stops at six. `####### seven` is a Paragraph, not an ATXHeading7 --
+   verified against our own grammar -- so this completes the set rather than
+   leaving a gap above it. */
+.preview-pane h4 {
+  font-size: 1.1em;
+}
+
+.preview-pane h5 {
+  font-size: 1.05em;
+}
+
+.preview-pane h6 {
+  font-size: 1em;
+}
+
 .preview-pane p,
 .preview-pane ul,
 .preview-pane ol,

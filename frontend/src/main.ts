@@ -17,6 +17,7 @@ import {
   publishActiveFormats,
   publishStatus,
   setEditorBehaviour,
+  setLivePreview,
   setWordWrap,
 } from './editor/extensions';
 import {
@@ -39,6 +40,7 @@ import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
 import { closeSettings, openSettings } from './ui/settingsdialog';
+import { openAbout } from './ui/aboutdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
 import { mountOpenWith, openPendingFiles } from './files/openwith';
@@ -124,6 +126,8 @@ mountMenuBar(root, (id) => {
     // shared predicate here would tick both rows in either mode.
     case 'view.readingMode':
       return activeDocument(store.getState())?.viewMode === 'preview';
+    case 'view.livePreview':
+      return activeDocument(store.getState())?.viewMode === 'live';
     // The handle doubles as the visibility flag for both of these; a separate
     // boolean beside it is a second source of truth that can disagree with the
     // DOM.
@@ -656,6 +660,11 @@ store.subscribe(
     // not of whether the pane has ever been mounted. Leaving a document in
     // preview-only, closing the pane and coming back must not strand the class.
     setReadingLayout(mode === 'preview');
+    // Live preview (SPEC §7.1). Outside the pane logic below entirely, because
+    // it is not a pane: `showsPreview('live')` is false and always will be --
+    // live mode hides markers *in the editor* and puts nothing beside it. The
+    // two features share only this subscription and the mode they read from.
+    setLivePreview(view, mode === 'live');
     // `showsPreview`, not `=== 'split'`. Two modes put the pane on screen now
     // (design §4.27) and this is the only line that mounts or unmounts it, so
     // getting the question wrong here is the whole feature failing to appear.
@@ -775,6 +784,31 @@ async function toggleReadingMode(): Promise<void> {
   // documents because `resolveViewMode` refuses `'preview'` for them, and the
   // two-slot history always has something else behind it to fall back to.
   void recordViewModeUsed('preview');
+}
+
+/**
+ * View > Live Preview (SPEC §7.1).
+ *
+ * **Synchronous, where the other two toggles are not**, and that is the whole
+ * shape of the feature rather than an inconsistency. Split and reading mode
+ * both have to `await ensurePreview()` before writing the mode, because the
+ * pane is a lazy chunk that may not have been fetched yet. Live mode has no
+ * pane: the extension is already in the entry bundle, sitting in an empty
+ * compartment, so switching it on is one dispatch with nothing to load.
+ *
+ * `target` is passed as `remember` as well as as the mode. Both legal values
+ * here are exactly the two `previousViewMode` accepts, so the document
+ * records that leaving a later split returns to live rather than to source --
+ * which is what `previousViewModeFor` already promised for a live document and
+ * had, until now, no way of being handed.
+ */
+function toggleLivePreview(): void {
+  const active = activeDocument(store.getState());
+  if (active === null) return;
+
+  const target = active.viewMode === 'live' ? 'source' : 'live';
+  store.setState((prev) => setViewMode(prev, active.id, target, target));
+  void recordViewModeUsed(target);
 }
 
 /**
@@ -1186,8 +1220,14 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     case 'view.readingMode':
       void toggleReadingMode();
       break;
+    case 'view.livePreview':
+      toggleLivePreview();
+      break;
     case 'settings.open':
       void openSettings();
+      break;
+    case 'help.about':
+      openAbout();
       break;
     case 'settings.reset':
       void resetSettings();

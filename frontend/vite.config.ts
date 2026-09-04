@@ -1,7 +1,31 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
+/**
+ * The version the About dialog shows, read from `wails.json` at build time.
+ *
+ * **One source of truth, and it is the file the build already treats as one.**
+ * `info.productVersion` is what stamps the Windows version resource on the
+ * exe, so reading it here means the dialog and the file's Properties tab
+ * cannot disagree -- where a constant in a `.ts` file would be a second place
+ * to remember on every release, and would be wrong the first time somebody
+ * forgot.
+ *
+ * Not a Go binding for the same reason it is not a constant: this is a build
+ * artifact, known at build time, and an IPC round trip to learn it would be
+ * machinery for a string that never changes while the app is running.
+ */
+const productVersion: string = (
+  JSON.parse(readFileSync(new URL('../wails.json', import.meta.url), 'utf8')) as {
+    info: { productVersion: string };
+  }
+).info.productVersion;
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(productVersion),
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

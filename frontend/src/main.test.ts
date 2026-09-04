@@ -768,14 +768,26 @@ describe('the outline toggle', () => {
    * the sidebar would sit *above* the editor rather than left of it, because
    * `#app` is a flex column -- the same mistake the toolbar once made.
    */
+  /**
+   * **Asserted by `classList`, not by the whole `className` string**, and that
+   * is a flake fix rather than a style preference. The original compared the
+   * exact class attribute, which made it depend on state no part of this test
+   * sets: a case that leaves a document in reading mode adds
+   * `editor-split--reading` to that same element, and the assertion then failed
+   * with `"editor-split editor-split--reading"` against `"editor-split"`.
+   *
+   * Caught by `--sequence.shuffle`, on two runs out of three, and *not*
+   * reproducible on demand -- six further runs on the same tree and six on the
+   * commit before it all passed. A test that depends on the order it happens to
+   * run in reports the shuffle seed, not a defect. What this case is actually
+   * about is which column comes first, so that is all it now asserts.
+   */
   it('mounts inside the workspace row, to the left of the editor', () => {
     emit('view.outline');
-
-    const workspace = document.querySelector('.workspace')!;
-    expect([...workspace.children].map((child) => child.className)).toEqual([
-      'outline-column',
-      'editor-split',
-    ]);
+    const children = [...document.querySelector('.workspace')!.children];
+    expect(children).toHaveLength(2);
+    expect(children[0]!.classList.contains('outline-column')).toBe(true);
+    expect(children[1]!.classList.contains('editor-split')).toBe(true);
   });
 
   it('lists the active document’s headings', () => {

@@ -945,6 +945,45 @@ body {
   background: color-mix(in oklab, var(--accent) 85%, var(--fg-primary));
 }
 
+/* About dialog (Help > About Hashpad). Shares `.confirm-dialog`'s frame,
+   backdrop and buttons; only the content below is its own. */
+.about-dialog__name {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: 600;
+}
+
+.about-dialog__version {
+  margin: 2px 0 0;
+  color: var(--fg-secondary);
+}
+
+.about-dialog__summary {
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
+/* Two columns rather than a stacked list: the terms are one word each, and a
+   grid keeps the values aligned without a fixed width that a longer term (or a
+   translation) would break. */
+.about-dialog__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 16px 0 20px;
+}
+
+.about-dialog__facts dt {
+  color: var(--fg-secondary);
+}
+
+.about-dialog__facts dd {
+  margin: 0;
+  /* The repository URL is one unbroken token and the dialog has a max-width,
+     so without this it pushes the box wider than the layout intends. */
+  overflow-wrap: anywhere;
+}
+
 /* ---------------------------------------------------------------------------
    Settings dialog (SPEC §6.13)
 

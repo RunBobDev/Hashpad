@@ -682,23 +682,30 @@ describe('the Editor group', () => {
   });
 
   /**
-   * Two exclusions, for two different reasons, and both matter.
+   * One exclusion now, where there were two.
    *
-   * `'live'` is in the `viewMode` union and renders exactly like source -- there
-   * is no live-preview mode yet -- so offering it would be a control wired to
-   * nothing, which is what `PreviewSettings`'s `loadRemoteImages` comment exists
-   * to warn against.
+   * **`'live'` joined the list at K.1 and this test is how that was noticed** --
+   * it failed on the option being added, which is the whole reason it pins the
+   * exact array rather than asserting a few `toContain`s. The old reason for
+   * excluding it (no live-preview mode existed, so the control was wired to
+   * nothing) expired when `livepreview.ts` landed. It is offered from the first
+   * slice at the owner's request, incomplete: inline marks hide, headings and
+   * links do not yet.
    *
    * `'preview'` **does** something, and is excluded anyway: reading mode has no
    * editor, so a new document opening in it would be a blank page nobody can
-   * type into (design §4.27). That is the one a future change is most likely to
-   * add for symmetry with the dropdown below it, which is why it is named here
-   * rather than left to the type.
+   * type into (design §4.27). That exclusion is permanent where `'live'`'s was
+   * temporary, which is the distinction to preserve if this list changes again.
    */
   it('offers no mode a new document cannot usefully open in', () => {
     const mode = byLabel<HTMLSelectElement>(editor(mount()), 'New documents open in');
 
-    expect([...mode.options].map((option) => option.value)).toEqual(['source', 'split', 'last']);
+    expect([...mode.options].map((option) => option.value)).toEqual([
+      'source',
+      'live',
+      'split',
+      'last',
+    ]);
   });
 
   /**
@@ -711,6 +718,7 @@ describe('the Editor group', () => {
 
     expect([...mode.options].map((option) => option.value)).toEqual([
       'source',
+      'live',
       'split',
       'preview',
       'last',

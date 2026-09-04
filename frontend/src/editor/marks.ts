@@ -22,13 +22,19 @@ export const INLINE_MARK_DELIMITERS: Record<InlineMark, string> = {
 };
 
 /**
- * The Lezer node names behind each mark. Kept module-private and separate
- * from `INLINE_MARK_DELIMITERS`: the delimiter text is a rendering/insertion
+ * The Lezer node names behind each mark. Separate from
+ * `INLINE_MARK_DELIMITERS`: the delimiter text is a rendering/insertion
  * concern (Task 2 reads it to build replacement text), while these are a
  * parser-shape concern, and `*` vs `**` show the two can diverge -- both are
  * `Emphasis`-family nodes but resolve to different node names entirely.
+ *
+ * Exported since K.1, having been module-private before it. `livepreview.ts`
+ * is the second consumer and its question is the same parser-shape one, so a
+ * copy there would be a second table to keep in step -- and the failure that
+ * caused would be silent: bold hiding its asterisks while the toolbar button
+ * disagreed about whether the caret was inside bold at all.
  */
-const INLINE_MARK_NODES: Record<InlineMark, { node: string; mark: string }> = {
+export const INLINE_MARK_NODES: Record<InlineMark, { node: string; mark: string }> = {
   bold: { node: 'StrongEmphasis', mark: 'EmphasisMark' },
   italic: { node: 'Emphasis', mark: 'EmphasisMark' },
   strikethrough: { node: 'Strikethrough', mark: 'StrikethroughMark' },

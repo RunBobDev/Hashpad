@@ -1546,9 +1546,9 @@ blank in every field. It also built as `hashpad.exe`, where SPEC §9 asks for
 The file associations are *declared* here and *registered* in I.3, so nothing in
 Explorer changes yet — the installer does that.
 
-- [x] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
-      Product name **Hashpad**, Product version **0.3.0**, File version
-      **0.3.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
+- [ ] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
+      Product name **Hashpad**, Product version **0.4.0**, File version
+      **0.4.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
       description **Hashpad**. Blank fields here mean the version resource did
       not link.
       *Confirmed 2026-08-31, measured: all six strings read back through
@@ -1691,7 +1691,7 @@ checks as well** — a half-tested uninstaller is how a machine collects debris.
       that unticked.
       *Confirmed 2026-08-31, owner.*
 - [ ] **Settings → Apps → Installed apps lists Hashpad**, with a version of
-      0.3.0 and a publisher of Hashpad.
+      0.4.0 and a publisher of Hashpad.
       *The entry exists -- the uninstall below was reached through it. The
       version and publisher strings shown there were not read.*
 
@@ -2109,3 +2109,263 @@ double-clicking a `.txt` went on opening Notepad -- correctly.
       the pane, with a comfortable margin of tint around the text. A long line
       still scrolls inside the block, and the pane itself never scrolls
       sideways.
+
+## Checkpoint K.1 — live preview, inline marks
+
+SPEC §7.1's first slice. Bold, italic, strikethrough, highlight and inline code
+hide their delimiters unless the caret is on the line they sit on. Headings,
+links, images, tables and list markers are **not** part of this slice and are
+expected to look exactly as they do in source mode.
+
+Two layers of automated cover already exist, and neither answers the question
+below. `livepreview.test.ts` checks which ranges are decorated, which is the
+logic; `harness/livepreview.html` compares the document text against the
+rendered DOM text in a real browser, which is the rendering. What no automated
+check can judge is whether it feels right to *type* in — every item here is
+about that.
+
+**The basics.** Turn it on with View > Live Preview.
+
+- [ ] **`**bold**` shows as bold with no asterisks** once the caret leaves its
+      line, and the asterisks come back when it returns. The word must not jump
+      or change width as they appear.
+- [ ] **Arrow across a formatted word, left to right, one key at a time.** The
+      text must not shuffle sideways as the caret passes each delimiter. This is
+      the reason the reveal rule is per line rather than per mark, and it is the
+      symptom if that ever changes.
+- [ ] **Select a paragraph containing bold.** The markers reappear for every
+      line the selection touches.
+- [ ] **All five marks** — `**bold**`, `*italic*`, `~~struck~~`, `==marked==`
+      and `` `code` `` — hide their delimiters and keep their styling.
+- [ ] **`***bold italic***` and `**_mixed_**`** hide both the outer and inner
+      runs, leaving the word with both styles.
+- [ ] **A `` `**literal**` `` inside a code span keeps its asterisks.** They are
+      not markup there, and the backticks around them still go.
+
+**What must not change yet.**
+
+- [ ] **`# Heading` keeps its hash**, at heading size. K.2 hides it.
+- [ ] **A fenced block keeps its ``` fences.** §7.1 is explicit that hiding them
+      is confusing, so this stays true after K.2 and K.3 as well.
+- [ ] **A `- ` list marker is still a hyphen.** K.2 turns it into a bullet.
+
+**Where it interacts with everything else.**
+
+- [ ] **The document on disk is unchanged.** Save a file written in live mode
+      and reopen it in source mode: every asterisk is still there. Hiding is a
+      decoration, and a save that had lost them would be the worst possible bug
+      this feature could have.
+- [ ] **Ctrl+B in live mode** still bolds, and the new asterisks are hidden
+      immediately rather than after the next keystroke.
+- [ ] **The toolbar's bold button lights up** with the caret inside hidden
+      bold, exactly as in source mode — both read the same node table.
+- [ ] **Find and Replace (Ctrl+F) matches text that has hidden markers**, and
+      the match highlight lands on the visible word.
+- [ ] **Switch tabs between a live-mode document and a source-mode one.** Each
+      keeps its own mode, and neither loses its undo history or caret — the
+      mode is per document and applied by reconfiguring, not rebuilding.
+- [ ] **No preview pane appears in live mode.** It is an editor feature; a pane
+      would mean the lazy chunk is being loaded for nothing.
+- [ ] **Word wrap on, with a long formatted line.** Hiding characters changes
+      where the line wraps; it must rewrap cleanly rather than leaving a gap.
+- [ ] **A 5,000-line document** stays responsive to typing and to holding an
+      arrow key down. §7.1's performance target; K.4 measures it properly, this
+      is the smoke test.
+
+**The settings.** Settings > Editor.
+
+- [ ] **"New documents open in" and "Existing documents open in" both offer
+      Live preview.** It is offered from this first slice deliberately, while
+      incomplete — choosing it and finding headings unchanged is expected, not a
+      bug.
+- [ ] **Set "New documents open in" to Live preview and restart.** The startup
+      document comes up in live mode.
+
+## Checkpoint K.2 — live preview, headings, links and list markers
+
+The second slice. Headings drop their `#` and keep their size, inline links
+show their text alone, and `-` becomes a bullet glyph. Everything from K.1 is
+unchanged and its checks still apply.
+
+Images and table alignment are **not** in this slice — an image must still look
+exactly as it does in source mode.
+
+- [ ] **`# Heading` shows as a heading with no hash**, at the same size and
+      weight as before. The text must not sit one space further right than the
+      lines around it — the space after the hash goes with it.
+- [ ] **All six levels**, `#` through `######`.
+- [ ] **`## Title ##`** — a closing sequence, which CommonMark allows — hides
+      *both* runs. Seeing `Title ##` means only the opening one was handled.
+- [ ] **A Setext heading** (text with `=====` under it) is left alone,
+      deliberately: hiding the underline would leave an empty line rather than
+      tidy anything.
+- [ ] **`[the docs](https://example.com)` shows as "the docs"**, styled as a
+      link, with the brackets, parentheses and URL gone. Put the caret on the
+      line and the whole thing comes back, editable.
+- [ ] **A link with a title** — `[t](url "Title")` — leaves no trailing gap
+      after the text. The space between the URL and the title is inside the
+      hidden range; if it is not, you get `t ` with a stray space.
+- [ ] **A reference link** `[text][ref]` is left whole. Hiding its brackets
+      alone would show `textref`.
+- [ ] **An image `![alt](pic.png)` is left whole**, markers and all. K.3 turns
+      it into a thumbnail.
+- [ ] **`- item` shows a bullet glyph**, and so do `* item` and `+ item`. The
+      text stays aligned where it was — the glyph replaces the marker rather
+      than being added beside it.
+- [ ] **`1. item` keeps its number.** Replacing an ordered marker would throw
+      the number away.
+- [ ] **Type in the middle of a long bullet** — one that runs over three or
+      four lines. The glyph must stay a glyph; if it flickers back to `-` while
+      you type below it, the reveal is testing the whole list item instead of
+      the marker's line.
+- [ ] **A heading immediately above a paragraph.** Put the caret in the
+      paragraph: the heading stays hidden. The same scope question, where the
+      answer happens to be easier.
+- [ ] **Ctrl+B, Ctrl+K and the list buttons** still insert the right markup in
+      live mode, and it hides itself immediately.
+- [ ] **Outline still lists every heading** with the hashes hidden. The outline
+      reads the document, not the screen, so this is a regression check rather
+      than a new feature.
+
+## Checkpoint K.2a — live preview typography, and the preview's h4–h6
+
+Two changes that belong together because the owner found the second while
+asking about the first: *why don't reading view and live preview look the
+same?*
+
+**Live mode now uses the reading view's typography.** Proportional prose at the
+preview's font and size; fenced blocks, tables and inline code stay at the
+editor's fixed pitch. That is not a new look — it is `preview.css`'s own rule
+(the pane is `--font-preview`, `code` and `pre` are `--font-editor` at 0.9em)
+applied to the editor. Source and split modes are untouched.
+
+- [ ] **Turn live preview on and off.** Prose changes typeface and size; source
+      mode looks exactly as it always did.
+- [ ] **A markdown table in live mode keeps its columns lined up.** This is the
+      whole reason code and tables were held back to fixed pitch — a
+      proportional font gives every character a different width, and a table
+      you are editing by hand stops forming columns.
+- [ ] **A fenced code block keeps fixed pitch**, fences included.
+- [ ] **Inline `code` keeps fixed pitch** and is slightly smaller than the prose
+      around it, matching the reading view.
+- [ ] **Headings are the same size in live preview and reading view.** Measured,
+      both are base 15px with h1 27px, h2 21.75px, h3 18px and inline code
+      13.5px. Matching the *typeface* was not enough and the first attempt
+      shipped without this: the editor's own scale steps down 1.6/1.42/1.28
+      while the preview's steps 1.8/1.45/1.2, so live mode's h1 came out at
+      24px against reading view's 27px. If they diverge again, one of the two
+      scales has moved.
+- [ ] **Both views draw a rule under h1 and h2, and neither draws one under
+      h3.** It is `preview.css`'s section-break styling rather than anything in
+      the document, which is why it appears with no `=====` typed anywhere.
+
+**Setext headings in live preview.** `Title` with `=====` under it is markdown's
+other heading syntax. Live mode hides the underline and gives the text line the
+rule instead -- the `=====` is promoted to the line it was drawing by hand,
+rather than deleted.
+
+- [ ] **A Setext h1 (`=====`) and h2 (`-----`)** each render as a heading with
+      a rule under it and no underline characters, matching reading view.
+- [ ] **The rule starts and ends where the text does**, not at the window edges.
+      A `.cm-line` spans the full editor width and carries the horizontal
+      padding itself, so a plain border on it runs edge to edge -- which is what
+      the first version did.
+- [ ] **The gap between a heading and its rule matches reading view.** Measured
+      at 6px there; live mode was 11px until every heading line took reading
+      view's `line-height: 1.25`.
+- [ ] **Arrow down onto the hidden underline line.** The caret must actually
+      land there and the `=====` reappear, or it could never be edited or
+      deleted. Measured in the harness -- the caret does land on it rather than
+      stepping over -- but worth confirming by hand, because it is a line with
+      no height and that is unusual enough to deserve a person's eyes.
+- [ ] **Arrow back up off it.** The underline hides again, and the caret does
+      not get stuck.
+- [ ] **Select across the whole heading** and delete it. Nothing is left behind
+      on a line you cannot see.
+- [ ] **Switch between a live tab and a source tab repeatedly.** Neither loses
+      its undo history, caret or scroll — the typography rides on the same
+      compartment the markers do.
+- [ ] **Zoom in and out (Ctrl+= / Ctrl+-) in live mode.** Both fonts scale
+      together; the mono blocks must not stay fixed while the prose grows.
+
+**The preview's h4–h6.** They had no `font-size` rule at all and fell through to
+the browser's defaults, which render h5 at 0.83em and h6 at 0.67em — *smaller
+than body text*.
+
+- [ ] **A document with all six heading levels, in reading view.** Each level is
+      smaller than the one above it, and **h5 and h6 are still larger than or
+      equal to the paragraph text**. Before this fix they were visibly smaller,
+      which read as a rendering bug rather than as a hierarchy.
+- [ ] **The same document in live preview.** The two views step down together.
+- [ ] **`####### seven hashes` is not a heading** in either view. Markdown stops
+      at six; the seventh renders as literal text, and that is correct.
+
+## Help > About Hashpad
+
+The menu item shipped disabled in Checkpoint A — "there is no About dialog yet"
+— and stayed that way through v0.1, v0.2 and v0.3. Its only item greyed out
+made Help read as an empty menu. Reported by the owner; nothing in the suite
+had an opinion either way, so `menubar.test.ts` now asserts it is enabled.
+
+- [ ] **Help > About Hashpad opens a dialog**, rather than doing nothing.
+- [ ] **The version matches the exe.** Compare it with the file's Properties >
+      Details tab. Both come from `wails.json`'s `info.productVersion` — the
+      dialog reads it at build time — so a mismatch means the build and the
+      resource disagree, which is worth knowing.
+- [ ] **The repository URL fits inside the box** without widening it or being
+      clipped.
+- [ ] **View source opens the repository in your browser**, with no
+      confirmation prompt in between. A link inside a *document* still gets one;
+      this URL is compiled in and you asked for it by name.
+- [ ] **Close, and Escape, both dismiss it** and leave nothing behind — open it
+      a second time and it still appears.
+- [ ] **In dark theme** the dialog is dark, with readable text and a visible
+      primary button. Checked in `harness/about.html`, but the app applies the
+      theme through a different path.
+
+## Toolbar pinning — toggling the same command twice
+
+The overflow (`···`) list stays open on purpose so several commands can be
+pinned in one visit. It was built with a snapshot of the pinned set, so from
+the second right-click onwards it acted on a state that no longer existed.
+
+- [ ] **Open the `···` menu, right-click a pinned command to unpin it, then
+      right-click it again.** The tick must come back straight away, without
+      closing and reopening the menu.
+- [ ] **Then close Hashpad and reopen it.** The command must still be on the
+      toolbar. This is the half that was invisible: the row updated correctly
+      because it owns the live list, while the event sent to settings said
+      *unpin* both times, so the pin was lost on the next launch.
+- [ ] **Pin and unpin several commands without closing the list.** Every tick
+      matches the row behind it.
+- [ ] **The right-click menu on the toolbar row itself** still pins and unpins
+      correctly. It closes on choice, so it never held a stale snapshot — worth
+      one pass to confirm the shared fix did not disturb it.
+
+## Live preview across tab switches and file opens
+
+`view.setState` rebuilds the editor's configuration from the incoming
+document's own extension list, and that list seeds live preview *off* — a
+document's `EditorState` is minted before anyone knows which mode it will be
+shown in. Word wrap and the editor behaviours survive the same call because
+they are window-wide and passed in at creation; the view mode is per document,
+so it has no equivalent and has to be re-applied after the swap.
+
+Set **both** view-mode settings to Live preview before running these. With them
+on different values the bug hides, because the store subscription happens to
+fire on the change.
+
+- [ ] **Launch Hashpad.** The startup document is in live preview and *looks*
+      like it — markers hidden. A ticked View > Live Preview over an editor
+      that renders like source is the fault.
+- [ ] **Open a file (Ctrl+O).** Same again, on the newly opened tab.
+- [ ] **Double-click a `.md` file in Explorer with Hashpad closed.** This is the
+      path that opens a file *and* switches to it during startup.
+- [ ] **Switch between two tabs that are both in live preview.** Markers stay
+      hidden. This is the case the subscription cannot catch at all: the value
+      it watches never changes.
+- [ ] **Switch between a live tab and a source tab, repeatedly.** Each shows its
+      own mode, and neither loses its caret or scroll position.
+- [ ] **Re-open a file that is already the front tab.** Nothing should move —
+      no caret jump, no scroll jump. Applying the mode unconditionally here
+      would rebuild the view and lose both.
