@@ -1367,3 +1367,79 @@ offset is removed. The better-behaved design was also the testable one.
 the derived answer for a section with no body — a `###` directly under a `##` —
 is the *next* heading, which is Checkpoint G.3b's old defect arriving by a new
 route.
+
+### 4.28 Live preview's thumbnails and table alignment stop short of SPEC §7.1
+
+§7.1 lists seven cases to "handle explicitly". Six are handled as written.
+Three details of the last two are not, each on purpose.
+
+**A remote image stays as markdown; it does not become a thumbnail or a
+placeholder.** §7.1 says images render as inline thumbnails, and design §3
+says remote images are never fetched — SPEC §2.1's zero-network constraint
+beating SPEC §6.7's opt-in loading. The two cannot both be satisfied, and the
+network rule is the older and the stronger. That leaves the choice of what to
+draw instead, and the answer differs from the reading view's: the pane replaces
+the markdown, so it owes the reader a dashed card in its place; the editor has
+not replaced anything, and `![alt](https://example.com/p.png)` shown as itself
+is both more honest and more useful — the URL is the thing worth seeing, and it
+stays selectable. The same applies to a local image in a document that has never
+been saved, which has no folder to resolve against.
+
+A local path that *is* resolvable but missing does get the dashed card, because
+by then the markdown has already been replaced and there is nothing else to show.
+It reuses `preview.css`'s `.preview-image-placeholder`, so the two views cannot
+drift.
+
+**Thumbnails are capped at 320px tall. Reading view caps only width.** A picture
+taller than the editor pushes the rest of the document off screen while you are
+trying to write it. Reading view has no cursor to keep in sight and so needs no
+cap; the editor does, and "thumbnail" is §7.1's own word for it.
+
+**Table columns are aligned; cell text is not.** §7.1 asks for tables to "align
+columns visually", and that is what padding to a common width achieves. Honouring
+`:--:` and `--:` to centre or right-align the text inside a cell is a second
+feature, and one the reading view cannot do either: `render.ts:90` forbids the
+`style` attribute markdown-it emits for it. Recorded here rather than left as a
+silent omission, because it is the first thing anyone will look for.
+
+**Anything whose markers straddle a line break stays as markdown.** Not a
+preference: CodeMirror forbids a `ViewPlugin` from producing a replacement that
+crosses a line break, and throws rather than ignoring one. Two things in
+markdown can ask for it — an image whose alt text wraps, and a link whose title
+CommonMark allows onto the next line — so both decline. The alternative for the
+link, hiding its brackets but not its destination, would render
+`t/url "Title"`: worse than the markdown it replaced.
+
+Alignment is **padding, never hiding**, which is why it has no reveal rule. The
+text on screen is the text in the document plus space before each `|`, so typing
+in a cell widens its column and every row follows. A table that jumped out of
+alignment the moment the caret entered it would be worse than one that never
+aligned.
+
+#### 4.28a The 5,000-line performance target, measured
+
+§7.1 asks for "no perceptible input lag in a 5,000-line document". Measured in
+`harness/livepreview.html`, which has both an editor with live preview on and the
+same editor with it off — the second is what makes the first mean anything.
+
+A keystroke in the middle of a 5,000-line markdown document, forty samples,
+median, one panel loaded at a time and the order alternated so the JIT warm-up
+does not land on the same side twice:
+
+| | median per keystroke |
+|---|---|
+| live preview off | ~10 ms |
+| live preview on | ~12.5 ms |
+
+**Live preview costs about 2.5 ms**, inside a 16 ms frame with the base editor's
+own cost included. No work was needed, which is what K.1's viewport limit was for;
+this is the checkpoint where "probably nothing to do" stopped being a claim. The
+numbers are from a Vite dev build in a VM, so the shipped build is faster, and
+the harness forces a synchronous `view.measure()` that the real editor defers.
+
+**One case is slow, and it is slow without live preview too.** A single table of
+5,000 rows costs 70–105 ms per keystroke with the feature off and 110–130 ms with
+it on. The base editor is already past the point of usability there, so a guard
+inside live preview would be treating 20 ms of a 105 ms problem — and the only
+guard available (stop aligning above some row count) trades a measurable delay for
+a silent behaviour change. Recorded, not fixed.

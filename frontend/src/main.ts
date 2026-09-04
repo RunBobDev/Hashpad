@@ -16,6 +16,7 @@ import { COMMANDS, toEditorCommand, type CommandId } from './editor/commands';
 import {
   publishActiveFormats,
   publishStatus,
+  setDocumentDir,
   setEditorBehaviour,
   setLivePreview,
   setWordWrap,
@@ -31,6 +32,7 @@ import {
 import { mountAutosave } from './files/autosave';
 import {
   closeDocumentWithPrompt,
+  documentDirOf,
   makeUntitledDocument,
   reopenLastClosed,
   switchToDocument,
@@ -695,6 +697,26 @@ store.subscribe(
       return;
     }
     previewHandle?.hide();
+  },
+);
+
+/**
+ * The folder live preview's image thumbnails resolve relative paths against
+ * (K.3), kept in step with whichever document is on screen.
+ *
+ * **Selects the path, not the document**, so this is silent while you type and
+ * fires exactly when the answer changes: opening a file, switching tabs, and
+ * Save As -- the last of which is the reason this cannot live in
+ * `switchToDocument` alone, since a Save As never switches anything.
+ *
+ * It fires *before* `switchToDocument` reaches `view.setState`, though, which
+ * discards it -- so that function repeats the call. Same shape as live preview's
+ * own two seams, and for the same reason.
+ */
+store.subscribe(
+  (state) => activeDocument(state)?.filePath ?? null,
+  (filePath) => {
+    setDocumentDir(view, documentDirOf(filePath));
   },
 );
 

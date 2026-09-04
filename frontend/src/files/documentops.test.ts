@@ -380,6 +380,33 @@ describe('switchToDocument', () => {
 
     expect(getEditorView().state.doc.toString()).toBe('doc A!');
   });
+
+  /**
+   * **Every dispatch this function makes after `view.setState` breaks the
+   * identity the function itself reads at the top**, and that identity
+   * (`d.editorState === view.state`) is how it recognises a redundant switch.
+   * Leave the store holding the state that went *in* and the next switch to
+   * this same tab finds no outgoing document, calls it a real switch, and
+   * redoes the swap -- throwing away the caret and the scroll position the
+   * skip exists to protect.
+   *
+   * Live mode is the case that shipped: it reconfigures a compartment, so the
+   * dispatch is unconditional. A scroll snapshot does the same thing on any
+   * tab that has been switched away from and back.
+   */
+  it('stays a no-op on a second switch to a live-mode tab', () => {
+    const a = cleanDoc('a', 'doc A');
+    const b: Document = { ...cleanDoc('b', 'doc B'), viewMode: 'live' };
+    store.setState((prev) => ({ ...prev, documents: [a, b], activeDocumentId: 'a' }));
+    view.setState(a.editorState);
+
+    switchToDocument('b');
+    const settled = getEditorView().state;
+
+    switchToDocument('b');
+
+    expect(getEditorView().state).toBe(settled);
+  });
 });
 
 describe('openDocumentInNewTab', () => {

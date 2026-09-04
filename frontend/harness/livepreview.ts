@@ -13,11 +13,20 @@
  * fake and impossible to observe in jsdom, which is why this file exists.
  *
  * `window.livePreview()` reports it; `window.caretTo(line)` moves the caret and
- * re-measures, which is the reveal rule.
+ * re-measures, which is the reveal rule. `window.renderedLines()` shows K.3's
+ * table padding as the DOM actually has it, and `window.images()` /
+ * `window.brokenImages()` show which thumbnails loaded.
+ *
+ * **K.4's measurement runs here too**, and needs both panels: the cost of a
+ * keystroke means nothing on its own, only against the same editor with the
+ * feature off. `window.sourceView` is that control. Load a 5,000-line document
+ * into one panel, time forty `dispatch` + `measure` pairs, clear it, then do the
+ * other -- one big document in the page at a time, alternating which panel goes
+ * first, because whichever is measured first pays for the JIT.
  */
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { buildExtensions, setLivePreview } from '../src/editor/extensions';
+import { buildExtensions, setDocumentDir, setLivePreview } from '../src/editor/extensions';
 import '../src/styles/app.css';
 
 const DOC = [
@@ -35,6 +44,10 @@ const DOC = [
   '| ------ | ------- | ----- |',
   '| short  | wider   | x     |',
   '',
+  '|a|bb|ccc|',
+  '|-|:-:|-|',
+  '|dddd|e|ff|',
+  '',
   'A Setext heading',
   '================',
   '',
@@ -47,7 +60,11 @@ const DOC = [
   '',
   'A [reference][ref] link stays whole.',
   '',
-  '![alt text](pic.png) stays whole too, until K.3.',
+  '![a data: URI](data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNDAnIGhlaWdodD0nOTAnPjxyZWN0IHdpZHRoPScxNDAnIGhlaWdodD0nOTAnIGZpbGw9J3N0ZWVsYmx1ZScvPjxjaXJjbGUgY3g9JzcwJyBjeT0nNDUnIHI9JzI4JyBmaWxsPSdnb2xkJy8+PC9zdmc+)',
+  '',
+  '![a missing file](nope.png) becomes the dashed card.',
+  '',
+  '![a remote one](https://example.com/p.png) stays as markdown.',
   '',
   '- a bullet becomes a glyph',
   '- and so does this one',
@@ -89,7 +106,17 @@ function panel(label: string, live: boolean): EditorView {
   // harness caught within a minute of loading. It is also the more faithful
   // arrangement: the app has no path that builds an editor with live preview
   // already on. It builds in source mode and reconfigures, exactly like this.
-  if (live) setLivePreview(view, true);
+  //
+  // **The folder is set because K.3's thumbnails need one.** `imageSource`
+  // answers `null` for a document that has never been saved, so without this
+  // every local image stays as markdown and the panel proves nothing about
+  // images. The path does not have to exist: vite has no asset handler, so
+  // `nope.png` 404s and the widget's `error` branch draws the dashed card --
+  // which is exactly the case worth looking at.
+  if (live) {
+    setLivePreview(view, true);
+    setDocumentDir(view, 'C:\\notes');
+  }
   return view;
 }
 
@@ -134,10 +161,14 @@ function measure(label: string, view: EditorView): Report {
 declare global {
   interface Window {
     livePreview: () => Report[];
+    renderedLines: () => string[];
+    images: () => { src: string; width: number; height: number }[];
+    brokenImages: () => string[];
     caretTo: (line: number) => Report;
     caretLine: () => number;
     arrowDown: () => number;
     liveView: EditorView;
+    sourceView: EditorView;
   }
 }
 
@@ -171,8 +202,46 @@ window.arrowDown = () => {
 // scrolled into view and measured first -- without that, `moveVertically` has
 // no coordinates for an off-screen line and returns the end of the document.
 window.liveView = on;
+// The control for K.4's measurement: the same document and the same editor with
+// live preview off, so a keystroke's cost can be attributed to this feature
+// rather than to CodeMirror.
+window.sourceView = off;
 
 window.livePreview = () => [measure('off', off), measure('on', on)];
+
+/**
+ * The live panel's lines exactly as the DOM has them, padding widgets included.
+ *
+ * **This is the only way to see K.3's table alignment.** The decoration set says
+ * "insert three spaces here"; whether the columns actually line up is a question
+ * about a monospace font in a real layout engine, and `padded()` in the unit
+ * tests answers a different one -- it expands the widgets by arithmetic, which
+ * is exactly the assumption under test.
+ */
+window.renderedLines = () => Array.from(on.contentDOM.children, (line) => line.textContent ?? '');
+
+/**
+ * Every thumbnail's source and its measured box. A zero height means the file
+ * never arrived -- which for `nope.png` is the point, and for the `data:` URI
+ * would be a failure.
+ */
+window.images = () =>
+  // **`.cm-live-image img`, not `img`.** CodeMirror puts a zero-width
+  // `<img class="cm-widgetBuffer">` either side of every widget it draws, so a
+  // bare tag selector reports 63 images in a document with two -- which is how
+  // the first version of this probe read.
+  Array.from(on.contentDOM.querySelectorAll('.cm-live-image img'), (img) => ({
+    src: img.getAttribute('src') ?? '',
+    width: img.clientWidth,
+    height: img.clientHeight,
+  }));
+
+/** The dashed cards a failed load left behind, by their accessible name. */
+window.brokenImages = () =>
+  Array.from(
+    on.contentDOM.querySelectorAll('.cm-live-image .preview-image-placeholder'),
+    (box) => box.getAttribute('aria-label') ?? '',
+  );
 
 /**
  * Puts the caret on a line of the live panel and reports what changed. The

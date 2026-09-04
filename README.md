@@ -38,6 +38,17 @@ wrap, and zoom.
 with scroll synchronisation, GitHub-flavoured styling that follows the active
 theme, and fenced code highlighted by the same parsers the editor uses.
 
+**Live preview** — markdown markers hide themselves unless the cursor is on the
+line they sit on. Type `**bold**`, move away, and the asterisks vanish while the
+word stays bold; move back and they return, so the formatting stays editable.
+Headings keep their size and lose their hashes, links show their text, bullets
+become glyphs, images become inline thumbnails, and table columns line up. It is
+still one editor and still plain markdown — the file on disk never changes.
+Fenced code keeps its fences, deliberately.
+
+**Four view modes** — source, live, split and reading — switchable per document
+from the View menu, with defaults for new and opened files in Settings.
+
 **Tabs** — open, close, reopen a closed tab, reorder by dragging, middle-click
 to close. One tab per file: opening a file that is already open switches to it.
 
@@ -143,7 +154,7 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [markdown-it](https://github.com/markdown-it/markdown-it) and
 [DOMPurify](https://github.com/cure53/DOMPurify).
 
-**Current state:** 12.7 MB executable, 1,388 automated tests, no known defects.
+**Current state:** 12.7 MB executable, 1,438 automated tests, no known defects.
 
 ---
 

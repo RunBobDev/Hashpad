@@ -2190,15 +2190,21 @@ unchanged and its checks still apply.
 Images and table alignment are **not** in this slice — an image must still look
 exactly as it does in source mode.
 
+**Two of the checks below have since been superseded**, each marked where it
+sits: K.2b made Setext headings render, and K.3 made images thumbnails. They are
+left in place rather than deleted, because a check that was true of a slice is
+part of the record of what that slice did.
+
 - [ ] **`# Heading` shows as a heading with no hash**, at the same size and
       weight as before. The text must not sit one space further right than the
       lines around it — the space after the hash goes with it.
 - [ ] **All six levels**, `#` through `######`.
 - [ ] **`## Title ##`** — a closing sequence, which CommonMark allows — hides
       *both* runs. Seeing `Title ##` means only the opening one was handled.
-- [ ] **A Setext heading** (text with `=====` under it) is left alone,
+- [ ] ~~**A Setext heading** (text with `=====` under it) is left alone,
       deliberately: hiding the underline would leave an empty line rather than
-      tidy anything.
+      tidy anything.~~ **Superseded by K.2b**, which renders it as a heading
+      with the rule the `=====` was drawing. Check the K.2a/b section instead.
 - [ ] **`[the docs](https://example.com)` shows as "the docs"**, styled as a
       link, with the brackets, parentheses and URL gone. Put the caret on the
       line and the whole thing comes back, editable.
@@ -2207,8 +2213,9 @@ exactly as it does in source mode.
       hidden range; if it is not, you get `t ` with a stray space.
 - [ ] **A reference link** `[text][ref]` is left whole. Hiding its brackets
       alone would show `textref`.
-- [ ] **An image `![alt](pic.png)` is left whole**, markers and all. K.3 turns
-      it into a thumbnail.
+- [ ] ~~**An image `![alt](pic.png)` is left whole**, markers and all. K.3 turns
+      it into a thumbnail.~~ **Superseded by K.3**, which did exactly that.
+      Check the K.3 section instead.
 - [ ] **`- item` shows a bullet glyph**, and so do `* item` and `+ item`. The
       text stays aligned where it was — the glyph replaces the marker rather
       than being added beside it.
@@ -2369,3 +2376,110 @@ fire on the change.
 - [ ] **Re-open a file that is already the front tab.** Nothing should move —
       no caret jump, no scroll jump. Applying the mode unconditionally here
       would rebuild the view and lose both.
+
+## Checkpoint K.3 — images as thumbnails, and table alignment
+
+The last slice of §7.1's list. Images become inline thumbnails, table columns
+line up, and nested emphasis — the third case §7.1 names — has worked since K.1
+by construction. Everything from K.1, K.2, K.2a and K.2b is unchanged and its
+checks still apply.
+
+**Save the document first.** A relative path has nothing to resolve against
+until the file has a folder, so an unsaved document shows every local image as
+markdown. That is deliberate (design §4.28), and it is also the most likely
+reason for "the thumbnails don't work".
+
+A ready-made fixture already exists: `Desktop\hashpad-preview-check\folder-blue`
+and `folder-red`, each with a different `pic.png` under the same name.
+
+### Thumbnails
+
+- [ ] **`![alt](pic.png)` next to a real file shows the picture**, with the
+      markdown gone. Move the caret onto the line and the markdown comes back,
+      editable, exactly like every other marker.
+- [ ] **A picture taller than the editor is capped**, not scrolled past. The
+      cap is 320px; reading view shows the same image full height, and that
+      difference is intended.
+- [ ] **A wide picture shrinks to the editor's width** rather than forcing a
+      horizontal scrollbar.
+- [ ] **A path that does not exist** shows a dashed "Image not found" card with
+      the path under it — the same card the reading view draws, because it is
+      the same CSS. A broken-image glyph instead means the error branch did not
+      run.
+- [ ] **A remote image** (`![a](https://example.com/p.png)`) stays as markdown,
+      untouched. Zero-network is the reason: there is nothing to draw, and the
+      URL is the useful thing to see. Reading view shows its dashed card here;
+      live mode deliberately does not.
+- [ ] **In a document that has never been saved**, a local image stays as
+      markdown for the same reason. Save the file and it becomes a thumbnail
+      without any further action.
+- [ ] **Two documents in different folders, both with `pic.png`.** Open both,
+      switch between the tabs, and each must show *its own* picture. This is
+      the check `folder-blue`/`folder-red` exists for, and the one that catches
+      a stale document folder.
+- [ ] **Save As into a different folder.** The thumbnails re-resolve against
+      the new folder. Nothing switches tabs here, which is why this path needs
+      its own check.
+- [ ] **A reference image** `![alt][ref]` is left whole, as a reference link is.
+- [ ] **An image whose alt text wraps onto a second line** — press Enter in the
+      middle of the alt — stays as markdown and, more to the point, **does not
+      break the editor**. A replacement may not cross a line break; CodeMirror
+      throws rather than ignoring it, and before the guard this crashed live
+      mode outright.
+- [ ] **A link whose title is on the next line** — `[t](/url` then Enter then
+      `"Title")` — likewise stays whole. Same cause, reachable since K.2, and
+      it must not render as `t/url "Title"` either: the whole link declines, not
+      half of it.
+- [ ] **Type a `![](…)` from scratch.** It becomes a thumbnail as soon as the
+      caret leaves the line, and the line below it does not overlap the picture
+      — the widget has to re-measure once the file loads.
+- [ ] **Scroll a document with several tall images**, fast, both directions.
+      Nothing should overlap or leave a gap where an image used to be.
+
+### Table alignment
+
+- [ ] **A ragged table lines up.** Type this and move the caret off it:
+
+      |a|bb|ccc|
+      |-|-|-|
+      |dddd|e|ff|
+
+      Every `|` should sit in the same screen column down the table, and the
+      dashes in the second row should lengthen to match rather than staying
+      short.
+- [ ] **A centred column keeps its colons.** `|:--:|` becomes `|:----:|`, never
+      `|:--:--|`. A trailing colon that has drifted left of the end means the
+      fill went in the wrong place.
+- [ ] **An empty cell keeps its column.** `|a||bbb|` has three columns, and the
+      middle one must not vanish.
+- [ ] **A table without outer pipes** (`a | b` rows) still has its columns
+      sized together. The pipes will not sit in the same screen column as a row
+      that *does* have outer pipes — that is not fixable by padding, and is not
+      a defect.
+- [ ] **Type in a cell.** The column widens as you type and every row follows.
+      That is what alignment means; a table that stopped aligning while the
+      caret was in it would be worse.
+- [ ] **Scroll a long table past the top and bottom of the window.** The
+      columns must not shift as rows leave the viewport. The widths are
+      measured from the whole table for exactly this reason.
+- [ ] **A table with word wrap on**, wide enough to wrap. The padding must
+      survive the wrap rather than collapsing at the break.
+- [ ] **A table inside a list item or a blockquote** still aligns.
+- [ ] **Reading view is unchanged.** Alignment is a live-mode rendering; the
+      pane draws real `<table>` columns and always did.
+
+### Checkpoint K.4 — the 5,000-line performance target
+
+The measurement, not a feature. §7.1 asks for "no perceptible input lag in a
+5,000-line document"; design §4.28a records what was measured and where.
+
+- [ ] **Open a 5,000-line markdown document in live preview and type a
+      paragraph.** No lag you can feel. Compare against the same document in
+      source mode — they should feel the same.
+- [ ] **Hold an arrow key down through a formatted region.** The markers reveal
+      and re-hide line by line without the text stuttering sideways.
+- [ ] **Page up and down through it.** Scrolling stays smooth.
+- [ ] **Known ceiling, deliberate.** A *single* table of several thousand rows
+      is slow to type in — and is slow with live preview off too, by most of
+      the same margin. The base editor is the bottleneck there; see design
+      §4.28a for the numbers.

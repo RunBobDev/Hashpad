@@ -9,10 +9,25 @@
  * the app runs (GFM base, our == extension, the code-language table), not a
  * simplified stand-in that would let a grammar mismatch pass.
  */
-import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state';
+import {
+  EditorSelection,
+  EditorState,
+  type Extension,
+  type TransactionSpec,
+} from '@codemirror/state';
 import { markdownSupport } from './highlight';
 
-export function testState(doc: string, anchor = 0, head = anchor): EditorState {
+/**
+ * `extensions` is last and optional because almost nothing needs it: only live
+ * preview's image thumbnails read a facet (`documentDir`, the folder relative
+ * paths resolve against), and every other caller wants the bare grammar.
+ */
+export function testState(
+  doc: string,
+  anchor = 0,
+  head = anchor,
+  extensions: Extension[] = [],
+): EditorState {
   return EditorState.create({
     doc,
     selection: EditorSelection.single(anchor, head),
@@ -26,7 +41,7 @@ export function testState(doc: string, anchor = 0, head = anchor): EditorState {
     // production rather than granting the test harness a capability the app
     // lacks; it is repeated here because `testState` builds its own extension
     // list rather than calling `buildExtensions`.
-    extensions: [...markdownSupport(), EditorState.allowMultipleSelections.of(true)],
+    extensions: [...markdownSupport(), EditorState.allowMultipleSelections.of(true), ...extensions],
   });
 }
 

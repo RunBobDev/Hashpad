@@ -17,6 +17,7 @@ import {
   buildExtensions,
   publishActiveFormats,
   publishStatus,
+  setDocumentDir,
   setLivePreview,
 } from '../editor/extensions';
 import { confirmSave } from '../ui/confirmdialog';
@@ -186,6 +187,11 @@ export function switchToDocument(id: string): void {
     // selected value never changes, so it does not fire at all. The symptom
     // was a ticked View > Live Preview over an editor rendering as source.
     setLivePreview(view, incoming.viewMode === 'live');
+    // The second thing `setState` discards, for the same reason and found by
+    // looking for it rather than by a report: live preview's image thumbnails
+    // resolve relative paths against this, and a stale one would draw the
+    // outgoing document's neighbour instead of this one's.
+    setDocumentDir(view, documentDirOf(incoming.filePath));
 
     // The other side of that same coin: `syncActiveFormats` and `syncStatus`
     // are updateListeners too, so neither fires here -- and unlike
@@ -194,6 +200,33 @@ export function switchToDocument(id: string): void {
     // and the status bar keeps showing its line, column and counts.
     publishActiveFormats(view.state);
     publishStatus(view.state);
+
+    // **Whatever the dispatches above produced is now what is on screen, and
+    // the store still holds what went in.** That matters because the line at
+    // the top of this function identifies the outgoing document by
+    // `d.editorState === view.state`: leave the two different and the next
+    // switch *to this same tab* finds no outgoing document, decides it is a
+    // real switch, and redoes the swap it exists to skip -- throwing away the
+    // caret and scroll position it exists to protect.
+    //
+    // Three things here can break that identity: the scroll snapshot, live
+    // preview, and now the document directory. **Two of them already could**,
+    // which is why this is a fix rather than a precaution -- a tab switched
+    // away from and back has a snapshot, and a document in live mode
+    // reconfigures a compartment, and either was enough. Only the third was
+    // covered by a test, and only because `documentDirOf` changes on the very
+    // first switch while the other two need a second one.
+    //
+    // Guarded, because when nothing dispatched there is nothing to write and a
+    // store write would wake every subscriber for no reason.
+    if (view.state !== incoming.editorState) {
+      store.setState((prev) => ({
+        ...prev,
+        documents: prev.documents.map((doc) =>
+          doc.id === incoming.id ? { ...doc, editorState: view.state } : doc,
+        ),
+      }));
+    }
   }
 }
 

@@ -12,18 +12,20 @@
  * `Decoration.line` at a position) and when it is rebuilt (also on
  * `selectionSet`, because here the cursor is an input).
  *
- * **Scope, as of K.2a.** The five inline marks (K.1); ATX heading hashes,
- * inline link brackets and URLs, and bullet-list markers (K.2); the reading
- * view's typography, the rule under h1 and h2, and the Setext collapse (K.2a).
- * Still to come: images as inline thumbnails and table alignment (K.3). Fenced
- * code keeps its fence permanently -- §7.1 is explicit that hiding it is
- * confusing.
+ * **Scope, as of K.3 -- everything §7.1 names.** The five inline marks (K.1);
+ * ATX heading hashes, inline link brackets and URLs, and bullet-list markers
+ * (K.2); the reading view's typography, the rule under h1 and h2, and the
+ * Setext collapse (K.2a/b); images as inline thumbnails and table columns
+ * aligned by padding (K.3). Nested emphasis has worked since K.1 and by
+ * construction -- nothing here stops descending, so `***both***` reaches the
+ * inner node on its own terms. Fenced code keeps its fence permanently -- §7.1
+ * is explicit that hiding it is confusing.
  *
  * **The reveal rule is per line, not per mark**, and that is a decision rather
  * than a convenience. See `revealedAt`.
  */
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
-import { RangeSetBuilder, type EditorState, type Extension } from '@codemirror/state';
+import { Facet, RangeSetBuilder, type EditorState, type Extension } from '@codemirror/state';
 import { tags } from '@lezer/highlight';
 import {
   Decoration,
@@ -36,6 +38,7 @@ import {
 } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { INLINE_MARK_NODES } from './marks';
+import { ASSET_ROUTE } from '../preview/rules/images';
 
 /**
  * An empty `replace` spec: the range is removed from the rendered line with
@@ -186,15 +189,193 @@ HANDLERS.set('Link', (state, node, out) => {
   if (url === null) return;
   if (revealedAt(state, node.from, node.to)) return;
 
-  for (const mark of node.getChildren('LinkMark')) {
-    out.push({ from: mark.from, to: mark.to, decoration: hidden });
-  }
   // **One span from the URL to the end of the title, not two.** `[t](u "T")`
   // has a space between the URL and the title, and hiding the two nodes
   // separately leaves that space behind -- the link rendered as `t ` with a
   // trailing gap. Covering the gap is what removes it.
   const title = node.getChild('LinkTitle');
-  out.push({ from: url.from, to: title?.to ?? url.to, decoration: hidden });
+  const destinationTo = title?.to ?? url.to;
+
+  // CommonMark allows a line break between the destination and the title, and
+  // the builder refuses a replacement that crosses one -- it has to, because
+  // CodeMirror throws on it. The builder's guard alone would drop this span and
+  // keep the bracket spans, rendering `t/url "Title"`: worse than the markdown
+  // it replaced. So the whole link declines rather than half of it.
+  if (state.doc.lineAt(url.from).to < destinationTo) return;
+
+  for (const mark of node.getChildren('LinkMark')) {
+    out.push({ from: mark.from, to: mark.to, decoration: hidden });
+  }
+  out.push({ from: url.from, to: destinationTo, decoration: hidden });
+});
+
+/**
+ * **The folder relative image paths resolve against** -- the one thing the
+ * editor has never needed to know about the document it is showing.
+ *
+ * A facet rather than a store read from inside the decoration builders, which
+ * take an `EditorState` precisely so they can be tested without an app around
+ * them. Empty string for a document that has never been saved, matching
+ * `documentDirOf`, whose answer this is; `extensions.ts` owns the compartment
+ * that sets it.
+ */
+export const documentDir = Facet.define<string, string>({
+  combine: (values) => values[0] ?? '',
+});
+
+/**
+ * Anything with a URL scheme, copied from `preview/rules/images.ts` for the
+ * reason spelled out there: **two or more characters before the colon**, so
+ * that `C:/docs/pic.png` is treated as the Windows path it is rather than as a
+ * `c:` URL.
+ */
+const REMOTE = /^[a-z][a-z0-9+.-]+:/i;
+
+/**
+ * What an `<img>` in the editor should point at, or `null` for "leave the
+ * markdown alone".
+ *
+ * **Three answers, and they are `rules/images.ts`'s three**, because the policy
+ * belongs to the app rather than to a view: `data:` passes through, a remote URL
+ * is never fetched (design §3 beats SPEC §6.7, and the CSP's `img-src` omits
+ * `https:` permanently), and a relative path becomes the same-origin asset route
+ * Wails forwards to the Go handler. That handler is the *only* place path
+ * traversal is checked -- this function does no security checking and must not
+ * start, for the same reason `rules/images.ts` says so in its own header.
+ *
+ * **`null` rather than a placeholder for the two cases that cannot load.** The
+ * reading view draws a dashed box because it has replaced the markdown and owes
+ * the reader something in its place; here the markdown is still there, and
+ * showing `![alt](https://…)` as itself is both more honest and more useful --
+ * the URL is what you would want to see, and it stays selectable.
+ *
+ * **No `normalizeLinkText` here, unlike the preview rule.** By the time that
+ * rule runs, markdown-it has already percent-encoded the source, so it has to
+ * decode before re-encoding. A `URL` node holds raw document text, so encoding
+ * it once is the whole job.
+ */
+function imageSource(state: EditorState, url: SyntaxNode): string | null {
+  let raw = state.doc.sliceString(url.from, url.to);
+  // CommonMark's pointy-bracket form, `![a](<my pic.png>)`. The brackets are
+  // part of the `URL` node and are delimiters, not path characters.
+  if (raw.startsWith('<') && raw.endsWith('>')) raw = raw.slice(1, -1);
+
+  if (raw === '') return null;
+  if (raw.startsWith('data:')) return raw;
+  if (REMOTE.test(raw)) return null;
+
+  const dir = state.facet(documentDir);
+  if (dir === '') return null;
+  return `${ASSET_ROUTE}?dir=${encodeURIComponent(dir)}&path=${encodeURIComponent(raw)}`;
+}
+
+/**
+ * The same dashed card `rules/images.ts` renders, built as DOM rather than as a
+ * string. `app.css` imports `preview.css` globally, so the class is already
+ * styled here; duplicating the rule in this file's theme would let the two drift.
+ *
+ * `alt` becomes the accessible name when there is one, for the reason that rule
+ * gives: "Image not found" tells a screen reader nothing about what is missing.
+ */
+function brokenImage(alt: string, src: string): HTMLElement {
+  const label = 'Image not found';
+  const box = document.createElement('span');
+  box.className = 'preview-image-placeholder';
+  box.setAttribute('role', 'img');
+  box.setAttribute('aria-label', alt.trim() === '' ? label : `${alt} -- ${label}`);
+  box.textContent = label;
+
+  const detail = document.createElement('span');
+  detail.className = 'preview-image-placeholder__detail';
+  detail.textContent = src;
+  box.append(detail);
+  return box;
+}
+
+/**
+ * §7.1's inline thumbnail.
+ *
+ * **The first widget whose height is not known when it is built**, which is the
+ * thing that makes images different from every other decoration here. The line's
+ * height changes when the file arrives, after CodeMirror has already measured
+ * and positioned everything below it; `requestMeasure` on `load` is what makes
+ * it re-read the geometry. Without it the image paints over the following lines
+ * until something else happens to trigger a measure pass.
+ *
+ * `error` is handled for the same reason it has to be: a broken path is a
+ * spelling mistake, not a crash, and the default broken-image glyph says
+ * nothing. Swapping the element in place rather than dispatching a state change
+ * keeps the failure a rendering detail -- a document does not become dirty, or
+ * even different, because a file is missing.
+ */
+class ImageWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+  ) {
+    super();
+  }
+
+  eq(other: ImageWidget): boolean {
+    return other.src === this.src && other.alt === this.alt;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-live-image';
+
+    const img = document.createElement('img');
+    img.src = this.src;
+    img.alt = this.alt;
+    img.addEventListener('load', () => {
+      view.requestMeasure();
+    });
+    img.addEventListener('error', () => {
+      img.remove();
+      wrap.append(brokenImage(this.alt, this.src));
+      view.requestMeasure();
+    });
+
+    wrap.append(img);
+    return wrap;
+  }
+}
+
+/**
+ * `![alt](pic.png)` becomes the picture (§7.1: "render inline thumbnails").
+ *
+ * **A different node from `Link`**, which is why K.2's link handler needed no
+ * exclusion for images and why this one needs no exclusion for links.
+ *
+ * The whole node is replaced, alt text included -- the alt is what you read
+ * *instead of* the picture, so showing both would be showing it twice. That
+ * replacement overlaps any inline mark inside the alt (`![**a**](x.png)`
+ * contributes a `StrongEmphasis` span of its own); the builder's overlap pass
+ * resolves it, and the image wins because it starts first.
+ *
+ * A reference image (`![alt][ref]`) has no `URL` child and is left alone, as
+ * reference links are.
+ */
+HANDLERS.set('Image', (state, node, out) => {
+  const url = node.getChild('URL');
+  if (url === null) return;
+  if (revealedAt(state, node.from, node.to)) return;
+
+  const src = imageSource(state, url);
+  if (src === null) return;
+
+  // Between `![` and `]`, taken from the marks rather than by offset from the
+  // URL: CommonMark allows whitespace after the `(`, so `![a](  x.png)` puts
+  // the URL two characters further along than the arithmetic would expect and
+  // an offset-based slice reads `a]` as the alt.
+  const marks = node.getChildren('LinkMark');
+  const alt = marks.length >= 2 ? state.doc.sliceString(marks[0]!.to, marks[1]!.from) : '';
+
+  out.push({
+    from: node.from,
+    to: node.to,
+    decoration: Decoration.replace({ widget: new ImageWidget(src, alt) }),
+  });
 });
 
 /**
@@ -258,6 +439,25 @@ export function inlineMarkDecorations(
   let end = -1;
   for (const span of spans) {
     if (span.from < end) continue;
+    // **A replacement may not cross a line break, and CodeMirror throws rather
+    // than ignoring one**: "Decorations that replace line breaks may not be
+    // specified via plugins" -- the same restriction the Setext underline works
+    // around with `display: none` (see `headingLineDecorations`). A state field
+    // is allowed to do it; a `ViewPlugin` is not, and a state field cannot see
+    // the viewport.
+    //
+    // Two handlers can produce one. An image's alt text may wrap
+    // (`![alt\ntext](p.png)`), and CommonMark allows a line break between a
+    // link's destination and its title (`[t](/url\n"Title")`) -- **the second
+    // has been reachable since K.2 and was found by looking for siblings of the
+    // first**, not by a report. Guarded here rather than in each handler so a
+    // future one cannot reintroduce it: this is the only place a span becomes a
+    // decoration.
+    //
+    // The consequence is that the markdown stays visible for those two, which
+    // is the same answer this file already gives whenever it cannot render
+    // something.
+    if (state.doc.lineAt(span.from).to < span.to) continue;
     builder.add(span.from, span.to, span.decoration);
     end = span.to;
   }
@@ -327,6 +527,228 @@ const monoBlocks = ViewPlugin.fromClass(
         syntaxTree(update.startState) !== syntaxTree(update.state)
       ) {
         this.decorations = monoBlockLines(update.view.state, update.view.visibleRanges);
+      }
+    }
+  },
+  { decorations: (plugin) => plugin.decorations },
+);
+
+/**
+ * §7.1's "tables: align columns visually", which K.2a made possible without
+ * doing: a table's lines are already held at fixed pitch by `cm-live-mono`, so
+ * every character is one cell wide and columns line up **if the source is
+ * padded**. `|a|bb|` still renders as `|a|bb|`. This is what pads it.
+ *
+ * **Padding, not hiding, and that is what makes the reveal rule unnecessary.**
+ * Nothing here is removed, so the text on screen is exactly the text in the
+ * document plus some space before each `|`. Editing a cell widens its column and
+ * every row follows -- which is what alignment *is*, rather than jitter.
+ *
+ * `PadWidget` renders the spaces (or dashes) themselves rather than a width in
+ * `ch`: a widget with a border-box width has to be measured, and the whole point
+ * of a fixed-pitch line is that the browser already knows how wide `n`
+ * characters are.
+ */
+class PadWidget extends WidgetType {
+  constructor(
+    readonly count: number,
+    readonly fill: string,
+  ) {
+    super();
+  }
+
+  eq(other: PadWidget): boolean {
+    return other.count === this.count && other.fill === this.fill;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'cm-live-pad';
+    span.textContent = this.fill.repeat(this.count);
+    return span;
+  }
+}
+
+/**
+ * One column's worth of one row: the run of text between two `|`, and where
+ * padding for it goes.
+ *
+ * `pad` is separate from `to` for the delimiter row alone, where the fill has to
+ * land after the last dash rather than at the end -- appending to `:--:` gives
+ * `:--:---`, which silently turns a centred column into a left-aligned one.
+ */
+interface Segment {
+  from: number;
+  to: number;
+  pad: number;
+  fill: string;
+}
+
+/** A run of fill characters to insert at `pos`. */
+interface Pad {
+  pos: number;
+  count: number;
+  fill: string;
+}
+
+/**
+ * Drops the empty segments a leading or trailing `|` produces, and only those.
+ *
+ * GFM makes the outer pipes optional (`a | b` is a valid row), so the text
+ * before the first `|` is a column when there is no leading pipe and nothing
+ * when there is. An *interior* empty segment -- the middle of `|a||b|` -- is a
+ * real empty cell and stays.
+ */
+function trimEdges(segments: Segment[], from: number, to: number): Segment[] {
+  const out = segments.slice();
+  if (out.length > 0 && out[0]!.from === out[0]!.to && out[0]!.from === from) out.shift();
+  const last = out.at(-1);
+  if (out.length > 0 && last!.from === last!.to && last!.to === to) out.pop();
+  return out;
+}
+
+/** A header or body row: its `TableDelimiter` children are the column edges. */
+function cellRowSegments(row: SyntaxNode): Segment[] {
+  const cuts: { from: number; to: number }[] = [];
+  for (let child = row.firstChild; child !== null; child = child.nextSibling) {
+    if (child.name === 'TableDelimiter') cuts.push({ from: child.from, to: child.to });
+  }
+
+  const segments: Segment[] = [];
+  let start = row.from;
+  for (const cut of cuts) {
+    segments.push({ from: start, to: cut.from, pad: cut.from, fill: ' ' });
+    start = cut.to;
+  }
+  segments.push({ from: start, to: row.to, pad: row.to, fill: ' ' });
+  return trimEdges(segments, row.from, row.to);
+}
+
+/**
+ * The `|---|:--:|` row, which is **one flat `TableDelimiter` node with no
+ * `TableCell` children** -- checked against the app's own grammar, not assumed.
+ * So it is split by hand, on the same rule as a cell row.
+ *
+ * Filled with `-` rather than spaces: a delimiter row padded with blanks is
+ * aligned but looks broken, and lengthening the dashes is what a person doing
+ * this by hand would do. The fill goes after the last dash so a trailing `:`
+ * stays where it belongs.
+ */
+function delimiterRowSegments(state: EditorState, node: SyntaxNode): Segment[] {
+  const text = state.doc.sliceString(node.from, node.to);
+  const segments: Segment[] = [];
+
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i !== text.length && text[i] !== '|') continue;
+    const slice = text.slice(start, i);
+    const lastDash = slice.lastIndexOf('-');
+    segments.push({
+      from: node.from + start,
+      to: node.from + i,
+      pad: node.from + start + (lastDash === -1 ? slice.length : lastDash + 1),
+      fill: '-',
+    });
+    start = i + 1;
+  }
+  return trimEdges(segments, node.from, node.to);
+}
+
+/**
+ * Every column of a table padded to the width of its widest cell.
+ *
+ * **Columns are measured between delimiters, not from `TableCell` nodes.** An
+ * empty cell (`| |`) produces no `TableCell` at all, so measuring cells would
+ * drop a column and misalign every row after it. The gap between two `|` always
+ * exists.
+ *
+ * The delimiter row is measured along with the rest rather than skipped: a
+ * column declared as `|:--------:|` is wider than its contents, and leaving it
+ * out of the maximum would make that one row overhang.
+ */
+function alignTable(state: EditorState, table: SyntaxNode, out: Pad[]): void {
+  const rows: Segment[][] = [];
+  for (let child = table.firstChild; child !== null; child = child.nextSibling) {
+    if (child.name === 'TableHeader' || child.name === 'TableRow') {
+      rows.push(cellRowSegments(child));
+    } else if (child.name === 'TableDelimiter') {
+      rows.push(delimiterRowSegments(state, child));
+    }
+  }
+
+  const widths: number[] = [];
+  for (const row of rows) {
+    row.forEach((segment, column) => {
+      widths[column] = Math.max(widths[column] ?? 0, segment.to - segment.from);
+    });
+  }
+
+  for (const row of rows) {
+    row.forEach((segment, column) => {
+      const count = widths[column]! - (segment.to - segment.from);
+      if (count > 0) out.push({ pos: segment.pad, count, fill: segment.fill });
+    });
+  }
+}
+
+export function tableAlignDecorations(
+  state: EditorState,
+  ranges: readonly { from: number; to: number }[],
+): DecorationSet {
+  const pads: Pad[] = [];
+  const seen = new Set<number>();
+
+  for (const { from, to } of ranges) {
+    syntaxTree(state).iterate({
+      from,
+      to,
+      enter: (node) => {
+        if (node.name !== 'Table') return;
+        // **The one walk in this file that is not clipped to the viewport.**
+        // A column width measured from the visible rows alone would change as
+        // the table scrolled past the edge, and the columns would visibly
+        // shuffle. The cost is bounded by the table rather than the document;
+        // K.4 is where that got measured.
+        if (seen.has(node.from)) return;
+        seen.add(node.from);
+        alignTable(state, node.node, pads);
+      },
+    });
+  }
+
+  // One pad per segment and segments never share an end position, so sorting is
+  // enough -- there is nothing to deduplicate beyond the whole-table guard above.
+  pads.sort((a, b) => a.pos - b.pos);
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const pad of pads) {
+    builder.add(
+      pad.pos,
+      pad.pos,
+      // `side: 1` so the padding sits after anything else at this point, which
+      // for a cell end means between the text and the `|`.
+      Decoration.widget({ widget: new PadWidget(pad.count, pad.fill), side: 1 }),
+    );
+  }
+  return builder.finish();
+}
+
+const tableAlign = ViewPlugin.fromClass(
+  class implements PluginValue {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+      this.decorations = tableAlignDecorations(view.state, view.visibleRanges);
+    }
+
+    update(update: ViewUpdate): void {
+      // No `selectionSet`, like `monoBlocks` and unlike the other two: padding
+      // hides nothing, so there is nothing for the caret to reveal.
+      if (
+        update.docChanged ||
+        update.viewportChanged ||
+        syntaxTree(update.startState) !== syntaxTree(update.state)
+      ) {
+        this.decorations = tableAlignDecorations(update.view.state, update.view.visibleRanges);
       }
     }
   },
@@ -455,6 +877,7 @@ const headingLines = ViewPlugin.fromClass(
  */
 const liveTypography: Extension = [
   monoBlocks,
+  tableAlign,
   headingLines,
   EditorView.theme({
     '.cm-content': {
@@ -495,6 +918,33 @@ const liveTypography: Extension = [
     },
     '.cm-line.cm-live-setext-hidden': {
       display: 'none',
+    },
+    // **`pre`, not inherited.** With word wrap on, `.cm-line` is `pre-wrap`,
+    // which drops a run of spaces that lands at a wrap point -- and column
+    // padding lands at the end of a cell, which is exactly where a long table
+    // row wraps. The columns came apart only on wrapped rows, which is the kind
+    // of thing that looks like a measurement bug.
+    '.cm-live-pad': {
+      whiteSpace: 'pre',
+    },
+    // An inline thumbnail (§7.1). `inline-block` and `vertical-align: top` so
+    // the line box grows to the picture instead of the picture hanging off the
+    // text baseline.
+    '.cm-live-image': {
+      display: 'inline-block',
+      maxWidth: '100%',
+      verticalAlign: 'top',
+    },
+    // **A thumbnail, not the full-size image**, which is where this parts
+    // company with the reading view (`preview.css` caps width only). A picture
+    // taller than the editor would push the rest of the document off the screen
+    // while you are trying to write it; reading view has no cursor to keep in
+    // sight and so needs no cap.
+    '.cm-live-image img': {
+      display: 'block',
+      maxWidth: '100%',
+      maxHeight: '320px',
+      borderRadius: 'var(--radius)',
     },
   }),
   // A second `HighlightStyle` rather than an edit to the shared one: these

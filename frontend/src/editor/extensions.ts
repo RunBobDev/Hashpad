@@ -20,7 +20,7 @@ import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { darkThemeCompartment, hashpadTheme } from './theme';
 import { Compartment } from '@codemirror/state';
 import { blockquoteLines } from './blockquote';
-import { livePreview } from './livepreview';
+import { documentDir, livePreview } from './livepreview';
 import { markdownSupport } from './highlight';
 import { COMMANDS, toEditorCommand } from './commands';
 import { activeFormats } from './marks';
@@ -217,6 +217,11 @@ export function buildExtensions(
     // shared constant, not a fresh `[]`, so that function's identity check
     // recognises a freshly built state as already-off.
     livePreviewCompartment.of(LIVE_PREVIEW_OFF),
+    // Empty until a document with a path is shown; see `setDocumentDir`. The
+    // facet's own `combine` answers `''` for "no folder", which is
+    // `documentDirOf`'s answer for an unsaved document, so the seed needs no
+    // value of its own.
+    documentDirCompartment.of([]),
     /**
      * SPEC §6.7 names this package. The panel is ours (`ui/findreplace.ts`):
      * the spec asks for it styled to match the app, and match highlighting is
@@ -511,4 +516,32 @@ export function setLivePreview(view: EditorView, enabled: boolean): void {
   if (livePreviewCompartment.get(view.state) === wanted) return;
 
   view.dispatch({ effects: livePreviewCompartment.reconfigure(wanted) });
+}
+
+/**
+ * Which folder the active document sits in, for live preview's image
+ * thumbnails (K.3) -- the first thing in the editor that has ever needed to
+ * know the document's path.
+ *
+ * **A compartment for the same reason live preview is one, and set in the same
+ * two places.** The store subscription in `main.ts` fires on a `filePath`
+ * change, which covers opening and Save As; `switchToDocument` has to repeat it
+ * because `view.setState` rebuilds the configuration from the incoming
+ * document's own extension list and discards whatever the subscription just
+ * applied. That is the 0.4.0 bug, and this is the second thing shaped like it.
+ */
+export const documentDirCompartment = new Compartment();
+
+/**
+ * Idempotent, like `setLivePreview` and for the same reason: `switchToDocument`
+ * calls it on every tab switch including the no-op one, and an unconditional
+ * dispatch there throws away the caret and the scroll position.
+ *
+ * Compared by facet value rather than by extension identity, because unlike
+ * live preview's two constants the value here is a string that varies.
+ */
+export function setDocumentDir(view: EditorView, dir: string): void {
+  if (view.state.facet(documentDir) === dir) return;
+
+  view.dispatch({ effects: documentDirCompartment.reconfigure(documentDir.of(dir)) });
 }

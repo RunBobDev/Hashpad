@@ -11,9 +11,11 @@ import { describe, expect, it } from 'vitest';
 import type { EditorState } from '@codemirror/state';
 import {
   BULLET,
+  documentDir,
   headingLineDecorations,
   inlineMarkDecorations,
   monoBlockLines,
+  tableAlignDecorations,
 } from './livepreview';
 import { testState } from './testdoc';
 
@@ -458,5 +460,261 @@ describe('heading line decorations', () => {
     expect(classesByLine(testState('Title\n=====\n\nbody', 7))).toEqual({
       1: 'cm-live-heading cm-live-heading-rule',
     });
+  });
+});
+
+/* ---- K.3: images ------------------------------------------------------- */
+
+/** A state whose document has been saved into `dir`. */
+function saved(doc: string, anchor = 0, dir = 'C:\\notes'): EditorState {
+  return testState(doc, anchor, anchor, [documentDir.of(dir)]);
+}
+
+/**
+ * The `ImageWidget` a range was replaced with, or `null` if it was not.
+ *
+ * Reads the widget's own fields rather than rendering it: `toDOM` needs a
+ * `document` and this file runs in the fast `node` environment. What a real
+ * `<img>` looks like on screen is `harness/livepreview.html`'s question.
+ */
+function thumbnail(state: EditorState): { src: string; alt: string } | null {
+  const set = inlineMarkDecorations(state, [{ from: 0, to: state.doc.length }]);
+  let found: { src: string; alt: string } | null = null;
+  set.between(0, state.doc.length, (_from, _to, value) => {
+    const widget = value.spec.widget as { src?: unknown; alt?: unknown } | undefined;
+    if (typeof widget?.src === 'string' && typeof widget.alt === 'string') {
+      found = { src: widget.src, alt: widget.alt };
+    }
+  });
+  return found;
+}
+
+describe('images as inline thumbnails', () => {
+  /**
+   * The whole node, alt text included -- the alt is what you read *instead of*
+   * the picture, so leaving it beside the picture would show it twice.
+   */
+  it('replaces the whole image node', () => {
+    // Caret parked on line 1, away from the image on line 2.
+    expect(hidden(saved('x\n![alt](pic.png)'))).toEqual([[2, 17]]);
+  });
+
+  it('resolves a relative path against the document folder', () => {
+    expect(thumbnail(saved('x\n![alt](sub/pic.png)'))).toEqual({
+      src: '/__hashpad/asset?dir=C%3A%5Cnotes&path=sub%2Fpic.png',
+      alt: 'alt',
+    });
+  });
+
+  /**
+   * Both halves are encoded separately, which is what stops a `src` from
+   * smuggling in its own `dir` -- the same property `rules.test.ts` pins for
+   * the preview, and the Go handler's `assets_test.go` for the other end.
+   */
+  it('escapes a path trying to smuggle in its own dir', () => {
+    expect(thumbnail(saved('x\n![a](p.png&dir=C:\\evil)'))?.src).toBe(
+      '/__hashpad/asset?dir=C%3A%5Cnotes&path=p.png%26dir%3DC%3A%5Cevil',
+    );
+  });
+
+  it('passes a data: URI through untouched', () => {
+    const src = 'data:image/gif;base64,R0lGOD';
+    expect(thumbnail(saved(`x\n![a](${src})`))?.src).toBe(src);
+  });
+
+  /**
+   * **Remote images are never fetched** (design §3 beats SPEC §6.7), so there
+   * is no thumbnail to draw -- and the markdown is left visible rather than
+   * replaced by an empty box, because the URL is the useful thing to show.
+   */
+  it('leaves a remote image as markdown', () => {
+    expect(hidden(saved('x\n![a](https://example.com/p.png)'))).toEqual([]);
+  });
+
+  it('leaves a local image alone in a document that has never been saved', () => {
+    expect(hidden(testState('x\n![a](pic.png)', 0))).toEqual([]);
+  });
+
+  /** A Windows absolute path is a path, not a `c:` URL -- see `REMOTE`. */
+  it('treats a drive-letter path as local', () => {
+    expect(thumbnail(saved('x\n![a](C:/pics/p.png)'))?.src).toContain('path=C%3A%2Fpics%2Fp.png');
+  });
+
+  it('leaves a reference image alone, having no URL to resolve', () => {
+    expect(hidden(saved('x\n![a][ref]\n\n[ref]: p.png'))).toEqual([]);
+  });
+
+  it('reveals the markdown when the caret is on its line', () => {
+    expect(hidden(saved('x\n![alt](pic.png)', 2))).toEqual([]);
+  });
+
+  /**
+   * CommonMark allows whitespace after the `(`, which is what makes the alt
+   * text worth taking from the marks rather than by arithmetic off the URL:
+   * an offset-based slice reads `a]` here.
+   */
+  it('reads the alt text when the URL is not where arithmetic expects it', () => {
+    expect(thumbnail(saved('x\n![a](  pic.png)'))?.alt).toBe('a');
+  });
+
+  it('strips the pointy brackets CommonMark allows around a URL', () => {
+    expect(thumbnail(saved('x\n![a](<my pic.png>)'))?.src).toContain('path=my%20pic.png');
+  });
+
+  /**
+   * `![**a**](p.png)` contributes two overlapping spans -- the image over the
+   * whole node, and the `StrongEmphasis` inside its alt. The builder's overlap
+   * pass keeps the image, which starts first, and the emphasis marks go with
+   * it rather than being hidden twice.
+   */
+  /**
+   * **CodeMirror throws on a replacement that crosses a line break** when it
+   * comes from a `ViewPlugin`, so this is a crash rather than a cosmetic
+   * defect: typing a wrapped alt text broke the editor outright. Found in the
+   * browser harness -- a decoration set built in `node` is only a description,
+   * and nothing rejects it until CodeMirror applies it.
+   */
+  it('leaves an image whose alt text wraps as markdown', () => {
+    expect(hidden(saved('x\n![alt\ntext](p.png)'))).toEqual([]);
+  });
+
+  /**
+   * The sibling of the case above, and **reachable since K.2**: CommonMark
+   * allows a line break between a link's destination and its title, so
+   * `[t](/url\n"Title")` asks for exactly the same forbidden span. Found by
+   * looking for it rather than by hitting it.
+   */
+  it('leaves a link whose title is on the next line as markdown', () => {
+    expect(hidden(saved('x\n[t](/url\n"Title")'))).toEqual([]);
+  });
+
+  it('wins over an inline mark inside its own alt text', () => {
+    expect(hidden(saved('x\n![**a**](p.png)'))).toEqual([[2, 17]]);
+  });
+});
+
+/* ---- K.3: table alignment ---------------------------------------------- */
+
+/** The document with every pad widget expanded -- the table as it renders. */
+function padded(state: EditorState): string {
+  const text = state.doc.toString();
+  const set = tableAlignDecorations(state, [{ from: 0, to: state.doc.length }]);
+  let out = '';
+  let at = 0;
+  set.between(0, state.doc.length, (from, to, value) => {
+    out += text.slice(at, from);
+    const widget = value.spec.widget as { count: number; fill: string };
+    out += widget.fill.repeat(widget.count);
+    at = to;
+  });
+  return out + text.slice(at);
+}
+
+/** Where the pads landed, for the cases that count them rather than read them. */
+function padPositions(state: EditorState, ranges: { from: number; to: number }[]): number[] {
+  const out: number[] = [];
+  tableAlignDecorations(state, ranges).between(0, state.doc.length, (from) => {
+    out.push(from);
+  });
+  return out;
+}
+
+describe('aligning table columns', () => {
+  it('pads every cell to the width of its column', () => {
+    expect(padded(testState('|a|bb|\n|-|-|\n|ccc|d|\n'))).toBe('|a  |bb|\n|---|--|\n|ccc|d |\n');
+  });
+
+  /**
+   * The delimiter row is filled with dashes rather than spaces: aligned blanks
+   * are aligned but look broken, and lengthening the dashes is what a person
+   * padding this by hand would do.
+   */
+  it('lengthens the delimiter row rather than blanking it', () => {
+    expect(padded(testState('|heading|\n|-|\n|x|\n'))).toBe('|heading|\n|-------|\n|x      |\n');
+  });
+
+  /**
+   * **The fill goes after the last dash**, so a trailing `:` stays put.
+   * Appending to `:--:` gives `:--:---`, which silently turns a centred column
+   * into a left-aligned one.
+   */
+  it('keeps a trailing alignment colon at the end of its run', () => {
+    expect(padded(testState('|abcdef|\n|:--:|\n|x|\n'))).toBe('|abcdef|\n|:----:|\n|x     |\n');
+  });
+
+  /**
+   * An empty cell produces no `TableCell` node at all, which is why columns are
+   * measured between delimiters instead. Measuring cells drops this column and
+   * misaligns every one after it.
+   */
+  it('keeps a column whose cell is empty', () => {
+    expect(padded(testState('|a||bbb|\n|-|-|-|\n|c|d|e|\n'))).toBe(
+      '|a| |bbb|\n|-|-|---|\n|c|d|e  |\n',
+    );
+  });
+
+  /** GFM makes the outer pipes optional, and `a | b` is a valid row. */
+  it('aligns a table written without outer pipes', () => {
+    expect(padded(testState('a | bb\n--- | ---\nccc | d\n'))).toBe(
+      'a   | bb \n--- | ---\nccc | d  \n',
+    );
+  });
+
+  /**
+   * **The case `trimEdges` exists for**, and the only one that can tell it is
+   * working: when every row is written the same way, the empty segment a
+   * leading `|` produces is present in every row and shifts them all equally,
+   * so leaving it in changes nothing. Mix the two styles in one table and it
+   * becomes column zero of some rows and not others.
+   *
+   * The pipes still do not line up across the two styles -- a leading `|` takes
+   * a screen column that a row without one does not have, and no amount of
+   * padding inside the cells can fix that. What is claimed here is that the
+   * *cells* are sized as one table rather than as two.
+   */
+  it('sizes columns as one table when only some rows have outer pipes', () => {
+    expect(padded(testState('| a | bb |\n|---|---|\nc | d\n'))).toBe(
+      '| a | bb |\n|---|----|\nc  | d  \n',
+    );
+  });
+
+  /**
+   * **The one walk not clipped to the viewport.** A column width measured from
+   * the visible rows alone changes as the table scrolls, and the columns would
+   * shuffle -- so a range covering only the header must still produce the pads
+   * for every row below it.
+   */
+  it('measures the whole table even when only part of it is visible', () => {
+    const state = testState('|a|bb|\n|-|-|\n|cccc|d|\n');
+    const clipped = padPositions(state, [{ from: 0, to: 6 }]);
+
+    expect(clipped).toEqual(padPositions(state, [{ from: 0, to: state.doc.length }]));
+    // Would be 1 (the header's own cell) if the walk stopped at the range.
+    expect(clipped.length).toBe(4);
+  });
+
+  /** Two visible ranges either side of a fold must not pad the table twice. */
+  it('pads a table entered from two ranges once', () => {
+    const state = testState('|a|bb|\n|-|-|\n|cccc|d|\n');
+    expect(
+      padPositions(state, [
+        { from: 0, to: 6 },
+        { from: 12, to: state.doc.length },
+      ]),
+    ).toEqual(padPositions(state, [{ from: 0, to: state.doc.length }]));
+    expect(padded(state)).toBe('|a   |bb|\n|----|--|\n|cccc|d |\n');
+  });
+
+  it('leaves a document with no table alone', () => {
+    expect(padded(testState('just **text**\n'))).toBe('just **text**\n');
+  });
+
+  /**
+   * Padding hides nothing, so unlike every other decoration here it does not
+   * answer to the caret. The alternative would be a table that jumped out of
+   * alignment the moment you clicked into it.
+   */
+  it('pads the line the caret is on, like every other', () => {
+    expect(padded(testState('|a|bb|\n|-|-|\n|ccc|d|\n', 1))).toBe('|a  |bb|\n|---|--|\n|ccc|d |\n');
   });
 });
