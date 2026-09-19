@@ -154,7 +154,7 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [markdown-it](https://github.com/markdown-it/markdown-it) and
 [DOMPurify](https://github.com/cure53/DOMPurify).
 
-**Current state:** 12.7 MB executable, 1,438 automated tests, no known defects.
+**Current state:** 12.7 MB executable, 1,440 automated tests, no known defects.
 
 ---
 

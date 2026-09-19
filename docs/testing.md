@@ -1547,10 +1547,13 @@ The file associations are *declared* here and *registered* in I.3, so nothing in
 Explorer changes yet — the installer does that.
 
 - [ ] **Right-click `Hashpad.exe` → Properties → Details.** It should read:
-      Product name **Hashpad**, Product version **0.4.0**, File version
-      **0.4.0.0**, Company **Hashpad**, Copyright **© 2026 Hashpad**, and File
-      description **Hashpad**. Blank fields here mean the version resource did
-      not link.
+      Product name **Hashpad**, Product version **whatever `wails.json`'s
+      `info.productVersion` says**, File version the same with `.0` appended,
+      Company **Hashpad**, Copyright **© 2026 Hashpad**, and File description
+      **Hashpad**. Blank fields here mean the version resource did not link.
+      *Written against the file rather than a literal, because a number spelled
+      out here goes stale on every release and the check then passes by
+      agreeing with an old expectation.*
       *Confirmed 2026-08-31, measured: all six strings read back through
       `Shell.Application`'s `GetDetailsOf`, which is the reader the section
       below names as the one that agrees with Explorer. Still worth a human
@@ -1690,8 +1693,8 @@ checks as well** — a half-tested uninstaller is how a machine collects debris.
 - [x] **Start menu has a Hashpad entry.** No desktop shortcut, because you left
       that unticked.
       *Confirmed 2026-08-31, owner.*
-- [ ] **Settings → Apps → Installed apps lists Hashpad**, with a version of
-      0.4.0 and a publisher of Hashpad.
+- [ ] **Settings → Apps → Installed apps lists Hashpad**, with the version
+      `wails.json` declares and a publisher of Hashpad.
       *The entry exists -- the uninstall below was reached through it. The
       version and publisher strings shown there were not read.*
 
