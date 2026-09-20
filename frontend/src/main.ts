@@ -503,6 +503,14 @@ void bootstrap();
 // editor, the focus in the preview, or nothing focused at all.
 mountZoom();
 
+// A temporary instrument for the scroll-choppiness report; see ui/scrollprobe.ts
+// for what it measures and why it cannot be measured here. Dynamically imported
+// behind a build flag, so an ordinary `wails build` never pulls it into the
+// bundle at all. Built with `VITE_SCROLL_PROBE=1`.
+if (import.meta.env.VITE_SCROLL_PROBE === '1') {
+  void import('./ui/scrollprobe').then((module) => module.mountScrollProbe());
+}
+
 // The same problem for every *other* shortcut, which unlike zoom are declared in
 // the editor's keymap and so only fire while the editor has focus. This forwards
 // them when it does not; see ui/shortcuts.ts.

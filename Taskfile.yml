@@ -64,6 +64,21 @@ tasks:
       # fails loudly when they do not land.
       - go test -ldflags "{{.PORTABLE_LDFLAGS}}" -run TestPortableMarkerMatchesTheBuild ./internal/app/
 
+  build:probe:
+    desc: Build Hashpad.exe with the temporary scroll probe overlay into build/bin/probe
+    # **Temporary, and deleted with the probe it builds.** See
+    # frontend/src/ui/scrollprobe.ts: the scroll-choppiness report cannot be
+    # reproduced in any browser available to development, so the measurement has
+    # to run on the machine that has the bug.
+    #
+    # The flag is a Vite env var rather than a Go ldflag because the thing being
+    # switched on is a dynamic import in main.ts -- which is also what keeps it
+    # out of every other build in this file, bundle and all.
+    env:
+      VITE_SCROLL_PROBE: '1'
+    cmds:
+      - wails build -o probe/Hashpad.exe
+
   build:installer:
     desc: Build the NSIS installer into build/bin
     platforms: [windows]
