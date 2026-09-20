@@ -205,7 +205,7 @@ describe('markdownHighlightStyle', () => {
     ['heading5', tags.heading5],
     ['heading6', tags.heading6],
   ])('caps the line box on %s', (_label, tag) => {
-    expect(declaredFor(classFor(tag), 'line-height')).toBe('1.25');
+    expect(declaredFor(classFor(tag), 'line-height')).toBe('var(--line-heading)');
   });
 
   /**

@@ -80,7 +80,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading1,
       fontSize: '1.6em',
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -88,7 +88,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading2,
       fontSize: '1.42em',
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -96,7 +96,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading3,
       fontSize: '1.28em',
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -104,7 +104,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading4,
       fontSize: '1.17em',
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -112,7 +112,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading5,
       fontSize: '1.08em',
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -120,7 +120,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading6,
       fontSize: '1.0em',
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',

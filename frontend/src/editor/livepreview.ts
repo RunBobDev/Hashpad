@@ -891,8 +891,14 @@ const liveTypography: Extension = [
     // `preview.css` gives every heading `line-height: 1.25`. Without it the
     // editor's 1.6 leaves leading below the text, and the rule below measured
     // 11px from the heading against reading view's 6px.
+    //
+    // **`--line-heading`, not the literal it used to be.** `highlight.ts` needs
+    // the same cap for the same reason -- see that token in `variables.css` --
+    // and a literal here is a flat 1.25 that makes a heading line *taller* than
+    // it would otherwise be whenever `editor.lineHeight` is set below 1.25,
+    // which the setting allows down to 1.
     '.cm-line.cm-live-heading': {
-      lineHeight: '1.25',
+      lineHeight: 'var(--line-heading)',
     },
     // The same 6px gap and 1px rule `preview.css` puts under h1 and h2.
     //

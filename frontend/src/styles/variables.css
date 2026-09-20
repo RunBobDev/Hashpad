@@ -83,6 +83,28 @@
   --size-preview: calc(15px * var(--zoom));
   --line-editor: 1.6;
 
+  /* The leading a heading line gets. A scrolling number, not a look-and-feel
+     one.
+
+     `--line-editor` is unitless, so it resolves against each element's *own*
+     font size: at 1.6 a 1.6em h1 line box is 35.8px where an ordinary line is
+     22.4px. CodeMirror estimates every line it has not drawn yet at exactly one
+     line height, so each un-drawn heading is under-estimated by the difference,
+     and scrolling into one makes `EditorView.measure` compensate with a
+     `scrollTop` write -- which is the stutter reported in source and split
+     after Checkpoint L. Capping the heading's leading shrinks the gap between
+     the estimate and the truth.
+
+     1.25 is reading view's heading leading (preview.css line 87), so this
+     borrows a number already in the design rather than inventing one.
+
+     **`min()`, not a flat 1.25**, and that is the whole reason this is a token
+     rather than a literal in two files. `editor.lineHeight` ranges 1 to 3. At
+     1.0 a flat cap would make a heading line *taller* than it is now -- 1.25 x
+     1.6em against 1.0 x 1.6em -- and the drift worse, which is the opposite of
+     the point. Below 1.25 the user's own value is already tighter, so it wins. */
+  --line-heading: min(1.25, var(--line-editor));
+
   /* How wide a line of text may get before it stops growing with the window
      (settings.editor.maxContentWidth). Prose past about 90 characters is hard
      to track back to the next line, and a maximised window on a wide monitor is
