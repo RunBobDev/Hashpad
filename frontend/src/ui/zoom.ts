@@ -55,10 +55,22 @@ export function zoomLevel(): number {
  * browser treats the unshifted `=` as zoom-in for that reason. `Ctrl+NumpadAdd`
  * arrives as `+` already.
  *
- * `preventDefault` on the wheel path stops WebView2 doing its own page zoom on
- * top of ours -- which would scale the chrome, the one thing SPEC rules out.
- * The listener is `passive: false` because a passive listener is forbidden from
- * preventing anything, and Chromium defaults wheel listeners to passive.
+ * **The wheel listener is passive, and that is load-bearing.** It used to
+ * `preventDefault` to stop WebView2 running its own page zoom on top of ours --
+ * which would scale the chrome, the one thing SPEC rules out -- and a listener
+ * that cancels has to be registered `passive: false`.
+ *
+ * That one flag costs the whole application smooth scrolling. A non-passive
+ * `wheel` listener on `window` tells Chromium that any wheel tick anywhere on
+ * the page might be cancelled, so it cannot scroll on the compositor thread:
+ * every tick waits for this function to return before the page may move. With
+ * CodeMirror measuring a viewport on the same thread, that wait is visible, and
+ * it is what the owner reported as choppy scrolling in the editor.
+ *
+ * `main.go` now switches WebView2's built-in zoom off instead
+ * (`IsZoomControlEnabled: false`), so there is nothing left to cancel. **Do not
+ * reintroduce `preventDefault` here without also removing that**, and do not
+ * make this listener non-passive for any other reason.
  */
 export function mountZoom(target: Window = window): () => void {
   const onKey = (event: KeyboardEvent): void => {
@@ -72,13 +84,16 @@ export function mountZoom(target: Window = window): () => void {
 
   const onWheel = (event: WheelEvent): void => {
     if (!event.ctrlKey) return;
-    event.preventDefault();
     if (event.deltaY < 0) zoomIn();
     else if (event.deltaY > 0) zoomOut();
   };
 
   target.addEventListener('keydown', onKey);
-  target.addEventListener('wheel', onWheel, { passive: false });
+  // `passive: true` is stated rather than left to the default, because the
+  // default is what it is only for wheel listeners on window/document and
+  // reading it as "no opinion" is how the `false` got here. See the comment
+  // above: this flag is the difference between compositor scrolling and not.
+  target.addEventListener('wheel', onWheel, { passive: true });
   return () => {
     target.removeEventListener('keydown', onKey);
     target.removeEventListener('wheel', onWheel);

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { mountZoom, zoomIn, zoomLevel, zoomOut, zoomReset } from './zoom';
 
@@ -105,14 +105,40 @@ describe('mountZoom', () => {
   }
 
   /**
-   * `preventDefault` matters more here than the zoom does: without it WebView2
-   * runs its own page zoom on top of ours, which scales the chrome -- the one
-   * thing SPEC §6.6 rules out.
+   * **The wheel listener staying passive matters more here than the zoom
+   * does**, which is the reverse of what this test used to say.
+   *
+   * It used to `preventDefault` so WebView2 would not run its own page zoom on
+   * top of ours (SPEC §6.6 rules that out -- it scales the chrome), and a
+   * listener that cancels has to be registered `passive: false`. That flag
+   * tells Chromium any wheel tick on the page might be cancelled, so none of
+   * them may scroll on the compositor thread: every tick waits on the main
+   * thread, where CodeMirror is measuring. Reported as choppy scrolling.
+   *
+   * `main.go` switches the built-in zoom off (`IsZoomControlEnabled: false`)
+   * so there is nothing left to cancel.
+   *
+   * Both halves are asserted. The flag is the thing that regresses. And
+   * `defaultPrevented` is checked because a `preventDefault()` added back would
+   * be *silently ignored* on a passive listener -- the zoom would still look
+   * right while the scrolling quietly got worse, which is precisely the failure
+   * that would otherwise ship unnoticed.
    */
-  it('zooms on Ctrl+scroll and prevents the browser doing it too', () => {
+  it('registers the wheel listener as passive', () => {
+    const spy = vi.spyOn(window, 'addEventListener');
+    const stop = mountZoom(window);
+    const wheelCall = spy.mock.calls.find(([type]) => type === 'wheel');
+    stop();
+    spy.mockRestore();
+
+    expect(wheelCall).toBeDefined();
+    expect(wheelCall![2]).toEqual({ passive: true });
+  });
+
+  it('zooms on Ctrl+scroll without cancelling the event', () => {
     const up = wheel(-100);
     expect(zoomLevel()).toBeGreaterThan(1);
-    expect(up.defaultPrevented).toBe(true);
+    expect(up.defaultPrevented).toBe(false);
 
     wheel(100);
     expect(zoomLevel()).toBeCloseTo(1, 5);

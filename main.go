@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
@@ -105,7 +106,34 @@ func main() {
 				application.OpenFromCommandLine(data.Args, data.WorkingDirectory)
 			},
 		},
-		Bind: []interface{}{application},
+		// **This exists so that scrolling is smooth**, which is not obvious from
+		// the name, so: WebView2 ships its own Ctrl+scroll and Ctrl+/- page
+		// zoom, and SPEC §6.6 rules it out because it scales the chrome.
+		// frontend/src/ui/zoom.ts therefore used to cancel the wheel event --
+		// and a `wheel` listener that can cancel must be registered
+		// `passive: false`, which tells Chromium every wheel tick on the page
+		// might be prevented. Chromium then cannot scroll on the compositor
+		// thread: each tick waits for JavaScript, so anything slow on the main
+		// thread (CodeMirror measuring a viewport, say) lands as a stutter in
+		// the scroll itself.
+		//
+		// Turning the built-in zoom off here means nothing needs cancelling,
+		// so that listener is passive and the compositor scrolls again.
+		// Hashpad's own zoom is untouched: it reads the wheel event, it never
+		// had to prevent it.
+		//
+		// **A non-nil `Windows` is not free**, and it is the only reason to
+		// think twice about this. Wails reads the struct in several places that
+		// are otherwise skipped entirely, and one of them has an effect:
+		// `NewWindow` sets `WS_EX_CONTROLPARENT | WS_EX_APPWINDOW` on the
+		// window only when this is non-nil (it is 0 when nil). Both are
+		// ordinary for a top-level window -- a taskbar button, and tab
+		// navigation recursing into child controls -- and every Wails app that
+		// sets any Windows option gets them. The other branches read fields
+		// whose zero values match the nil path exactly, `Theme` included
+		// (`SystemDefault` is 0).
+		Windows: &windows.Options{IsZoomControlEnabled: false},
+		Bind:    []interface{}{application},
 	})
 	if err != nil {
 		// wails.Run only returns on failure to start (for example, the webview

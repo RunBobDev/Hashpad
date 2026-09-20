@@ -2799,7 +2799,48 @@ the wheel's own animation is a different mechanism and is on by default.
 
 ### Open
 
-### Shipped, unverified
+### The height map was not it
+
+The first fix cut the estimation error by roughly three quarters and **changed
+nothing** — reported as still choppy. That kills the theory, and it agrees with
+the measurement that never supported it: the visible movement error was zero all
+along. Whatever CodeMirror's `scrollTop` writes are doing, a person cannot see
+them.
+
+Kept anyway, because it is right on its own terms and costs nothing — but it is
+no longer offered as the fix. See below.
+
+### What was actually wrong: the page could not scroll on the compositor
+
+`ui/zoom.ts` registered its `wheel` listener on `window` as `passive: false`,
+because it called `preventDefault()` to stop WebView2 running its own page zoom
+on top of Hashpad's (SPEC §6.6: zoom must not scale the chrome).
+
+**That one flag takes the whole application off compositor-thread scrolling.** A
+non-passive `wheel` listener tells Chromium that any tick anywhere on the page
+might be cancelled, so no tick may be applied until JavaScript has run and
+declined to cancel it. Every wheel event then queues behind whatever the main
+thread is doing — and in the editor that is CodeMirror measuring a viewport,
+recomputing decorations, plus the outline's `refreshActive` reading
+`lineBlockAtHeight` out of a scroll handler. The preview pane is static HTML and
+has no such work, which is why only the editor was reported as bad.
+
+`main.go` now sets `Windows: &windows.Options{IsZoomControlEnabled: false}`, so
+WebView2's built-in zoom is gone and there is nothing left to cancel. The
+listener is `passive: true`; Hashpad's own zoom is unaffected, because it only
+ever *read* the event.
+
+- [ ] **Is the choppiness gone?** Still only answerable by a person on a real
+      build — see the note on smooth scrolling above.
+- [ ] **Does Ctrl+scroll still zoom, and still leave the chrome alone?** The
+      mechanism moved, so this is worth one deliberate check.
+- [ ] **Does Ctrl+Plus / Ctrl+Minus / Ctrl+0 still zoom?** Those go through
+      `keydown`, which is untouched, but WebView2's own handling of them is now
+      off as well.
+- [ ] **Anything odd about the window itself?** A non-nil `Windows` gives it
+      `WS_EX_CONTROLPARENT | WS_EX_APPWINDOW`, which it did not have before.
+
+### Also shipped: the heading line cap
 
 Live mode already caps heading lines at `line-height: 1.25` (`livepreview.ts`,
 `liveTypography`), which is the one difference between it and the modes that
