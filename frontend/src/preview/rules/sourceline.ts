@@ -21,11 +21,31 @@
 // publishes `.`, `./browser` and `./package.json`, so that deep import fails
 // to resolve (TS2307) even though @types/markdown-it still ships a
 // declaration file at that path.
-import type { MarkdownIt, StateCore } from 'markdown-it';
+import type { MarkdownIt, StateCore, Token } from 'markdown-it';
 
 /** Collected during rendering; read back through the env. */
 export interface SourceLineEnv {
   anchors?: number[];
+}
+
+/**
+ * The `data-source-line` attribute for a token, as an HTML fragment, or `''`.
+ *
+ * **For rules that write their own HTML string**, which is where this keeps
+ * going wrong. markdown-it renders a token's attributes for you; a renderer
+ * that builds its own markup does that itself, and silently drops everything it
+ * does not mention -- turning that block into a hole in the scroll-sync map.
+ *
+ * Both L's rules hit it. `rules/mermaid.ts` was written with the attribute
+ * copied by hand; `rules/math.ts` was not, and its display blocks went
+ * unanchored until someone asked whether the checkpoint was actually finished.
+ * One helper, in the file that owns the attribute, so the next such rule has
+ * something to reach for rather than a precedent to miss.
+ */
+export function sourceLineAttr(md: MarkdownIt, token: Token): string {
+  const line = token.attrGet('data-source-line');
+  if (line === null) return '';
+  return ` data-source-line="${md.utils.escapeHtml(String(line))}"`;
 }
 
 export function sourceLinePlugin(md: MarkdownIt): void {

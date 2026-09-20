@@ -1619,3 +1619,30 @@ pays for the ones nobody uses.
 entry point to switch to. The lever, if the binary ever needs it back, is
 stubbing the exotic diagram types out of the module graph — not a different
 build of Mermaid.
+
+#### 4.29e Two gaps in the scroll-sync map, found by being asked
+
+Both rules write their own HTML string, and **markdown-it renders a token's
+attributes only for tokens it renders itself**. `rules/sourceline.ts` stamps
+`data-source-line` on every block token with a `map`; a renderer that builds its
+own markup drops it unless it copies it across.
+
+`rules/mermaid.ts` copied it. `rules/math.ts` did not, and **shipped every `$$`
+block as a hole in the scroll-sync map** -- a tall hole, in exactly the place the
+tallest blocks are. Both now share `sourceLineAttr`, exported from the file that
+owns the attribute so the next such rule has something to reach for rather than
+a precedent to miss.
+
+**And a diagram changes height after it is measured.** The pane measures anchors
+lazily, on the first scroll that needs them, and invalidates them on a render, a
+divider drag, a window resize, an editor reflow, and an `<img>` firing `load`.
+Inserting an `<svg>` fires nothing at all, so a diagram drawn for the first time
+-- hundreds of milliseconds after the render that created it, turning two lines
+of placeholder text into a picture -- left the mapping describing content that
+had moved. Opening a document with a diagram and scrolling straight away kept
+that mapping until the next keystroke. `renderDiagramsIn`'s promise settling is
+the only signal available, so `pane.ts` invalidates on it.
+
+Neither was caught by anything. Both were found by the owner asking whether the
+checkpoint was actually finished, which is the honest record of how: the tests
+that cover them now were written after the question, not before it.

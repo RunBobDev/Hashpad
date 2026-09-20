@@ -81,6 +81,21 @@ vi.mock('./codehighlight', async (importOriginal) => {
   };
 });
 
+/**
+ * Diagrams, stubbed so the pane's own behaviour can be tested without Mermaid
+ * -- which cannot run under jsdom at all (`mermaid.render` calls `getBBox`).
+ *
+ * Defaults to an already-resolved render, so every case but one behaves exactly
+ * as it did before diagrams existed. `deferDiagrams` lets a single test hold the
+ * promise open and decide when the diagram "finishes".
+ */
+let deferDiagrams: { promise: Promise<void>; resolve: () => void } | null = null;
+
+vi.mock('./diagrams', () => ({
+  onDiagramsLoaded: () => () => {},
+  renderDiagramsIn: () => deferDiagrams?.promise ?? Promise.resolve(),
+}));
+
 vi.mock('../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
 
 /**
@@ -754,14 +769,18 @@ describe('scroll sync', () => {
      */
     async function expectRemeasured(
       mounted: ReturnType<typeof mountSynced>,
-      disturb: () => void,
+      // Async-capable: a diagram finishing is a settled promise rather than an
+      // event, so that case needs a turn before the anchors are gone. The four
+      // synchronous callers return `undefined`, which `await` passes straight
+      // through.
+      disturb: () => void | Promise<void>,
     ): Promise<void> {
       const pane = paneOf(mounted.split);
       scrollEditorToLine(mounted.view, 3);
       expect(pane.scrollTop).toBe(600);
       await nextFrame();
 
-      disturb();
+      await disturb();
       giveAnchorTops(pane, [0, 12, 500]);
       scrollEditorToLine(mounted.view, 3);
 
@@ -803,6 +822,41 @@ describe('scroll sync', () => {
         paneOf(mounted.split).append(image);
         image.dispatchEvent(new Event('load'));
       });
+    });
+
+    /**
+     * **The fifth way, and the only one with no event behind it.**
+     *
+     * A diagram is placeholder text until Mermaid finishes with it, and then it
+     * is a picture — a height change of the same order as the tall image above,
+     * arriving hundreds of milliseconds after the render that created it. An
+     * `<img>` announces itself with `load`; **inserting an `<svg>` announces
+     * nothing at all**, so the promise settling is the only signal there is.
+     *
+     * Without this, opening a document with a diagram and scrolling straight
+     * away measures the placeholders and keeps that mapping until the next
+     * keystroke. Found by asking whether the checkpoint was finished rather
+     * than by any check, which is why it has one now.
+     */
+    it('re-measures when a diagram finishes drawing', async () => {
+      let settle!: () => void;
+      deferDiagrams = {
+        promise: new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+        resolve: () => {
+          settle();
+        },
+      };
+
+      const mounted = mountSynced();
+      await expectRemeasured(mounted, async () => {
+        deferDiagrams!.resolve();
+        // One turn, so the `.finally` that clears the anchors has run.
+        await Promise.resolve();
+      });
+
+      deferDiagrams = null;
     });
 
     /**

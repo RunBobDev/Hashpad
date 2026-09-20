@@ -526,3 +526,65 @@ describe('mermaid fences', () => {
     ).toEqual(['first\n', 'second\n']);
   });
 });
+
+/* ---- L: the scroll-sync anchors both new rules nearly lost --------------- */
+
+/**
+ * **A rule that writes its own HTML string drops the token's attributes**, and
+ * both of L's rules do write their own. `rules/sourceline.ts` stamps
+ * `data-source-line` on every block token with a `map`, and markdown-it renders
+ * a token's attributes only for tokens it renders itself.
+ *
+ * `rules/mermaid.ts` was written with the anchor copied across; `rules/math.ts`
+ * was not, and shipped every `$$` block as a hole in the scroll-sync map --
+ * found by being asked whether the checkpoint was actually finished, not by any
+ * check here. Both now share `sourceLineAttr`, and this is what stops either
+ * losing it again.
+ *
+ * The anchors matter most for exactly these two blocks: a display equation and
+ * a diagram are the tallest things a document contains, so a missing anchor
+ * there is the largest possible error in the mapping.
+ */
+describe('block-level anchors for math and diagrams', () => {
+  const FENCE = '```';
+
+  it('anchors a display equation to its own line', () => {
+    const { doc, anchors } = render('# T\n\npara\n\n$$\nx = 1\n$$\n\nafter\n');
+
+    expect(doc.querySelector(`.${MATH_DISPLAY_CLASS}`)?.getAttribute('data-source-line')).toBe('5');
+    expect(anchors).toContain(5);
+  });
+
+  it('anchors a one-line display equation too', () => {
+    const { doc } = render('para\n\n$$ x = 1 $$\n\nafter\n');
+    expect(doc.querySelector(`.${MATH_DISPLAY_CLASS}`)?.getAttribute('data-source-line')).toBe('3');
+  });
+
+  it('anchors a diagram to its fence', () => {
+    const { doc, anchors } = render(`# T\n\npara\n\n${FENCE}mermaid\ngraph TD;\n${FENCE}\n`);
+
+    expect(doc.querySelector(`.${DIAGRAM_CLASS}`)?.getAttribute('data-source-line')).toBe('5');
+    expect(anchors).toContain(5);
+  });
+
+  /**
+   * Inline math is *inside* a paragraph, and only the paragraph carries a map.
+   * So it has no anchor of its own and should not have one -- the paragraph is
+   * the block the mapping is about.
+   */
+  it('does not anchor inline math, which belongs to its paragraph', () => {
+    const { doc } = render('a paragraph with $x$ in it\n');
+
+    expect(doc.querySelector(`.${MATH_INLINE_CLASS}`)?.hasAttribute('data-source-line')).toBe(
+      false,
+    );
+    expect(doc.querySelector('p')?.getAttribute('data-source-line')).toBe('1');
+  });
+
+  /** Every block in a document of nothing but these two still maps. */
+  it('leaves no gaps in a document of equations and diagrams', () => {
+    const { anchors } = render(`$$\na\n$$\n\n${FENCE}mermaid\ngraph TD;\n${FENCE}\n\n$$\nb\n$$\n`);
+
+    expect(anchors).toEqual([1, 5, 9]);
+  });
+});

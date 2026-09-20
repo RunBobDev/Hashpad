@@ -2708,3 +2708,26 @@ asserted in prose have become tests or measurements:
 - **Cold start is provisional.** `WaitForInputIdle` measures a message loop
   pumping, not first paint. A trustworthy number needs the frontend to report
   its own first render, which nothing does yet.
+
+### Scroll sync with math and diagrams
+
+Both were broken when L first shipped and are fixed; these are the checks that
+would have caught them.
+
+- [ ] **A document with a tall display equation part-way down.** Scroll the
+      editor so the equation is at the top; the preview should land on it, not
+      a screenful away. A `$$` block used to carry no source-line anchor at all,
+      so the mapping jumped straight from the paragraph above it to the one
+      below.
+- [ ] **The same with a diagram.**
+- [ ] **Open a document containing a diagram and scroll immediately**, before
+      the diagram has drawn. Once it appears, scroll sync must still line up.
+      The anchors are measured on that first scroll, when the diagram is still
+      two lines of placeholder text; an `<svg>` appearing fires no event, so
+      nothing used to tell the pane its measurements had gone stale.
+- [ ] **Ctrl+scroll to zoom with a diagram on screen.** Known ceiling: the math
+      scales with the text because KaTeX sizes in `em`; a Mermaid SVG has a
+      fixed intrinsic size and only shrinks to fit the pane, so it does not
+      grow with the font. Not a defect, but worth knowing before it is reported
+      as one.
+

@@ -24,6 +24,7 @@
 // as named types from the package root rather than a `markdown-it/lib/...`
 // subpath.
 import type { MarkdownIt, StateBlock, StateInline } from 'markdown-it';
+import { sourceLineAttr } from './sourceline';
 
 const DOLLAR = 0x24;
 
@@ -187,10 +188,18 @@ export function mathPlugin(md: MarkdownIt): void {
   md.renderer.rules.math_inline = (tokens, index) =>
     `<span class="${MATH_INLINE_CLASS}">${md.utils.escapeHtml(tokens[index]!.content)}</span>`;
 
-  const display = (content: string): string =>
-    `<div class="${MATH_DISPLAY_CLASS}">${md.utils.escapeHtml(content)}</div>`;
-
-  md.renderer.rules.math_block = (tokens, index) => `${display(tokens[index]!.content)}\n`;
+  // **The anchor is carried by hand**, because this renderer writes its own
+  // HTML and markdown-it only renders attributes for tokens it renders itself.
+  // A display equation is a block with a `map`, so `sourceLinePlugin` stamps
+  // one -- and dropping it made every `$$` block a hole in the scroll-sync map,
+  // which is a tall hole in exactly the place the tallest blocks are.
+  md.renderer.rules.math_block = (tokens, index) => {
+    const token = tokens[index]!;
+    return (
+      `<div class="${MATH_DISPLAY_CLASS}"${sourceLineAttr(md, token)}>` +
+      `${md.utils.escapeHtml(token.content)}</div>\n`
+    );
+  };
   // `$$x$$` inside a paragraph. A `<div>` inside a `<p>` is invalid HTML and
   // the browser closes the paragraph around it, so this one stays a span and
   // takes the display class as a modifier instead.

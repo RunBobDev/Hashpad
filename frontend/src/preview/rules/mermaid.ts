@@ -17,6 +17,7 @@
 // See sourceline.ts for why this imports `MarkdownIt` as a named type from the
 // package root rather than a `markdown-it/lib/...` subpath.
 import type { MarkdownIt } from 'markdown-it';
+import { sourceLineAttr } from './sourceline';
 
 /** The class `preview/diagrams.ts` looks for, shared so the two cannot drift. */
 export const DIAGRAM_CLASS = 'preview-mermaid';
@@ -47,12 +48,14 @@ export function mermaidPlugin(md: MarkdownIt): void {
     // original back with `textContent`. The same arrangement math uses, and for
     // the same reason.
     //
-    // `data-source-line` is copied across by hand because `rules/sourceline.ts`
-    // stamps it on the token, and a rule that writes its own HTML string
-    // bypasses the attribute-rendering markdown-it would otherwise do. Without
-    // it a document's diagrams are holes in the scroll-sync map.
-    const line = token.attrGet('data-source-line');
-    const anchor = line === null ? '' : ` data-source-line="${md.utils.escapeHtml(String(line))}"`;
-    return `<div class="${DIAGRAM_CLASS}"${anchor}>${md.utils.escapeHtml(token.content)}</div>\n`;
+    // `sourceLineAttr` rather than a hand-rolled copy: a rule that writes its
+    // own HTML string bypasses the attribute rendering markdown-it would
+    // otherwise do, and without the anchor a document's diagrams are holes in
+    // the scroll-sync map. `rules/math.ts` made exactly that mistake, which is
+    // why the helper now lives in the file that owns the attribute.
+    return (
+      `<div class="${DIAGRAM_CLASS}"${sourceLineAttr(md, token)}>` +
+      `${md.utils.escapeHtml(token.content)}</div>\n`
+    );
   };
 }

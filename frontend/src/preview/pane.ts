@@ -201,7 +201,21 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
       // keystroke in a document with a diagram wait for the diagram. Cached
       // diagrams are already back on screen by the time this returns -- the
       // synchronous half of `renderDiagramsIn` does that before it yields.
-      void renderDiagramsIn(pane, store.getState().isDark);
+      //
+      // **But the anchors have to be invalidated when it finishes**, and this
+      // is the one content-height change in the pane that nothing else catches.
+      // A diagram drawn from cache is in place before anyone can measure; a
+      // diagram drawn for the first time lands hundreds of milliseconds later,
+      // turning two lines of placeholder text into a picture. An `<img>`
+      // arriving is covered by the `load` listener below -- **inserting an
+      // `<svg>` fires no event at all.** Without this, opening a document with
+      // a diagram and scrolling straight away measures the placeholders and
+      // keeps that mapping until the next keystroke.
+      //
+      // `finally`, so a rejection cannot leave the anchors describing content
+      // that has moved. `renderDiagramsIn` catches per diagram and should not
+      // reject, which is exactly the assumption worth not relying on here.
+      void renderDiagramsIn(pane, store.getState().isDark).finally(invalidateAnchors);
     } catch (error) {
       // A renderer that throws must not leave the last good render on screen
       // pretending to be current, so this replaces the content rather than
