@@ -177,9 +177,12 @@ declare global {
       which: string;
       direction: string;
       steps: number;
-      reversals: number;
-      worst: number;
-      drifts: number[];
+      /** Times CodeMirror wrote `scrollTop` to compensate a height correction. */
+      corrections: number;
+      worstCorrection: number;
+      /** Times the content moved on screen by something other than the step. */
+      visualJumps: number;
+      worstVisual: number;
     }>;
   }
 }
@@ -272,52 +275,90 @@ window.caretTo = (line: number) => {
  *
  * Owner report after Checkpoint L: scrolling down jumps a little up every few
  * ticks, and scrolling up jumps a little down -- in every view mode *except*
- * live preview. The obvious suspect was the preview pane's scroll sync, which
- * L had touched. It was not: a pane-side probe found nothing in either
- * direction, and the editor drifts here with **no preview pane on the page at
- * all**.
+ * live preview. The panels here are the same editor with the feature on and
+ * off, which is exactly the comparison that report draws, and why the probe
+ * belongs on this page rather than a new one.
  *
- * This is the measurement that localised it, and the reason it belongs on this
- * page rather than a new one: the two panels are the same editor with live
- * preview on and off, which is exactly the comparison the report draws.
+ * **Two numbers, because the obvious one is the wrong one.** CodeMirror
+ * corrects its own height estimates as lines render, and compensates by writing
+ * `scrollDOM.scrollTop += diff` (`@codemirror/view`, `EditorView.measure`, the
+ * `scrollAnchorHeight` block). So `scrollTop` moving against the direction of
+ * travel is *expected* and says nothing about what a person sees: the whole
+ * point of the write is to hold the content still while the numbers move under
+ * it. `corrections` counts those writes. `visualJumps` is the one that matters
+ * -- it tracks a real document position's screen coordinates through the step
+ * and reports how far the content moved *other* than by the amount asked for.
  *
- * Measured: the OFF panel reversed on 1 of 20 steps scrolling down and 3 of 20
- * scrolling up (worst 50 px); the ON panel reversed on none of 40. It is
- * intermittent and depends on the document's shape -- a run of short paragraphs
- * showed it, four hundred long wrapping lines did not -- which is consistent
- * with CodeMirror correcting an estimated height as lines actually render, and
- * is why stepping `scrollTop` is only a rough model of a real wheel.
+ * Measured, 2026-09-20: on a heading-dense document, corrections of 13 and
+ * 16 px in **both** panels, with the scroll height moving 30-68 px in the same
+ * step; on a realistically-shaped one, none in either over 240 steps. Visual
+ * jumps: zero, everywhere, always.
  *
- * `dir` is 1 for down, -1 for up. A "reversal" is movement *against* the
- * direction of travel, which is what a person feels as a stutter.
+ * **This page cannot show the reported symptom, and the reason is worth
+ * knowing.** Native smooth wheel scrolling is the one ingredient it needs, and
+ * the automation browser this was driven from has it switched off --
+ * `scrollBy({ behavior: 'smooth' })` there moves nothing at all. Stepping
+ * `scrollTop` is an instant scroll, which gives CodeMirror's compensation a
+ * still target to land on. WebView2 on Windows animates a wheel tick over
+ * dozens of frames instead. So a clean run here is evidence about the height
+ * map, not about the wheel.
+ *
+ * `dir` is 1 for down, -1 for up.
  */
-window.scrollDrift = async (which, dir = 1, steps = 20) => {
+window.scrollDrift = async (which, dir = 1, steps = 30) => {
   const view = which === 'live' ? on : off;
   const scroller = view.scrollDOM;
-  const max = scroller.scrollHeight - scroller.clientHeight;
   const wait = (ms: number): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, ms));
 
-  scroller.scrollTop = dir > 0 ? 500 : max - 500;
-  await wait(300);
+  // From an end, not from the middle: the drift lives in never-measured lines,
+  // and starting anywhere the probe has already been warms the height map.
+  scroller.scrollTop = dir > 0 ? 0 : scroller.scrollHeight - scroller.clientHeight;
+  await wait(400);
 
-  const drifts: number[] = [];
+  let taken = 0;
+  let corrections = 0;
+  let worstCorrection = 0;
+  let visualJumps = 0;
+  let worstVisual = 0;
+
   for (let i = 0; i < steps; i++) {
-    const set = Math.round(scroller.scrollTop) + dir * 120;
+    const box = scroller.getBoundingClientRect();
+    // A document position halfway down the viewport, followed by its screen
+    // coordinates rather than by the height map's opinion of them.
+    const pos = view.posAtCoords({ x: box.left + 20, y: box.top + scroller.clientHeight / 2 });
+    const before = pos === null ? null : view.coordsAtPos(pos);
+
+    const want = Math.round(scroller.scrollTop) + dir * 90;
     // Stop before the ends: past them the browser clamps, and a clamp is not a
     // drift however much it looks like one in the numbers.
-    if (set <= 0 || set >= max - 120) break;
-    scroller.scrollTop = set;
-    await wait(120);
-    drifts.push(Math.round(scroller.scrollTop) - set);
+    if (want <= 0 || want >= scroller.scrollHeight - scroller.clientHeight) break;
+    scroller.scrollTop = want;
+    await wait(90);
+    taken++;
+
+    const correction = Math.round(scroller.scrollTop) - want;
+    if (correction !== 0) {
+      corrections++;
+      worstCorrection = Math.max(worstCorrection, Math.abs(correction));
+    }
+
+    const after = pos === null ? null : view.coordsAtPos(pos);
+    if (before !== null && after !== null) {
+      const error = Math.round(before.top - after.top) - dir * 90;
+      if (Math.abs(error) > 1) {
+        visualJumps++;
+        worstVisual = Math.max(worstVisual, Math.abs(error));
+      }
+    }
   }
 
-  const reversals = drifts.filter((d) => (dir > 0 ? d < 0 : d > 0));
   return {
     which,
     direction: dir > 0 ? 'down' : 'up',
-    steps: drifts.length,
-    reversals: reversals.length,
-    worst: reversals.length === 0 ? 0 : Math.max(...reversals.map((d) => Math.abs(d))),
-    drifts,
+    steps: taken,
+    corrections,
+    worstCorrection,
+    visualJumps,
+    worstVisual,
   };
 };

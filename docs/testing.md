@@ -2742,33 +2742,80 @@ little up every few ticks; scrolling up jumps a little down. In every view mode
 
 **It is the editor, not the preview pane.** The obvious suspect was scroll sync,
 which L had touched. It is not: a pane-side probe found no pull in either
-direction, and the drift reproduces in `harness/livepreview.html`, which has no
-preview pane on the page at all. `git diff` across the whole of Checkpoint L
-shows **no change to `frontend/src/editor/`**, and the only editor changes since
-0.4.0 are live-preview-only.
+direction, and the numbers below reproduce in `harness/livepreview.html`, which
+has no preview pane on the page at all. `git diff` across the whole of
+Checkpoint L shows **no change to `frontend/src/editor/`**, and the only editor
+changes since 0.4.0 are live-preview-only. Confirmed by the owner: the editor is
+what moves, in source and in split, a few pixels at a time.
 
 **Why it looks new.** Both view-mode settings have been on live preview since
 0.4.0, so a long document has rarely been scrolled in any other mode since then.
 
-Measured with `window.scrollDrift('source' | 'live', dir)` in that harness:
+### The mechanism
 
-| | down | up |
-|---|---|---|
-| live preview off | 1 reversal in 20, worst 9 px | 3 in 20, worst 50 px |
-| live preview on | 0 in 20 | 0 in 20 |
+CodeMirror estimates the height of every line it has not drawn at exactly one
+line height — `HeightOracle.heightForLine` returns `this.lineHeight` when
+wrapping is off — and `--line-editor: 1.6` against `--size-editor: 14px` makes
+that 22.4 px. A heading line is not 22.4 px: `highlight.ts` gives `heading1`
+`font-size: 1.6em`, and the same unitless 1.6 line height then resolves against
+*that*, for 35.8 px. **Every un-drawn h1 is therefore under-estimated by
+13.4 px**, and scrolling into it corrects the height map.
 
-It is intermittent and depends on the document's shape — a run of short
-paragraphs showed it; four hundred long wrapping lines did not — which is
-consistent with CodeMirror correcting an estimated line height as lines actually
-render. Why live preview is immune is **not established**; the plausible reason
-is that its view plugins re-measure the viewport on every update, but that is a
-hypothesis rather than a finding.
+CodeMirror compensates for its own correction. `EditorView.measure` anchors on
+the line 8 px below the top of the viewport, and if that line's `top` has moved
+by more than a pixel it writes `scrollDOM.scrollTop += diff` and measures again.
+That write is the "drift" — and the arithmetic above is where its size comes
+from: observed corrections of **13 px and 16 px**, against a predicted 13.4.
 
-- [ ] **Confirm which scroller drifts.** In split mode, does the *editor* move
-      under the pointer, or the *preview*? Both were suspected; only the editor
-      reproduces here.
-- [ ] **Does it happen in source mode with the preview never opened?** That
-      rules the preview module out entirely rather than by inference.
+Observed, and **not reproducible on demand**: later runs of the same steps over
+the same document corrected nothing at all, and the panel's scroll height came
+out 8,800 px apart between two runs of the same load — so the two runs were not
+measuring the same layout, and what differed was not established. (Not webfonts:
+`--font-editor` and `--font-preview` are system stacks and there is no
+`@font-face` outside KaTeX's own.) Treat the two numbers as a sighting that
+matches the arithmetic, not as a measurement that can be repeated to order.
+
+### What that does *not* explain
+
+**The compensation is exact.** `window.scrollDrift` now reports two numbers, and
+the second is the one that matters: `visualJumps` follows a real document
+position's screen coordinates through each step, and measured **zero** — over
+50 steps on the heading-dense document that produced the corrections, and over
+240 steps across both panels on a realistically-shaped one. Holding the content
+still while `scrollTop` moves under it is the entire purpose of that write.
+
+So the arithmetic matches the symptom's size but not its visibility, and the gap
+is this: **native smooth wheel scrolling is the one ingredient the report needs,
+and it cannot be exercised from here.** The automation browser used for these
+runs has it switched off — `scrollBy({ behavior: 'smooth' })` moves nothing at
+all — so every step above is an *instant* scroll, which gives the compensation a
+still target to land on. WebView2 on Windows animates a wheel tick over dozens
+of frames, and a mid-animation `scrollTop +=` is a read-modify-write against a
+value the compositor is still changing.
+
+`preview/pane.ts` already records the same hazard from the other side, for
+`writeTo` under `scroll-behavior: smooth`. Nothing in `src/` sets that property;
+the wheel's own animation is a different mechanism and is on by default.
+
+### Open
+
+- [ ] **Does it survive making the estimate less wrong?** Live mode already
+      gives heading lines `line-height: 1.25` (`livepreview.ts`, `liveTypography`),
+      which both shrinks the per-line error and gives it two signs — an h6 at
+      1em × 1.25 is 4.9 px *under* 22.4 px where an h1 is 5.6 px over, so errors
+      partly cancel across a viewport instead of accumulating. Source mode has no
+      such rule. That is the best available explanation for the exemption and the
+      cheapest mitigation, but it changes the editor's leading, so it wants the
+      owner's eyes before it ships.
+- [ ] **Does it happen in source mode with the preview never opened?** Reported
+      as yes. Worth one deliberate check, because in that mode nothing in
+      Hashpad writes the editor's `scrollTop` at all — which would leave
+      CodeMirror's own compensation as the only candidate.
+- [ ] **Is split worse than source?** In split the pane sync writes the editor's
+      `scrollTop` as well, and a smooth wheel gesture fires many scroll events
+      where the echo guard expects roughly one per frame.
 - [ ] **Does word wrap change it?** Probed both ways with no difference, but on
-      a synthetic document.
+      a synthetic document and without smooth scrolling. Wrapping makes the
+      estimate a multiple of an estimate, so it should make this worse, not
+      better.
 
