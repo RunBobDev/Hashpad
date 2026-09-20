@@ -14,6 +14,8 @@ import DOMPurify, { type Config } from 'dompurify';
 import { highlightCode } from './codehighlight';
 import { frontMatterPlugin } from './rules/frontmatter';
 import { imagePlugin } from './rules/images';
+import { mathPlugin } from './rules/math';
+import { mermaidPlugin } from './rules/mermaid';
 import { sourceLinePlugin, type SourceLineEnv } from './rules/sourceline';
 import { taskListPlugin } from './rules/tasklist';
 
@@ -83,6 +85,15 @@ const md = new MarkdownIt({
   .use(frontMatterPlugin)
   .use(taskListPlugin)
   .use(imagePlugin)
+  // Before source lines for the same reason everything else is: that one is a
+  // core rule pushed last so it sees the finished token stream. Math is an
+  // inline and a block rule, so it has to be registered before parsing starts.
+  .use(mathPlugin)
+  // **After everything that could also want the fence rule.** This one wraps
+  // the renderer rather than replacing it, so whatever is registered when it
+  // runs is what a non-mermaid fence still gets -- including the `highlight`
+  // hook configured above.
+  .use(mermaidPlugin)
   .use(sourceLinePlugin);
 
 // Not `as const`: DOMPurify's `Config.FORBID_TAGS`/`FORBID_ATTR` are typed as

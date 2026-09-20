@@ -36,9 +36,11 @@
     "@lezer/highlight": "1.2.3",
     "@lezer/markdown": "1.7.2",
     "dompurify": "3.4.13",
+    "katex": "0.18.7",
     "markdown-it": "15.0.0",
     "markdown-it-footnote": "4.0.0",
     "markdown-it-mark": "4.0.0",
+    "mermaid": "12.0.0",
     "style-mod": "4.1.3"
   }
 }

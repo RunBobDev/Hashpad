@@ -1616,10 +1616,13 @@ describe('destroy', () => {
 
     handle.destroy();
 
-    // Two: the render subscription and the caret one added for the hybrid. The
-    // count is the assertion -- releasing one of two would otherwise look
-    // exactly like releasing both.
-    expect(released).toHaveBeenCalledTimes(2);
+    // Three: the render subscription, the caret one added for the hybrid, and
+    // the theme one L.2 needed -- Mermaid bakes its colours into the SVG, so a
+    // light/dark flip is a re-render rather than a restyle. The count is the
+    // assertion: releasing two of three would otherwise look exactly like
+    // releasing all three. It went from two to three because the new
+    // subscription *is* released -- had it not been, this would still read two.
+    expect(released).toHaveBeenCalledTimes(3);
   });
 
   /** Same hole, same reasoning: the mocked `onLanguageLoaded` is the witness. */

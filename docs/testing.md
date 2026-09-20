@@ -1410,7 +1410,7 @@ is why that list is load-bearing security rather than a content-type nicety.
 - [ ] **A document saved at a drive root** (`C:\notes.md`) still shows its
       images — that path shape is what the anchoring check exists for.
 
-## The three budgets (SPEC §1.3)
+## The three budgets (SPEC §2.3)
 
 Binary under 25 MB, cold start under 500 ms, under 100 MB RAM with five tabs.
 The RAM one is a **recorded miss** — see design §4.21. It is a Chromium floor,
@@ -1865,7 +1865,7 @@ SPEC 9's six targets, plus a few that fell out of them. Every one was run except
     task build:all          all three
     task test               both suites
     task lint               gofmt, go vet, tsc, eslint, prettier
-    task measure            the SPEC 1.3 budget report
+    task measure            the SPEC 2.3 budget report
 
 ### The one that needs a person
 
@@ -1891,24 +1891,37 @@ executable that is simply not portable.
 
 ### Latest budget report
 
-Measured with `task measure`, one empty document, on a VMware VM with a virtual
-GPU, so the startup figure is pessimistic against real hardware.
+Measured with `task measure` after L.2, one empty document, on a VMware VM with
+a virtual GPU, so the startup figure is pessimistic against real hardware.
 
-| Budget | SPEC 1.3 | Measured | |
+| Budget | SPEC 2.3 | Measured | |
 |---|---|---|---|
-| Binary size | 25 MB | 12.71 MB | pass |
-| Cold start | 500 ms | 46 ms median | pass, provisional |
-| Memory | 100 MB | 182.8 MB private commit, 7 processes | see design 4.21 |
+| Binary size | 25 MB | 18.14 MB | pass |
+| Cold start | 500 ms | 45.7 ms median | pass, provisional |
+| Memory | 100 MB | 170.2 MB private commit, 7 processes | see design 4.21 |
+
+**The binary grew 5.43 MB in Checkpoint L**, from 12.71 MB, essentially all of
+it Mermaid — the largest dependency in the project by a wide margin. KaTeX cost
+about 0.5 MB after the build was taught to ship woff2 only. 73% of the budget is
+now spent, which is worth knowing before the next large dependency is weighed.
+
+**Cold start did not move**: 46 ms before L, 45.7 ms after. That is the number
+SPEC §7.2 asks to be verified rather than assumed, and it is unchanged because
+both libraries are behind dynamic imports that a document without math or
+diagrams never triggers — proven separately by `math.test.ts` and
+`diagrams.test.ts`, which assert the module factory is never invoked, and by the
+entry bundle containing zero references to either library.
 
 The cold-start verdict is marked provisional by the script itself:
 `WaitForInputIdle` measures a message loop pumping, not first paint. The first
-of the five runs was 1074 ms against a median of 46, which is the disk cache
+of the five runs was 250 ms against a median of 46, which is the disk cache
 filling rather than a real spread.
 
-**`scripts/measure.ps1` still prints "Five-tab measurement lands with tabs at
-Checkpoint C".** Tabs shipped long ago; the note is stale and the script has not
-been taught to open five. The five-tab figure in design 4.21 was measured by
-hand instead.
+**The five-tab case is still measured by hand.** `scripts/measure.ps1` opens one
+empty document; it has never been taught to open five, and the figure in design
+4.21 was measured by hand on 2026-08-27. Automating it would not change the
+verdict — the budget is already exceeded with one document open, because
+WebView2 is six processes of its own.
 
 ## Checkpoint J.1 — reading view, and the two view-mode settings
 
@@ -2486,3 +2499,212 @@ The measurement, not a feature. §7.1 asks for "no perceptible input lag in a
       is slow to type in — and is slow with live preview off too, by most of
       the same margin. The base editor is the bottleneck there; see design
       §4.28a for the numbers.
+
+## Checkpoint L.1 — math in the preview (SPEC §7.2)
+
+`$inline$` and `$$block$$` render as typeset math in the preview pane. KaTeX is
+bundled, never fetched, and loaded only when a document actually contains math.
+
+**Live preview is deliberately not part of this.** §7.2 calls math in the editor
+a stretch goal rather than a requirement; `$x$` in live mode shows the source,
+exactly as it did before.
+
+**What "one flash" means.** The first document containing math in a session
+renders its LaTeX source, then swaps to typeset a moment later — that is the
+lazy load arriving, and it is a behaviour, not a defect. It happens once per
+session, not once per document.
+
+### It renders
+
+- [ ] **`$E = mc^2$` in a sentence** becomes typeset math, on the same line, at
+      roughly the surrounding text's size.
+- [ ] **`$$ … $$` on its own lines** becomes a centred display equation with
+      space above and below.
+- [ ] **`$$ x = 1 $$` written on one line** is also a display equation, not
+      inline math.
+- [ ] **`$$\alpha$$` inside a sentence** keeps the sentence in one paragraph.
+      If the text breaks into two paragraphs around it, the span became a
+      `<div>`.
+- [ ] **A very long equation scrolls inside its own box**, left and right. The
+      pane must not scroll sideways, and neither must the window. Narrow the
+      window until it bites.
+- [ ] **Reading mode and split mode both show it.** Same pane, same pipeline.
+- [ ] **Dark theme**: the math is the same colour as the body text, not black
+      on dark.
+- [ ] **Ctrl+= / Ctrl+-** scale the math along with the prose.
+
+### It does not render where it should not
+
+- [ ] **`I paid $5 and $10 for it`** stays as written. So does
+      **`it costs$20 more`** — that one is caught by a different guard, so it is
+      worth typing both.
+- [ ] **`\$5`** shows a dollar sign.
+- [ ] **`` `$PATH$` ``** in a code span, and `echo $HOME$` in a fence, stay
+      literal.
+- [ ] **A half-typed `$$` block** — opening delimiter, no closing one — leaves
+      the rest of the document alone. Type one and keep going: nothing below it
+      should disappear into an equation.
+
+### Errors and hostile input
+
+- [ ] **`$\frac{1}{$`** renders the broken source in red, in place, and
+      **everything else on the page still renders**. A whole-pane error card
+      here is the failure.
+- [ ] **Hover the red text**: a tooltip gives KaTeX's parse error.
+- [ ] **The red follows the theme.** KaTeX hard-codes `#cc0000` inline; the
+      override should give a lighter red on dark. If it is the same red in both
+      themes, the `!important` has been lost.
+- [ ] **`$\href{javascript:alert(1)}{click}$` is not a link.** Nothing to click,
+      no anchor. This is the one that matters: math is inserted past the
+      sanitiser, so KaTeX's own escaping is the only thing between a document
+      and the pane.
+- [ ] **`$\text{<img src=x onerror=alert(1)>}$`** shows as text, loads nothing.
+
+### Size and laziness
+
+- [ ] **A document with no math never loads KaTeX.** With the app open on a
+      plain document, `dist` should have served no `katex-*.js`.
+- [ ] **The build ships woff2 only.** No `.woff` or `.ttf` in `frontend/dist/assets`:
+
+      ls frontend/dist/assets | grep -E "\.(woff|ttf)$"
+
+      Anything listed means the Vite plugin stopped firing, and about 817 kB has
+      crept back into the binary.
+- [ ] **The math glyphs are KaTeX's**, not a fallback serif. A fraction bar,
+      a summation sign and an integral sign should all be properly formed. If
+      the fonts failed to load the layout still happens, just wrongly — which is
+      why this needs eyes rather than a test.
+
+## Checkpoint L.2 — Mermaid diagrams (SPEC §7.2)
+
+A ` ```mermaid ` fence renders as a diagram in the preview pane. Mermaid is
+bundled, never fetched, and its chunks load only when a document actually
+contains a diagram.
+
+**The one flash rule applies here too**: the first document with a diagram in a
+session shows the diagram source, then draws it a moment later. Once per
+session.
+
+**Almost nothing here is covered by the test suite, and that is not laziness.**
+`mermaid.render` calls `getBBox`, which jsdom does not implement, so the
+automated tests stub Mermaid entirely and cover only the machinery around it.
+Every visual claim below needs a person or the harness.
+
+### It draws
+
+- [ ] **A flowchart** (` ```mermaid ` then `graph TD; A-->B;`) draws, centred,
+      fitting the pane's width.
+- [ ] **A sequence diagram** draws.
+- [ ] **A wide diagram shrinks to fit** rather than making the pane scroll
+      sideways.
+- [ ] **Reading mode and split mode** both show it.
+- [ ] **A fence that is not mermaid is untouched** — ` ```js ` still gets syntax
+      highlighting, and an infoless fence is still a plain code block. This is
+      the one most likely to break silently, because the diagram rule *wraps*
+      the fence renderer rather than replacing it.
+
+### It stays fast while you type
+
+- [ ] **Type in a paragraph in a document containing two or three diagrams.**
+      The diagrams must not flicker, redraw or jump. They come back from the
+      cache on every keystroke; if they visibly re-draw, the cache key is wrong
+      and every keystroke is paying for a full Mermaid render.
+- [ ] **Type inside a diagram fence.** This one *is* slow — every keystroke is a
+      new diagram and Mermaid has to lay it out again. Expect it to lag behind.
+      What must not happen is the rest of the document locking up with it.
+
+### Errors
+
+- [ ] **Break a diagram** (`graph TD;` then `A --> ;;;`). It shows a "Diagram
+      error" card with the message and the source, **in place**. The rest of the
+      document still renders. A whole-pane error card is the failure.
+- [ ] **Fix it.** The diagram draws on the next keystroke — failures are not
+      cached, precisely so this works.
+- [ ] **A half-typed diagram** while you write it shows errors and then resolves.
+      Annoying but correct; what matters is that it stays contained.
+
+### Theme
+
+- [ ] **Flip light/dark with a diagram on screen.** The diagram re-colours. It
+      is the only thing in the pane that needs a re-render to do so — everything
+      else is CSS variables.
+- [ ] **Flip back.** Instant, from cache.
+
+### Hostile input
+
+- [ ] **A label containing `<img src=x onerror=alert(1)>`** renders as *visible
+      text*, not as an image. Mermaid's SVG is inserted past our sanitiser, so
+      this is the check that matters most. If you see a broken-image icon, the
+      `htmlLabels: false` setting has been lost.
+- [ ] **A label containing `<script>`** likewise renders as text.
+- [ ] **No leftover nodes.** With a broken diagram on screen, type a dozen
+      characters, then in the webview console:
+
+      document.querySelectorAll('[id^="dhashpad-mermaid-"]').length
+
+      It must be 0. Mermaid does not clean up after a failed render, and the
+      sweep that does is easy to lose in a refactor.
+
+### Size
+
+- [ ] **The binary is under 25 MB** (SPEC §2.3). It was 18.14 MB when L.2
+      shipped, up from 12.71 — Mermaid is the largest dependency in the project
+      by a wide margin.
+- [ ] **Cold start has not regressed.** `task measure` — it was 45.7 ms median
+      against a 500 ms budget, unchanged by Mermaid because nothing loads until
+      a diagram is on screen.
+- [ ] **A document with no diagrams loads no Mermaid chunk.** Open a plain
+      document and confirm nothing named `mermaid.core-*.js` was fetched.
+
+## Checkpoint L.3 — the budgets, verified
+
+A measurement checkpoint, like K.4 was. No feature; the deliverable is the
+numbers and the checks that keep them honest.
+
+**What is now mechanical, and needs no person.** Three claims that were being
+asserted in prose have become tests or measurements:
+
+- `math.test.ts` and `diagrams.test.ts` each assert the module factory is
+  **never invoked** for a document without math or diagrams. Both were written
+  first as "count the renders", which passes whether or not the chunk was
+  fetched; the math one was then found to pass even with the guard removed,
+  because it waited one microtask and a dynamic import takes longer. Both halves
+  now share one wait window, and the positive case proves the window is long
+  enough.
+- The built entry bundle contains **zero** references to `katex` or `mermaid`.
+  The pane chunk's only mentions are inside `import()` calls and our own class
+  names.
+- `task measure` reports the binary and cold start against SPEC §2.3, and the
+  report above is current as of L.2.
+
+### What still needs a person
+
+- [ ] **Open a plain document with the preview showing and confirm no chunk is
+      fetched.** The tests prove the import is not *started*; this confirms the
+      built app agrees. In the webview console:
+
+      performance.getEntriesByType('resource').filter(r => /katex|mermaid/.test(r.name))
+
+      Empty is the pass. Then type `$x$` and watch it fill.
+- [ ] **The build ships woff2 only.** No `.woff` or `.ttf` under
+      `frontend/dist/assets`:
+
+      ls frontend/dist/assets | grep -E "\.(woff|ttf)$"
+
+      Anything listed means the Vite plugin stopped firing and about 817 kB has
+      crept back into the binary. It is a build-config behaviour with no test
+      behind it, so this is the only guard.
+- [ ] **`task measure` after any dependency change.** The binary is at 73% of
+      its budget; the next large dependency needs the number before it is added,
+      not after (SPEC §2.5).
+
+### Known ceilings, deliberate
+
+- **Memory misses its budget and always has.** 170.2 MB private commit against
+  100 MB, because WebView2 is six processes of its own. Recorded in design 4.21;
+  Checkpoint L did not move it.
+- **The five-tab case is measured by hand.** The script opens one document. See
+  the budget report above for why automating it would not change the verdict.
+- **Cold start is provisional.** `WaitForInputIdle` measures a message loop
+  pumping, not first paint. A trustworthy number needs the frontend to report
+  its own first render, which nothing does yet.

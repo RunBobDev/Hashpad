@@ -430,3 +430,139 @@
 .editor-split--reading .preview-divider {
   display: none;
 }
+
+/* ---- Math (SPEC 7.2) --------------------------------------------------- */
+
+/*
+ * A math placeholder before KaTeX has filled it in, and what is left if KaTeX
+ * never arrives: the LaTeX source, in the editor's face so it reads as source
+ * rather than as prose that has gone wrong.
+ *
+ * Both classes survive into the rendered output -- `preview/math.ts` adds a
+ * third rather than removing these -- so every rule here has to be one that is
+ * still correct once the span holds typeset math. Hence the face and not, say,
+ * a dashed border.
+ */
+.preview-math {
+  font-family: var(--font-editor);
+}
+
+/* KaTeX has arrived: it brings its own face, and this one must get out of the
+   way or the fallback face fights the math fonts for the `.katex` children. */
+.preview-math-done {
+  font-family: inherit;
+}
+
+/*
+ * A display equation, centred on its own line the way `$$...$$` is written.
+ *
+ * `overflow-x: auto` because a long equation does not wrap -- KaTeX lays it out
+ * as one unbreakable row -- and without this the pane itself scrolls sideways,
+ * which SPEC 6.1's layout does not allow for.
+ */
+.preview-math-display {
+  display: block;
+  margin: 16px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+
+/* `$$x$$` written inside a sentence. It keeps the display *size* -- that is
+   what the author asked for -- but not the block layout, because a block inside
+   a paragraph is invalid HTML and the browser would close the paragraph. */
+span.preview-math-display {
+  display: inline-block;
+  margin: 0;
+  text-align: inherit;
+}
+
+/*
+ * A malformed expression. KaTeX renders the offending source in place and marks
+ * it `.katex-error`; its own stylesheet colours that with a hard-coded `#cc0000`
+ * that neither theme asked for and that fails contrast on the dark background.
+ *
+ * Pointed at `--syn-code-invalid`, the token `.preview-error` already uses --
+ * variables.css:144 records that `--bg-danger` was weighed for that card and
+ * rejected -- so a broken equation and a broken render look like the same kind
+ * of problem, in both themes.
+ */
+.preview-pane .katex-error {
+  /*
+   * **`!important`, and it is the only thing that works here.** KaTeX does not
+   * style this in its stylesheet -- there is no `.katex-error` rule in
+   * `katex.min.css` at all. It writes `style="color:#cc0000"` onto the element
+   * from JavaScript, and an inline declaration beats every selector in the
+   * cascade however specific.
+   *
+   * Worth overriding rather than living with: that red is fixed in both themes,
+   * and on the dark pane's --bg-editor it measures about 3.4:1 -- below AA for
+   * text, in the one place the reader most needs to read.
+   */
+  color: var(--syn-code-invalid) !important;
+  font-family: var(--font-editor);
+}
+
+/* ---- Diagrams (SPEC 7.2) ----------------------------------------------- */
+
+/*
+ * A diagram placeholder before Mermaid has drawn it, and what stays if Mermaid
+ * never arrives: the diagram source, in the editor's face so it reads as source.
+ * The same fallback math has, and a useful one -- the text is what you wrote.
+ */
+.preview-mermaid {
+  font-family: var(--font-editor);
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
+
+/*
+ * Drawn. The face and the pre-wrap have to go, or they fight the SVG's own text
+ * -- and `white-space` in particular leaks into foreignObject labels.
+ */
+.preview-mermaid-done {
+  font-family: inherit;
+  font-size: inherit;
+  white-space: normal;
+  text-align: center;
+}
+
+/* Mermaid sizes its SVG in the abstract and lets the container decide; without
+   this a wide flowchart sets the pane's width instead of fitting it. */
+.preview-mermaid-done svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/*
+ * A diagram that would not parse. In place of the picture, never in place of
+ * the document -- one mistyped arrow must not blank the page around it, and a
+ * diagram is mistyped for most of the time it is being written.
+ *
+ * Same tokens as `.preview-error`, so a broken diagram and a broken render read
+ * as the same kind of problem.
+ */
+.preview-mermaid-error {
+  padding: 8px 12px;
+  border-left: 3px solid var(--syn-code-invalid);
+  color: var(--syn-code-invalid);
+  font-family: var(--font-ui);
+  text-align: left;
+}
+
+.preview-mermaid-error__message {
+  margin-top: 4px;
+  font-family: var(--font-editor);
+  font-size: 0.9em;
+}
+
+/* The source that failed, so the mistake is visible without going back to the
+   editor. Muted rather than red: it is context, not the error. */
+.preview-mermaid-error pre {
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+}

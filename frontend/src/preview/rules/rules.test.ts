@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { renderMarkdown } from '../render';
 import { ASSET_ROUTE } from './images';
+import { MATH_DISPLAY_CLASS, MATH_INLINE_CLASS } from './math';
+import { DIAGRAM_CLASS } from './mermaid';
 
 function render(markdown: string, documentDir: string | null = 'C:\\docs') {
   const html = renderMarkdown(markdown, { documentDir });
@@ -282,5 +284,245 @@ describe('source-line anchors', () => {
     const { anchors } = render('# A\n\n# B\n\n# C\n');
     expect(anchors).toEqual([1, 3, 5]);
     expect([...anchors].sort((a, b) => a - b)).toEqual(anchors);
+  });
+});
+
+/* ---- L.1: math placeholders -------------------------------------------- */
+
+/**
+ * The parser's half of SPEC §7.2. Nothing here is typeset -- `rules/math.ts`
+ * only finds math and marks it, and `preview/math.test.ts` covers what fills
+ * the marks in.
+ *
+ * **These run through `renderMarkdown`, so every case is also a claim that the
+ * placeholder survives DOMPurify.** That is the whole reason for the
+ * placeholder, and asserting it against the raw renderer would prove the
+ * opposite of what is needed.
+ */
+describe('math', () => {
+  /** The placeholders in document order, as `[class, expression]`. */
+  function maths(markdown: string): [string, string][] {
+    const { doc } = render(markdown);
+    return [...doc.querySelectorAll(`.${MATH_INLINE_CLASS}, .${MATH_DISPLAY_CLASS}`)].map(
+      (element) => [element.className, element.textContent ?? ''],
+    );
+  }
+
+  it('marks inline math and keeps the expression as text', () => {
+    expect(maths('Einstein said $E = mc^2$ once.')).toEqual([[MATH_INLINE_CLASS, 'E = mc^2']]);
+  });
+
+  it('marks a display block', () => {
+    expect(maths('before\n\n$$\n\\sum_{i=1}^{n} i\n$$\n\nafter')).toEqual([
+      [MATH_DISPLAY_CLASS, '\\sum_{i=1}^{n} i'],
+    ]);
+  });
+
+  it('marks a one-line display block', () => {
+    expect(maths('$$ x = 1 $$')).toEqual([[MATH_DISPLAY_CLASS, 'x = 1']]);
+  });
+
+  /**
+   * `$$x$$` inside a sentence keeps the display *size* but not the block
+   * layout: a `<div>` inside a `<p>` is invalid HTML and the browser closes the
+   * paragraph around it, splitting the sentence in two.
+   */
+  it('keeps inline display math inside its paragraph', () => {
+    const { doc } = render('text $$x$$ more');
+    const element = doc.querySelector(`.${MATH_DISPLAY_CLASS}`)!;
+    expect(element.tagName).toBe('SPAN');
+    expect(element.closest('p')).not.toBeNull();
+  });
+
+  /**
+   * **The case this rule exists to get right.** Two prices in a sentence are
+   * two dollar signs with text between them, which is a perfectly good math
+   * span as far as the delimiters go. The guard is that a closing `$` may not
+   * be followed by a digit.
+   */
+  it('leaves prices alone', () => {
+    expect(maths('I paid $5 and $10 for it.')).toEqual([]);
+    expect(maths('It costs $20.')).toEqual([]);
+  });
+
+  /**
+   * **The case the digit guard is actually for**, and it is not the one above.
+   *
+   * `$5 and $10` is already rejected by the *whitespace* rule -- the closing `$`
+   * has a space in front of it -- so removing the digit guard leaves that test
+   * green, which is what the mutation run showed. Here the second `$` is tight
+   * against a word, so whitespace says nothing and only "a closing delimiter is
+   * not followed by a digit" rejects it.
+   */
+  it('leaves a price that is tight against a word alone', () => {
+    expect(maths('was $5 but now costs$10 more')).toEqual([]);
+  });
+
+  it('needs the opening delimiter tight against the expression', () => {
+    expect(maths('a $ x$ b')).toEqual([]);
+    expect(maths('a $x $ b')).toEqual([]);
+  });
+
+  it('honours a backslash escape', () => {
+    expect(maths('\\$5 and \\$10')).toEqual([]);
+  });
+
+  /**
+   * `\\` is an escaped *backslash*, so the `$` after it is live. Counting the
+   * run rather than looking at one character is what gets this right; without
+   * it, math silently stops working after any line ending in a backslash.
+   */
+  it('counts the backslash run rather than looking at one', () => {
+    expect(maths('a \\\\$x$ b')).toEqual([[MATH_INLINE_CLASS, 'x']]);
+  });
+
+  it('does not match a lone dollar', () => {
+    expect(maths('a $ b')).toEqual([]);
+  });
+
+  /**
+   * An unterminated `$$` is what a display equation looks like for the whole
+   * time you are typing it. Claiming it would swallow the rest of the document
+   * on every keystroke until the closing pair arrived.
+   */
+  it('leaves an unterminated display block as text', () => {
+    expect(maths('$$\n\\sum x\n\nmore text\n')).toEqual([]);
+  });
+
+  /**
+   * A `$$` open is never closed by a single `$`.
+   *
+   * What happens to `$$x$ y` instead is worth pinning rather than glossing:
+   * the `$$` span fails, markdown-it moves on one character, and the *second*
+   * dollar opens a perfectly ordinary `$x$`. So the leading `$` is literal text
+   * and `x` is inline math -- **not** display math, which is the half that
+   * matters. Pinned as the real behaviour because it is what someone sees
+   * halfway through typing a display equation.
+   */
+  it('does not let a single dollar close a double', () => {
+    expect(maths('$$x$ y')).toEqual([[MATH_INLINE_CLASS, 'x']]);
+    expect(render('$$x$ y').doc.querySelector(`.${MATH_DISPLAY_CLASS}`)).toBeNull();
+    expect(render('$$x$ y').doc.querySelector('p')?.textContent).toBe('$x y');
+  });
+
+  /**
+   * Inline rules never run inside a code span or a fence, so this needs no
+   * guard of its own -- but a future change to rule ordering could break it
+   * invisibly, and `$` in a shell snippet is extremely common.
+   */
+  it('leaves math delimiters alone inside code', () => {
+    expect(maths('`$PATH$` and a fence')).toEqual([]);
+    expect(maths('```sh\necho $HOME$\n```')).toEqual([]);
+  });
+
+  /**
+   * The expression goes in as text, which markdown-it escapes -- so `<` cannot
+   * become a tag, and DOMPurify has nothing to strip. Reading it back with
+   * `textContent` returns the original, which is what `preview/math.ts` does.
+   */
+  it('escapes an expression that looks like markup', () => {
+    expect(maths('$a < b$')).toEqual([[MATH_INLINE_CLASS, 'a < b']]);
+    expect(maths('$x <script>y</script>$')).toEqual([[MATH_INLINE_CLASS, 'x <script>y</script>']]);
+  });
+
+  it('leaves the rest of the sentence intact', () => {
+    const { doc } = render('before $x$ after');
+    expect(doc.querySelector('p')?.textContent).toBe('before x after');
+  });
+});
+
+/* ---- L.2: diagram placeholders ----------------------------------------- */
+
+/**
+ * The parser's half of Mermaid support. Nothing here draws -- `rules/mermaid.ts`
+ * only marks the fence and holds its source, and `preview/diagrams.test.ts`
+ * covers what fills the mark in.
+ *
+ * Run through `renderMarkdown`, so every case is also a claim that the
+ * placeholder survives DOMPurify.
+ */
+describe('mermaid fences', () => {
+  const FENCE = '```';
+
+  function diagrams(markdown: string): string[] {
+    return [...render(markdown).doc.querySelectorAll(`.${DIAGRAM_CLASS}`)].map(
+      (element) => element.textContent ?? '',
+    );
+  }
+
+  it('turns a mermaid fence into a placeholder holding its source', () => {
+    expect(diagrams(`${FENCE}mermaid\ngraph TD;\n  A-->B;\n${FENCE}`)).toEqual([
+      'graph TD;\n  A-->B;\n',
+    ]);
+  });
+
+  /**
+   * **The reason this wraps the fence renderer rather than replacing it.**
+   * `render.ts` configures markdown-it's `highlight` hook, which only the
+   * *default* fence renderer calls; replacing the rule outright would silently
+   * turn off syntax highlighting for every other language in the document.
+   */
+  it('leaves every other fence to the renderer it replaced', () => {
+    const { doc } = render(`${FENCE}js\nconst x = 1;\n${FENCE}`);
+
+    expect(doc.querySelector(`.${DIAGRAM_CLASS}`)).toBeNull();
+    // **The `language-js` class, not the highlighter's spans.** The first
+    // version asserted on spans and failed under `--sequence.shuffle`: grammars
+    // load lazily (`codehighlight.ts`), so whether `js` has arrived by the time
+    // this case runs depends on what ran before it. The class is what the
+    // *default fence renderer* emits, which is the thing being delegated to,
+    // and it is there whether or not the grammar has landed.
+    const code = doc.querySelector('pre > code');
+    expect(code?.className).toContain('language-js');
+    expect(code?.textContent).toContain('const x = 1;');
+  });
+
+  it('leaves an infoless fence alone', () => {
+    const { doc } = render(`${FENCE}\nplain\n${FENCE}`);
+    expect(doc.querySelector(`.${DIAGRAM_CLASS}`)).toBeNull();
+    expect(doc.querySelector('pre > code')?.textContent).toBe('plain\n');
+  });
+
+  /** Only the first word, which is all markdown-it hands the highlight hook. */
+  it('matches the first word of the info string, case-insensitively', () => {
+    expect(diagrams(`${FENCE}Mermaid\ngraph TD;\n${FENCE}`)).toEqual(['graph TD;\n']);
+    expect(diagrams(`${FENCE}mermaid theme=dark\ngraph TD;\n${FENCE}`)).toEqual(['graph TD;\n']);
+    expect(diagrams(`${FENCE}mermaidish\ngraph TD;\n${FENCE}`)).toEqual([]);
+  });
+
+  /**
+   * **`data-source-line` has to be copied across by hand.** `rules/sourceline.ts`
+   * stamps it on the token, and markdown-it renders a token's attributes for
+   * you -- but a rule that writes its own HTML string does that rendering
+   * itself and drops everything it does not mention. Without this a document's
+   * diagrams are holes in the scroll-sync map.
+   */
+  it('keeps the source-line anchor the scroll map needs', () => {
+    const { doc, anchors } = render(`# Title\n\n${FENCE}mermaid\ngraph TD;\n${FENCE}`);
+    const element = doc.querySelector(`.${DIAGRAM_CLASS}`)!;
+
+    expect(element.getAttribute('data-source-line')).toBe('3');
+    expect(anchors).toContain(3);
+  });
+
+  /**
+   * The source goes in as text, which markdown-it escapes -- so a label
+   * containing markup cannot become a tag, and DOMPurify has nothing to strip.
+   * Reading it back with `textContent` returns the original, which is what
+   * `preview/diagrams.ts` hands to Mermaid.
+   */
+  it('escapes a diagram that looks like markup', () => {
+    expect(diagrams(`${FENCE}mermaid\ngraph TD;\n  A["<img src=x>"];\n${FENCE}`)).toEqual([
+      'graph TD;\n  A["<img src=x>"];\n',
+    ]);
+    expect(
+      render(`${FENCE}mermaid\nA["<script>x</script>"]\n${FENCE}`).doc.querySelector('script'),
+    ).toBeNull();
+  });
+
+  it('handles two diagrams in one document', () => {
+    expect(
+      diagrams(`${FENCE}mermaid\nfirst\n${FENCE}\n\ntext\n\n${FENCE}mermaid\nsecond\n${FENCE}`),
+    ).toEqual(['first\n', 'second\n']);
   });
 });

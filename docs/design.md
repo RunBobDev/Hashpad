@@ -882,10 +882,11 @@ apologising for their absence since Checkpoint A.
 
 ### 4.21 The 100 MB RAM budget is missed, at 135 MB
 
-SPEC §1.3 sets three budgets: binary under 25 MB, cold start under 500 ms, and
-**under 100 MB RAM with five tabs open**. The first is met with room to spare
-(12.7 MB). The third is not, and this records the measurement rather than the
-estimate that stood in for it.
+SPEC §2.3 sets three budgets: binary under 25 MB, cold start under 500 ms, and
+**under 100 MB RAM with five tabs open**. The first is met, though with less
+room than it once had -- 12.7 MB when this was written, 18.14 MB since
+Checkpoint L added Mermaid (see 4.29d). The third is not, and this records the
+measurement rather than the estimate that stood in for it.
 
 **Measured 2026-08-27**, release build, five tabs open, on the development machine.
 Seven processes, all rooted at `hashpad.exe`:
@@ -920,7 +921,7 @@ process disabled, which is the 58 MB / 18.9 MB row. It costs scrolling
 smoothness in an editor — the one interaction the app is for — and even taking
 it would land around 116 MB, still over. Rejected on both counts.
 
-**What the budget was really arguing against.** §1.3's own table justifies Wails
+**What the budget was really arguing against.** §2.3's own table justifies Wails
 as "~10–20 MB instead of Electron's 150 MB+". That is the *binary*, and it holds:
 12.7 MB against a 25 MB budget. The RAM figure was written in the same breath,
 but Electron and WebView2 are both Chromium underneath, so the runtime saving
@@ -949,9 +950,11 @@ the argument below did not depend on the measurement.
 **What UPX would buy.** Go binaries typically compress 55–65%, so 12.7 MB would
 land somewhere near 5 MB. Estimated, not measured.
 
-**Why that is worth nothing here.** SPEC §1.3's binary budget is 25 MB and the
-build sits at 12.7 MB, winning by 12 MB. The other two budgets are the ones
-under pressure, and UPX works against both:
+**Why that is worth nothing here.** SPEC §2.3's binary budget is 25 MB and the
+build sits at 18.14 MB, winning by nearly 7 MB. (It won by 12 MB when this was
+written; Checkpoint L spent 5.43 MB of that on Mermaid. The argument is
+unchanged -- the margin is smaller but still not the binding constraint.) The
+other two budgets are the ones under pressure, and UPX works against both:
 
 - **Cold start.** UPX prepends a stub that decompresses the entire image into
   memory before `main` runs, on every launch. §7 called cold start the tight
@@ -1443,3 +1446,176 @@ it on. The base editor is already past the point of usability there, so a guard
 inside live preview would be treating 20 ms of a 105 ms problem — and the only
 guard available (stop aligning above some row count) trades a measurable delay for
 a silent behaviour change. Recorded, not fixed.
+
+### 4.29 Math is rendered past the sanitiser, not through it
+
+SPEC §7.2 asks for KaTeX. `render.ts:92` forbids the `style` attribute. KaTeX's
+HTML output carries its geometry — struts, vlists, vertical-align — in exactly
+that attribute, so math routed through the sanitiser does not fail: it renders,
+wrongly, and looks like a KaTeX bug.
+
+**So it is not routed through it.** `rules/math.ts` emits a placeholder that
+survives sanitisation untouched, holding the expression as its own *text*:
+
+    <span class="preview-math">E = mc^2</span>
+
+and `preview/math.ts` fills that in once the pane's HTML is already in the DOM —
+`pane.ts` calls `renderMathIn(pane)` on the line after `pane.innerHTML = html`.
+
+**Three alternatives, each rejected for a reason worth keeping.**
+
+*Relax `FORBID_ATTR` globally.* Then a document's own raw
+`<div style="position:fixed;inset:0">` applies too. That is defacement inside the
+pane rather than code execution, but it is a real reduction for every document
+that never asked for it — and `render.ts:119` warns that any config change here
+also disturbs the default that drops HTML comments, which SPEC §6.8 depends on.
+
+*Allow `style` only under `.katex`.* Forgeable: a document can write
+`<span class="katex">` in its own raw HTML and inherit the exemption.
+
+*Use KaTeX's `output: 'mathml'`, which emits no inline styles at all.* This
+works and is far smaller, and it remains the fallback if bundle size ever
+becomes the binding constraint. It was not chosen because it hands typesetting
+to the browser's MathML implementation, which is the thing KaTeX exists to do
+better.
+
+**What the placeholder buys beyond the sanitiser.** The fallback is free: until
+the KaTeX chunk arrives — or if it never does — what is on screen is the LaTeX
+source rather than a blank. And Mermaid (L.2) needs this shape regardless, being
+asynchronous even once loaded, so the two features share one mechanism instead
+of one needing a config relaxation and the other a post-pass anyway.
+
+**Where the trust boundary actually moved.** DOMPurify is there to distrust the
+*document's HTML*. What is inserted here is not that: it is KaTeX's rendering of
+the document's *text*, and KaTeX escapes its own input. That argument is only as
+good as two options staying true, so both are passed explicitly and asserted in
+`math.test.ts` rather than assumed — `trust: false` (no `\href`, no live links)
+and strict mode left at its default (no `\htmlClass`). Both happen to be KaTeX
+0.18's defaults; a default is not a promise, and a version bump is exactly how
+one stops being true.
+
+`math.test.ts` also pins the general case structurally — no anchors, images,
+scripts, `on*` handlers or URL-bearing attributes out of hostile input — rather
+than by string matching. The first version matched strings and failed for the
+wrong reason: KaTeX echoes the LaTeX source into its `<annotation>` element, so
+`javascript:` and ` onerror=` are genuinely present in the output, as escaped
+text, inert. A string match cannot tell that from a live attribute.
+
+#### 4.29a Three things KaTeX does that needed working around
+
+**`throwOnError` defaults to `true`.** `pane.ts` catches a renderer exception by
+replacing the whole pane with an error card, so a half-typed `\frac{1}{` would
+blank the document around it on every keystroke. It is passed as `false`, and
+KaTeX then renders the offending source in place instead.
+
+**The error colour is written inline, from JavaScript.** There is no
+`.katex-error` rule in `katex.min.css` at all — KaTeX sets
+`style="color:#cc0000"` on the element, which beats every selector in the
+cascade. That red is fixed in both themes and measures about 3.4:1 on the dark
+pane, below AA for text, in the one place the reader most needs to read it. So
+`preview.css` overrides it with `!important` and `--syn-code-invalid`, the token
+`.preview-error` already uses.
+
+**Twenty faces ship three times.** KaTeX's stylesheet lists woff2, woff and ttf
+for each face, and Vite emits every file the CSS references: 256 kB of woff2
+against **817 kB of woff and ttf that WebView2 will never request**, Chromium
+having read woff2 since version 36 and WebKitGTK since 2015. A ten-line Vite
+plugin (`katexWoff2Only`, `enforce: 'pre'`) drops the fallback entries from the
+`src` lists, which is what stops the files being emitted. Measured: `dist` fell
+from 3.22 MB to 2.40 MB.
+
+`enforce: 'pre'` is load-bearing rather than tidy — Vite's own `vite:css` plugin
+resolves `url()` references and registers the assets to emit, so a transform
+running after it is editing a string whose side effects have already happened.
+Without it the files were still emitted.
+
+**One cost accepted.** `vite.config.ts` sets `cssCodeSplit: false`, so every
+stylesheet lands in one file regardless of where it is imported — KaTeX's 24 kB
+of CSS is in the entry stylesheet for every document, math or not. The *fonts*
+stay lazy on their own, because a browser fetches a `@font-face` file only when
+a rule using it matches something. The JavaScript is genuinely lazy: `katex` is
+its own 262 kB chunk and the entry bundle did not move.
+
+#### 4.29b Mermaid is asynchronous, which changes the shape of everything
+
+KaTeX hands back a string. **Mermaid does not, and cannot**: it measures
+laid-out text to size its nodes, so `mermaid.render` returns a promise by
+design. The placeholder mechanism §4.29 established is shared, but three things
+fall out of the asynchrony that math needed none of.
+
+**A cache keyed on theme and source.** `pane.ts` replaces the whole pane's HTML
+on a 150 ms debounce, so without one, every keystroke anywhere in a document
+re-runs Mermaid on every diagram in it. The cache is read *synchronously* before
+the pass yields, so everything already drawn is back on screen in the same turn
+the pane rebuilt — no flicker, no call. Theme is part of the key rather than a
+reason to clear it: Mermaid bakes its colours into the SVG, so the same diagram
+in the other theme is a different rendering rather than a stale one, and
+flipping back is free. Measured in the harness: three redraws of an unchanged
+document hold the cache at three entries; a flip to dark takes it to six; a flip
+back adds nothing.
+
+**`isConnected` before writing.** A render that started two keystrokes ago
+finishes against a pane that has since been rebuilt. Checking the element is
+still attached is both simpler and stricter than the generation counter the
+brief planned for.
+
+**Errors caught per diagram.** `pane.ts` answers a thrown renderer by replacing
+the whole pane with an error card, and a diagram is mistyped for most of the
+time it is being written. A failure renders in place — message, and the source
+that produced it — and is deliberately *not* cached, because the next keystroke
+is usually the one that fixes it.
+
+**A theme subscription, which is new.** Diagrams are the first thing in the pane
+that does not follow the theme on its own: everything else is CSS variables that
+restyle in place. Mermaid's colours are in the generated SVG, so a light/dark
+flip is a re-render rather than a restyle. `pane.test.ts` pins the count of
+released subscriptions, so it went from two to three deliberately.
+
+#### 4.29c Three things Mermaid does that needed working around
+
+**`securityLevel: 'strict'` was not enough.** Measured in the harness: a node
+label of `<img src=x onerror=alert(1)>` came through as a **live `<img>`** with
+the handler stripped but the tag and `src` intact, rendered into a
+`<foreignObject>`. Not an execution hole — the handler was gone, and the CSP's
+`img-src 'self'` would refuse a remote source — but a document should not be
+able to put an image into the pane through a diagram label at all.
+
+`htmlLabels: false` renders labels as SVG `<text>` instead, which removes the
+surface rather than trusting a sanitiser to keep emptying it. After it:
+`<foreignObject>` count 0, `<img>` count 0, and the hostile markup renders as
+visible inert text — which is right, because the document did say that.
+
+**It leaks DOM on a failed render.** Mermaid appends scratch elements to
+`document.body` while measuring and does not remove them when the render throws.
+Measured: three renders of a document with one broken diagram left six nodes
+behind, a `<div id="d…">` and an `<svg>` per failure. At one failure per
+keystroke while a diagram is being written, that is a leak worth a three-line
+sweep.
+
+**It cannot be tested in jsdom at all.** `mermaid.render` calls `getBBox`, which
+jsdom does not implement, so it throws before producing anything.
+`diagrams.test.ts` stubs the module and covers the machinery — placeholder,
+cache, connected check, failure path — and `harness/diagrams.html` is the only
+place a real diagram is ever drawn. The gap is larger than anywhere else in this
+codebase and is stated at the top of both files.
+
+#### 4.29d What Mermaid costs
+
+| | before L | after L.2 |
+|---|---|---|
+| Binary | 12.71 MB | **18.14 MB** (budget 25 MB, 73%) |
+| Cold start, median | 46 ms | **45.7 ms** (budget 500 ms) |
+| `dist` | 2.40 MB | 7.54 MB |
+| JS chunks | ~20 | 178 |
+
+**+5.43 MB of binary for zero cold-start cost**, which is the whole point of the
+lazy split and is what SPEC §7.2 asks to be verified rather than assumed.
+Mermaid 12 code-splits every diagram type, so a document with a flowchart never
+loads the 1.47 MB ELK layout engine, the 687 kB Cynefin renderer or the 443 kB
+of cytoscape — but all 178 chunks are embedded in the executable, so the binary
+pays for the ones nobody uses.
+
+`import('mermaid')` already resolves to `mermaid.core.mjs`; there is no cheaper
+entry point to switch to. The lever, if the binary ever needs it back, is
+stubbing the exotic diagram types out of the module graph — not a different
+build of Mermaid.

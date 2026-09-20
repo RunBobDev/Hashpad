@@ -40,6 +40,8 @@ import { setTopSourceLineReader, store, topSourceLineChanged } from '../state/ap
 import { clampSplitRatio, MAX_SPLIT_RATIO, MIN_SPLIT_RATIO, showsPreview } from '../state/document';
 import { activeDocument } from '../state/documents';
 import { onLanguageLoaded } from './codehighlight';
+import { onDiagramsLoaded, renderDiagramsIn } from './diagrams';
+import { onMathLoaded, renderMathIn } from './math';
 import { renderMarkdown } from './render';
 import {
   farEndHeight,
@@ -187,6 +189,19 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
       // Sanitised by renderMarkdown -- see render.ts, where `html: true` and
       // DOMPurify are documented as a pair that must not be separated.
       pane.innerHTML = html;
+      // **After the assignment, deliberately.** KaTeX's output is inline-style
+      // dependent and the sanitiser strips `style`, so math is rendered into
+      // placeholders once the sanitised HTML is already in the DOM rather than
+      // being passed through it -- see `preview/math.ts` for why that is the
+      // boundary rather than a relaxed config. A no-op for a document with no
+      // math, which is most of them.
+      renderMathIn(pane);
+      // **Not awaited, deliberately.** Mermaid measures laid-out text, so a
+      // render is a real await; blocking the pane on it would make every
+      // keystroke in a document with a diagram wait for the diagram. Cached
+      // diagrams are already back on screen by the time this returns -- the
+      // synchronous half of `renderDiagramsIn` does that before it yields.
+      void renderDiagramsIn(pane, store.getState().isDark);
     } catch (error) {
       // A renderer that throws must not leave the last good render on screen
       // pretending to be current, so this replaces the content rather than
@@ -267,6 +282,33 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * debounce.
    */
   const unsubscribeLanguage = onLanguageLoaded(render);
+
+  /**
+   * The same arrangement for KaTeX: the first document containing math renders
+   * without it, starts the load, and this brings the pane back once the chunk
+   * lands. One flash per session, and the LaTeX source is what shows until then.
+   */
+  const unsubscribeMath = onMathLoaded(render);
+
+  /** The same, for Mermaid's chunk. */
+  const unsubscribeDiagrams = onDiagramsLoaded(render);
+
+  /**
+   * **Diagrams are the first thing in the pane that does not follow the theme
+   * on its own.** Everything else is CSS variables, which restyle in place with
+   * no re-render -- but Mermaid bakes its colours into the SVG it generates, so
+   * a flip from light to dark leaves every diagram in the old palette until the
+   * document happens to change.
+   *
+   * Rare enough to re-render the whole pane for, and the diagram cache is keyed
+   * on theme, so flipping back is free.
+   */
+  const unsubscribeTheme = store.subscribe(
+    (state) => state.isDark,
+    () => {
+      render();
+    },
+  );
 
   /**
    * Where each `[data-source-line]` element sits, in the pane's own scroll
@@ -1023,6 +1065,9 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     unsubscribeStore();
     unsubscribeCaret();
     unsubscribeLanguage();
+    unsubscribeMath();
+    unsubscribeDiagrams();
+    unsubscribeTheme();
   }
 
   return { show, hide, destroy };

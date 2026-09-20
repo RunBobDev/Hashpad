@@ -166,7 +166,10 @@ Write-Host ("  process breakdown          : {0}" -f $treeByNameSummary)
 Write-Host ("  resolved PIDs              : {0}" -f ($treeIds -join ', '))
 Write-Host ''
 Write-Host 'Note: this is one empty document, not the five-tab budget case.' -ForegroundColor DarkGray
-Write-Host 'Five-tab measurement lands with tabs at Checkpoint C.' -ForegroundColor DarkGray
+Write-Host 'This script has never been taught to open five tabs; the five-tab figure' -ForegroundColor DarkGray
+Write-Host 'in design 4.21 was measured by hand on 2026-08-27. Automating it would not' -ForegroundColor DarkGray
+Write-Host 'change the verdict: the budget is already exceeded with one document open,' -ForegroundColor DarkGray
+Write-Host 'for the reason 4.21 records -- WebView2 is six processes of its own.' -ForegroundColor DarkGray
 Write-Host ''
 
 $gpu = (Get-CimInstance Win32_VideoController | Select-Object -First 1).Name
