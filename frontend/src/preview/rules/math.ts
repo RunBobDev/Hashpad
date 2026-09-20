@@ -144,7 +144,22 @@ function mathBlock(
   let closed = false;
   while (++line < endLine) {
     const from = state.bMarks[line]! + state.tShift[line]!;
-    if (state.src.slice(from, state.eMarks[line]!).trim() === '$$') {
+    const text = state.src.slice(from, state.eMarks[line]!).trim();
+
+    // **A blank line ends the search, unclosed**, and this is the guard that
+    // matters in a real document. Scanning to the next `$$` anywhere at all
+    // sounds harmless and is not: in a document that already contains
+    // equations, typing an opening `$$` swallows everything between here and
+    // the *next equation*, however far away that is. Measured on a fixture with
+    // nine sections -- one stray `$$` ate seven diagrams, eight code fences and
+    // six headings.
+    //
+    // Display math never needs a blank line inside it; `\begin{aligned}` and
+    // friends are newline-separated, not paragraph-separated. So this bounds
+    // the damage to the paragraph being typed, which is the most a half-written
+    // equation should ever affect.
+    if (text === '') break;
+    if (text === '$$') {
       closed = true;
       break;
     }

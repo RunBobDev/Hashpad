@@ -2541,9 +2541,12 @@ session, not once per document.
 - [ ] **`\$5`** shows a dollar sign.
 - [ ] **`` `$PATH$` ``** in a code span, and `echo $HOME$` in a fence, stay
       literal.
-- [ ] **A half-typed `$$` block** — opening delimiter, no closing one — leaves
-      the rest of the document alone. Type one and keep going: nothing below it
-      should disappear into an equation.
+- [ ] **A half-typed `$$` block** — opening delimiter, no closing one — stops at
+      the next blank line. Type one **in a document that already has other
+      equations further down** and keep going: nothing below it should disappear.
+      Without the blank-line rule it runs to the *next* `$$` anywhere in the
+      document, which on the L fixture meant eating seven diagrams, eight code
+      fences and six headings.
 
 ### Errors and hostile input
 

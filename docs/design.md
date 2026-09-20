@@ -1646,3 +1646,27 @@ the only signal available, so `pane.ts` invalidates on it.
 Neither was caught by anything. Both were found by the owner asking whether the
 checkpoint was actually finished, which is the honest record of how: the tests
 that cover them now were written after the question, not before it.
+
+#### 4.29f An unterminated `$$` stops at a blank line
+
+The block rule refuses an unclosed `$$`, handing the delimiter back to the
+paragraph rule — which is the state a display equation is in for the whole time
+it is being typed. But "unclosed" was being decided by scanning for the next
+`$$` **anywhere in the document**, and a document that already contains
+equations always has one.
+
+Measured on a nine-section demonstration file: one stray `$$` in section 2 ran
+all the way to section 8, swallowing seven diagrams, eight code fences and six
+headings into a single display block. The tests missed it because their
+documents were short enough to contain no second `$$` — true of a fixture,
+never true of a document someone is actually writing.
+
+The search now stops at a blank line. Display math has no use for one inside it
+(`egin{aligned}` and friends are newline-separated, not
+paragraph-separated), so this costs nothing and bounds the damage of a
+half-written equation to the paragraph being written.
+
+**Found by building the file meant to demonstrate the checkpoint**, which is
+worth recording as a technique: the fixture parsed to one diagram where it
+should have had seven, and that count was the whole diagnosis.
+

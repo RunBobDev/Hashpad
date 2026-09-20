@@ -390,6 +390,50 @@ describe('math', () => {
   });
 
   /**
+   * **The case the short fixtures above could not show.** An unterminated `$$`
+   * does not just fail to close -- it goes looking for the next `$$` anywhere in
+   * the document, and in a document that already contains equations it finds
+   * one. Everything in between becomes a single display block.
+   *
+   * Found by writing a nine-section demonstration file and discovering that one
+   * stray `$$` in section 2 had eaten seven diagrams, eight code fences and six
+   * headings on its way to section 8. The test above passes because its document
+   * has no later `$$` to find; this is the same case with a document shaped like
+   * a real one.
+   */
+  it('stops an unterminated block at the blank line, not at the next equation', () => {
+    const doc = [
+      '$$',
+      'x = 1',
+      '',
+      '## A heading that must survive',
+      '',
+      '```js',
+      'const survives = true;',
+      '```',
+      '',
+      '$$',
+      'y = 2',
+      '$$',
+      '',
+    ].join('\n');
+    const { doc: rendered } = render(doc);
+
+    // The stray `$$` claimed nothing.
+    expect(maths(doc)).toEqual([[MATH_DISPLAY_CLASS, 'y = 2']]);
+    // And everything it used to swallow is still here.
+    expect(rendered.querySelector('h2')?.textContent).toBe('A heading that must survive');
+    expect(rendered.querySelector('pre > code')?.textContent).toContain('const survives = true;');
+  });
+
+  /** A legitimate multi-line block is unaffected -- it has no blank line in it. */
+  it('still claims a well-formed multi-line block', () => {
+    expect(maths('$$\n\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}\n$$')).toEqual([
+      [MATH_DISPLAY_CLASS, '\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}'],
+    ]);
+  });
+
+  /**
    * A `$$` open is never closed by a single `$`.
    *
    * What happens to `$$x$ y` instead is worth pinning rather than glossing:
