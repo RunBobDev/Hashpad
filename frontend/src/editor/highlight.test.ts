@@ -54,13 +54,18 @@ function sheetIndexOf(cls: string): number {
   return -1;
 }
 
-/** The `color` `.cls` declares, verbatim -- e.g. `var(--syn-marker)`. */
-function declaredColourFor(cls: string): string | null {
+/**
+ * What `.cls` declares for `property`, verbatim -- e.g. `var(--syn-marker)`.
+ *
+ * Verbatim and not computed, because a custom property is the answer for
+ * `color` and jsdom resolves those to the empty string.
+ */
+function declaredFor(cls: string, property: string): string | null {
   for (const sheet of Array.from(document.styleSheets)) {
     for (const rule of Array.from(sheet.cssRules)) {
       const styleRule = rule as CSSStyleRule;
       if (styleRule.selectorText !== `.${cls}`) continue;
-      return styleRule.style.getPropertyValue('color') || null;
+      return styleRule.style.getPropertyValue(property) || null;
     }
   }
   return null;
@@ -172,6 +177,35 @@ describe('markdownHighlightStyle', () => {
     expect(el!.textContent).toBe('---');
 
     view.destroy();
+  });
+
+  /**
+   * **Every heading level caps its line box, and this is a scrolling rule.**
+   *
+   * `--line-editor: 1.6` is unitless, so without a cap it resolves against the
+   * heading's *own* font size -- 1.6 x 1.6em for an h1, 35.8px against an
+   * ordinary line's 22.4px. CodeMirror estimates every un-drawn line at exactly
+   * one line height, so each of those is under-estimated by 13.4px; scrolling
+   * into one corrects the height map, and `EditorView.measure` compensates by
+   * writing `scrollDOM.scrollTop += diff`. That write is the stutter reported
+   * in source and split after Checkpoint L.
+   *
+   * jsdom lays nothing out, so this asserts the declaration reaches the style
+   * rule and nothing more -- which is the part that can silently disappear in
+   * an edit. The heights it buys are measured in `harness/livepreview.html`,
+   * which has a layout engine, and tabulated beside the rule itself: one
+   * heading of each level costs 34.7px of estimation error before and 9.5px
+   * after.
+   */
+  it.each([
+    ['heading1', tags.heading1],
+    ['heading2', tags.heading2],
+    ['heading3', tags.heading3],
+    ['heading4', tags.heading4],
+    ['heading5', tags.heading5],
+    ['heading6', tags.heading6],
+  ])('caps the line box on %s', (_label, tag) => {
+    expect(declaredFor(classFor(tag), 'line-height')).toBe('1.25');
   });
 
   /**
@@ -478,7 +512,7 @@ describe('no markdown construct is left to codeHighlightStyle', () => {
     let winningIndex = -1;
     let painted: string | null = null;
     for (const cls of span!.className.split(' ')) {
-      const declared = declaredColourFor(cls);
+      const declared = declaredFor(cls, 'color');
       if (!declared) continue;
       const index = sheetIndexOf(cls);
       if (index > winningIndex) {

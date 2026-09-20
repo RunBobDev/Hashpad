@@ -47,9 +47,40 @@ export const markdownHighlightStyle = HighlightStyle.define(
     // Measured: with this rule alone, table headers came out clean and every
     // real heading was still underlined.
     { tag: tags.heading, fontWeight: 'bold', textDecoration: 'none' },
+    // **`lineHeight` on all six, and it is about scrolling, not about looks.**
+    //
+    // `--line-editor: 1.6` is unitless, so it resolves against each element's
+    // *own* font size: a 1.6em h1 gets a 1.6 x 1.6em line box, 35.8px against
+    // an ordinary line's 22.4px. CodeMirror estimates every line it has not
+    // drawn yet at exactly one line height (`HeightOracle.heightForLine`
+    // returns `this.lineHeight` with wrapping off), so each un-drawn h1 is
+    // under-estimated by 13.4px. Scrolling into one corrects the height map,
+    // and `EditorView.measure` compensates by writing `scrollDOM.scrollTop +=
+    // diff` -- which is the stutter the owner reported in source and split.
+    // Live mode never had it: `liveTypography` already caps heading lines at
+    // 1.25.
+    //
+    // Measured in `harness/livepreview.html`, against the 22.4px an un-drawn
+    // line is estimated at:
+    //
+    // | level | line box before | after | error before | after |
+    // |-------|-----------------|-------|--------------|-------|
+    // | h1    | 35.83px         | 28.39 | +13.44       | +6.00 |
+    // | h2    | 31.79           | 24.84 |  +9.40       | +2.45 |
+    // | h3    | 28.67           | 23.39 |  +6.27       | +1.00 |
+    // | h4    | 26.19           | 22.39 |  +3.80       |     0 |
+    // | h5    | 24.19           | 22.39 |  +1.80       |     0 |
+    // | h6    | 22.39           | 22.39 |      0       |     0 |
+    //
+    // One of each costs 34.7px of estimation error before and 9.5px after. h6
+    // is the only level the rule does not move: at 1.0em it already sits on the
+    // line's own strut, 14px x 1.6, which is the floor none of these can go
+    // below. **The error shrinks; it does not vanish**, and nothing can remove
+    // it while a heading is taller than a line of prose.
     {
       tag: tags.heading1,
       fontSize: '1.6em',
+      lineHeight: '1.25',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -57,6 +88,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading2,
       fontSize: '1.42em',
+      lineHeight: '1.25',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -64,6 +96,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading3,
       fontSize: '1.28em',
+      lineHeight: '1.25',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -71,6 +104,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading4,
       fontSize: '1.17em',
+      lineHeight: '1.25',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -78,6 +112,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading5,
       fontSize: '1.08em',
+      lineHeight: '1.25',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',
@@ -85,6 +120,7 @@ export const markdownHighlightStyle = HighlightStyle.define(
     {
       tag: tags.heading6,
       fontSize: '1.0em',
+      lineHeight: '1.25',
       fontWeight: 'bold',
       textDecoration: 'none',
       color: 'var(--syn-heading)',

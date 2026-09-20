@@ -2799,14 +2799,31 @@ the wheel's own animation is a different mechanism and is on by default.
 
 ### Open
 
-- [ ] **Does it survive making the estimate less wrong?** Live mode already
-      gives heading lines `line-height: 1.25` (`livepreview.ts`, `liveTypography`),
-      which both shrinks the per-line error and gives it two signs — an h6 at
-      1em × 1.25 is 4.9 px *under* 22.4 px where an h1 is 5.6 px over, so errors
-      partly cancel across a viewport instead of accumulating. Source mode has no
-      such rule. That is the best available explanation for the exemption and the
-      cheapest mitigation, but it changes the editor's leading, so it wants the
-      owner's eyes before it ships.
+### Shipped, unverified
+
+Live mode already caps heading lines at `line-height: 1.25` (`livepreview.ts`,
+`liveTypography`), which is the one difference between it and the modes that
+stutter. `highlight.ts` now declares the same cap on all six heading levels, so
+source and split get it too. Measured in `harness/livepreview.html`:
+
+| level | line box before | after | error before | after |
+|-------|-----------------|-------|--------------|-------|
+| h1 | 35.83 px | 28.39 | +13.44 | +6.00 |
+| h2 | 31.79 | 24.84 | +9.40 | +2.45 |
+| h3 | 28.67 | 23.39 | +6.27 | +1.00 |
+| h4 | 26.19 | 22.39 | +3.80 | 0 |
+| h5 | 24.19 | 22.39 | +1.80 | 0 |
+| h6 | 22.39 | 22.39 | 0 | 0 |
+
+One heading of each level costs 34.7 px of estimation error before and 9.5 px
+after. **This is a mitigation, not a cure** — the error shrinks, and nothing can
+remove it while a heading is taller than a line of prose.
+
+- [ ] **Does it actually help?** The only instrument that can answer is a person
+      scrolling a real document in a real build, for the reason above.
+- [ ] **Does the tighter heading leading look wrong?** It is the leading live
+      mode has always had, now in source and split as well. A one-commit revert
+      if not.
 - [ ] **Does it happen in source mode with the preview never opened?** Reported
       as yes. Worth one deliberate check, because in that mode nothing in
       Hashpad writes the editor's `scrollTop` at all — which would leave
