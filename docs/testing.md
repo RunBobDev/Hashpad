@@ -2734,3 +2734,41 @@ would have caught them.
       grow with the font. Not a defect, but worth knowing before it is reported
       as one.
 
+## Known issue — the editor drifts slightly while scrolling
+
+**Reported after Checkpoint L, and not caused by it.** Scrolling down jumps a
+little up every few ticks; scrolling up jumps a little down. In every view mode
+*except* live preview.
+
+**It is the editor, not the preview pane.** The obvious suspect was scroll sync,
+which L had touched. It is not: a pane-side probe found no pull in either
+direction, and the drift reproduces in `harness/livepreview.html`, which has no
+preview pane on the page at all. `git diff` across the whole of Checkpoint L
+shows **no change to `frontend/src/editor/`**, and the only editor changes since
+0.4.0 are live-preview-only.
+
+**Why it looks new.** Both view-mode settings have been on live preview since
+0.4.0, so a long document has rarely been scrolled in any other mode since then.
+
+Measured with `window.scrollDrift('source' | 'live', dir)` in that harness:
+
+| | down | up |
+|---|---|---|
+| live preview off | 1 reversal in 20, worst 9 px | 3 in 20, worst 50 px |
+| live preview on | 0 in 20 | 0 in 20 |
+
+It is intermittent and depends on the document's shape — a run of short
+paragraphs showed it; four hundred long wrapping lines did not — which is
+consistent with CodeMirror correcting an estimated line height as lines actually
+render. Why live preview is immune is **not established**; the plausible reason
+is that its view plugins re-measure the viewport on every update, but that is a
+hypothesis rather than a finding.
+
+- [ ] **Confirm which scroller drifts.** In split mode, does the *editor* move
+      under the pointer, or the *preview*? Both were suspected; only the editor
+      reproduces here.
+- [ ] **Does it happen in source mode with the preview never opened?** That
+      rules the preview module out entirely rather than by inference.
+- [ ] **Does word wrap change it?** Probed both ways with no difference, but on
+      a synthetic document.
+

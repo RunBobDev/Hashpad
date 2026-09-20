@@ -169,6 +169,18 @@ declare global {
     arrowDown: () => number;
     liveView: EditorView;
     sourceView: EditorView;
+    scrollDrift: (
+      which: 'live' | 'source',
+      dir?: number,
+      steps?: number,
+    ) => Promise<{
+      which: string;
+      direction: string;
+      steps: number;
+      reversals: number;
+      worst: number;
+      drifts: number[];
+    }>;
   }
 }
 
@@ -253,4 +265,59 @@ window.caretTo = (line: number) => {
   on.dispatch({ selection: EditorSelection.single(pos) });
   on.focus();
   return measure(`on · caret line ${String(line)}`, on);
+};
+
+/**
+ * **Does the editor stay where it is put while scrolling?**
+ *
+ * Owner report after Checkpoint L: scrolling down jumps a little up every few
+ * ticks, and scrolling up jumps a little down -- in every view mode *except*
+ * live preview. The obvious suspect was the preview pane's scroll sync, which
+ * L had touched. It was not: a pane-side probe found nothing in either
+ * direction, and the editor drifts here with **no preview pane on the page at
+ * all**.
+ *
+ * This is the measurement that localised it, and the reason it belongs on this
+ * page rather than a new one: the two panels are the same editor with live
+ * preview on and off, which is exactly the comparison the report draws.
+ *
+ * Measured: the OFF panel reversed on 1 of 20 steps scrolling down and 3 of 20
+ * scrolling up (worst 50 px); the ON panel reversed on none of 40. It is
+ * intermittent and depends on the document's shape -- a run of short paragraphs
+ * showed it, four hundred long wrapping lines did not -- which is consistent
+ * with CodeMirror correcting an estimated height as lines actually render, and
+ * is why stepping `scrollTop` is only a rough model of a real wheel.
+ *
+ * `dir` is 1 for down, -1 for up. A "reversal" is movement *against* the
+ * direction of travel, which is what a person feels as a stutter.
+ */
+window.scrollDrift = async (which, dir = 1, steps = 20) => {
+  const view = which === 'live' ? on : off;
+  const scroller = view.scrollDOM;
+  const max = scroller.scrollHeight - scroller.clientHeight;
+  const wait = (ms: number): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, ms));
+
+  scroller.scrollTop = dir > 0 ? 500 : max - 500;
+  await wait(300);
+
+  const drifts: number[] = [];
+  for (let i = 0; i < steps; i++) {
+    const set = Math.round(scroller.scrollTop) + dir * 120;
+    // Stop before the ends: past them the browser clamps, and a clamp is not a
+    // drift however much it looks like one in the numbers.
+    if (set <= 0 || set >= max - 120) break;
+    scroller.scrollTop = set;
+    await wait(120);
+    drifts.push(Math.round(scroller.scrollTop) - set);
+  }
+
+  const reversals = drifts.filter((d) => (dir > 0 ? d < 0 : d > 0));
+  return {
+    which,
+    direction: dir > 0 ? 'down' : 'up',
+    steps: drifts.length,
+    reversals: reversals.length,
+    worst: reversals.length === 0 ? 0 : Math.max(...reversals.map((d) => Math.abs(d))),
+    drifts,
+  };
 };
