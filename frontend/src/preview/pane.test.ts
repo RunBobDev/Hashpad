@@ -1531,6 +1531,67 @@ describe('scroll sync', () => {
     expect(pane.scrollTop).toBe(300);
   });
 
+  /**
+   * **The echo arrives a frame late, and by then the editor has moved on.**
+   * This is the split- and reading-view choppiness the owner reported, and the
+   * test above could not see it because it delivers the echo immediately.
+   *
+   * A browser fires scroll events *before* animation-frame callbacks in the
+   * same frame. Sync runs inside a scroll event, so the guard it armed was
+   * released by its own `requestAnimationFrame` in that same frame -- and the
+   * pane's echo, dispatched in the next frame's scroll steps, found nothing to
+   * stop it. It was taken as the user scrolling the pane and mapped back into
+   * the editor; meanwhile the wheel animation had carried the editor further,
+   * so the mapping pulled it backwards. Once per frame, all the way down:
+   * filmed in the real app at 52 frames against the direction of travel in a
+   * 40-tick scroll, and half the distance covered.
+   */
+  it('ignores its own echo even when it arrives after the next frame', async () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    scrollEditorToLine(view, 3);
+    expect(pane.scrollTop).toBe(600);
+    await nextFrame();
+
+    // The wheel animation has carried the editor on before the echo lands.
+    const movedOn = blockTopOf(view, 3) + 50;
+    const restore = placeScroller(view, movedOn);
+    pane.dispatchEvent(new Event('scroll'));
+    const editorTop = view.scrollDOM.scrollTop;
+    restore();
+
+    expect(editorTop).toBe(movedOn);
+  });
+
+  /**
+   * **The side the user is scrolling leads; the other only follows.** A
+   * follower's position is a frame stale by definition while the leader moves,
+   * so letting it sync back can only ever pull the leader backwards.
+   *
+   * Not hypothetical, and not an echo: in reading view the editor keeps its
+   * full layout behind the pane, so CodeMirror goes on drawing and correcting
+   * its height estimates while it follows -- and a correction moves its
+   * `scrollTop` to a position sync never wrote. Filmed in the real app
+   * scrolling up through not-yet-drawn text: the pane stepped backwards on 5
+   * frames after the echo fix, 25 px at worst.
+   */
+  it('does not let the follower move the side the user is scrolling', () => {
+    const { split, view } = mountSynced();
+    const pane = paneOf(split);
+
+    pane.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 }));
+    scrollPaneTo(view, pane, 300);
+    const editorAt = view.scrollDOM.scrollTop;
+
+    // CodeMirror moves the editor on its own, to a position sync never wrote.
+    const restore = placeScroller(view, editorAt + 40);
+    view.scrollDOM.dispatchEvent(new Event('scroll'));
+    restore();
+
+    expect(pane.scrollTop).toBe(300);
+  });
+
   it('is listening again on the next frame', async () => {
     const { split, view } = mountSynced();
     const pane = paneOf(split);
@@ -1607,24 +1668,6 @@ describe('scroll sync', () => {
     handle.hide();
 
     expect(removed).toHaveBeenCalledWith('scroll', expect.any(Function));
-  });
-
-  /**
-   * The only spy in this file on something that outlives its test, so it is
-   * restored through `onTestFinished` rather than at the end of the body: a
-   * failing assertion aborts before that line, and `window.cancelAnimationFrame`
-   * left spied takes down every later test that tears an editor down.
-   * Mutation-tested -- with the restore inline, breaking this reddened eleven.
-   */
-  it('cancels the guard’s pending frame on destroy', () => {
-    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
-    onTestFinished(() => cancel.mockRestore());
-    const { split, view, handle } = mountSynced();
-    scrollPaneTo(view, paneOf(split), 300);
-
-    handle.destroy();
-
-    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });
 

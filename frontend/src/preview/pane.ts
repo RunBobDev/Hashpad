@@ -132,9 +132,11 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
    * layout flush, and it re-measures only when the number actually moves.
    */
   let anchoredHeight = -1;
-  /** The scroller this module just wrote to; its next scroll event is the echo. */
-  let echoFrom: HTMLElement | null = null;
-  let guardFrame: number | null = null;
+  /** Where each scroller was last put by a sync write, as the browser accepted it. */
+  const written = new Map<HTMLElement, number>();
+  /** The scroller the user is scrolling, and until when that still counts. */
+  let leader: HTMLElement | null = null;
+  let leaderUntil = 0;
 
   /**
    * Off unless someone turns it on from the console with
@@ -536,62 +538,96 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
 
   /**
    * Scrolling one pane scrolls the other, whose own scroll event would scroll
-   * the first one back. What suppresses that echo is a token naming **the
-   * scroller we just wrote to**, consumed by the first event that arrives on it.
+   * the first one back. **An event is the echo when its scroller is exactly
+   * where sync last put it** -- recognised by position, not by when it arrives.
    *
-   * This replaced a single `applying` boolean that blocked *any* sync for a
-   * whole animation frame, and that was the bug behind "the pane I am scrolling
-   * is smooth, the other one is choppy and jumps". Scroll events fire several
-   * times per frame during a wheel or a drag; the flag let the first one
-   * through and dropped every one after it until the frame ran. The follower
-   * therefore updated at best once a frame, from whichever source position
-   * happened to land after a frame boundary, so it lurched between distant
-   * positions instead of tracking. A token that names one scroller only ever
-   * suppresses the echo, never the user.
+   * It used to be recognised by timing: a token naming the scroller just
+   * written to, released by the next animation frame. That could never work
+   * in a browser, and it was the split- and reading-view choppiness the owner
+   * reported. Scroll events fire *before* animation-frame callbacks in the same
+   * frame, and sync always runs inside a scroll event -- so the release frame
+   * ran in the same frame as the write, and the echo, dispatched in the next
+   * frame's scroll steps, found the token already gone. It was taken as the
+   * user scrolling the other side and mapped back; a wheel animation had moved
+   * the source on in the meantime, so the mapping dragged it backwards. Every
+   * frame. Filmed in the real app: 52 of ~250 frames moving against the
+   * direction of travel, and half the distance covered. jsdom fires no events
+   * on its own, so every test delivered the echo immediately and passed.
    *
-   * The frame is still here, as the release valve for a write that produces no
-   * scroll event at all -- the browser clamping at the top or bottom, say.
-   * Without it the token would sit armed and eat the user's next real scroll on
-   * that side.
+   * Position needs no clock. Nothing is consumed, so several events landing on
+   * the same written position are all recognised, and a genuine scroll is
+   * whatever moved the scroller *away* from it. Nor is there a release valve
+   * to tune: a write that produces no event leaves an entry that can only ever
+   * match a scroller that has not moved, which is not something to sync.
    *
-   * Untested here and worth knowing: this reasoning assumes the write scrolls
-   * instantly. Under `scroll-behavior: smooth` the assignment animates over
-   * dozens of frames and only the first echo would be inside the token --
-   * measured in real Chromium, where the remaining echoes dragged the source
-   * scroller back to 0. Nothing in `src/` or `@codemirror/view` sets it today.
+   * Still the right granularity, unlike the single `applying` boolean before
+   * the token, which blocked *any* sync for a frame and made the follower lurch
+   * between whichever positions crossed a frame boundary: this only ever
+   * suppresses a scroller sitting where we put it, never the user.
    */
   function isEcho(scroller: HTMLElement): boolean {
-    if (echoFrom !== scroller) return false;
-    // Consume it: the token is good for exactly one event.
-    releaseGuard();
-    return true;
+    const top = written.get(scroller);
+    // Half a pixel: the read-back below is already snapped to device pixels,
+    // and two genuinely different positions are at least one device pixel apart.
+    return top !== undefined && Math.abs(scroller.scrollTop - top) < 0.5;
   }
 
   function writeTo(scroller: HTMLElement, top: number): void {
-    // An assignment that changes nothing fires no scroll event, so arming the
-    // token would leave it waiting for an echo that never comes -- and eating
-    // the user's next real scroll on that side instead.
     if (scroller.scrollTop === top) return;
-    releaseGuard();
-    echoFrom = scroller;
-    guardFrame = requestAnimationFrame(() => {
-      guardFrame = null;
-      echoFrom = null;
-    });
     scroller.scrollTop = top;
+    // **Read back, not `top`.** The browser clamps to the scroll range and snaps
+    // to device pixels, and the echo carries the position it accepted.
+    written.set(scroller, scroller.scrollTop);
   }
 
   /**
-   * A pending frame would clear the flag against a pane that no longer exists,
-   * and a flag left set would wedge the sync for the next `show()` -- both
-   * invisible from the DOM.
+   * **The side the user is scrolling leads; the other only follows.** While one
+   * side moves under a wheel, a drag or a key, the other's position is a frame
+   * stale by definition -- it was set from where the leader *was* -- so letting
+   * it sync back can only ever pull the leader backwards.
+   *
+   * Echoes are one way that happens and `isEcho` stops them. This stops the
+   * other: a follower moving for its own reasons. In reading view the editor
+   * keeps its full layout behind the pane (preview.css says why), so CodeMirror
+   * goes on drawing and correcting its height estimates while it follows, and a
+   * correction writes a `scrollTop` sync never wrote. Filmed in the real app,
+   * scrolling up through text not yet drawn: the pane stepped backwards on 5
+   * frames in 280 with only the echo fix, 25 px at worst.
+   *
+   * A clock, but not the fragile kind the old echo guard was. The lead is
+   * *taken* by input, which is unambiguous, and renewed by every scroll event
+   * the leader produces -- a wheel animation fires one each frame -- so the
+   * window only has to bridge the frame between input and the first scroll, and
+   * the tail after the last. Outside a user scroll nobody leads and sync runs
+   * both ways as before, which is what an outline jump or a caret move needs.
    */
+  const LEAD_MS = 200;
+
+  function lead(scroller: HTMLElement): void {
+    leader = scroller;
+    leaderUntil = performance.now() + LEAD_MS;
+  }
+
+  function isFollowing(scroller: HTMLElement): boolean {
+    if (leader === null || performance.now() >= leaderUntil) return false;
+    if (leader !== scroller) return true;
+    lead(scroller);
+    return false;
+  }
+
+  const leadEditor = (): void => {
+    lead(view.scrollDOM);
+  };
+  const leadPane = (): void => {
+    if (pane !== null) lead(pane);
+  };
+  /** The inputs that mean a person is moving this side, as opposed to sync. */
+  const LEAD_INPUTS = ['wheel', 'pointerdown', 'touchstart', 'keydown'] as const;
+
+  /** Forgotten on `hide()`, so nothing from one showing suppresses the next. */
   function releaseGuard(): void {
-    if (guardFrame !== null) {
-      cancelAnimationFrame(guardFrame);
-      guardFrame = null;
-    }
-    echoFrom = null;
+    written.clear();
+    leader = null;
   }
 
   /**
@@ -640,7 +676,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // the document. Reachable: `html_block` drops the source-line attribute, so
     // a document that is one block of raw HTML scrolls and has no anchors.
     if (list.length === 0) return;
-    if (isEcho(view.scrollDOM)) return;
+    if (isFollowing(view.scrollDOM) || isEcho(view.scrollDOM)) return;
 
     // **The end, decided live rather than looked up.**
     //
@@ -800,7 +836,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     const list = anchorOffsets(target);
     // See `syncFromEditor`: an empty list means "no mapping", not "line 1".
     if (list.length === 0) return;
-    if (isEcho(target)) return;
+    if (isFollowing(target) || isEcho(target)) return;
 
     // The inverse, and fractional for the same reason: rounding to a line and
     // scrolling to its top made the editor lurch a line at a time and sit still
@@ -1019,6 +1055,12 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     // this one is a real leak if `hide()` forgets it -- and it would keep
     // measuring against a pane that is no longer there.
     view.scrollDOM.addEventListener('scroll', syncFromEditor);
+    // Who leads the sync. Both sides, removed in `hide()` for the same reason
+    // as the line above: the editor's scroller outlives the pane.
+    for (const type of LEAD_INPUTS) {
+      view.scrollDOM.addEventListener(type, leadEditor, { passive: true });
+      pane.addEventListener(type, leadPane, { passive: true });
+    }
     // Same reasoning as the `load` listener above, for the other thing that
     // rewraps the pane without rendering it.
     window.addEventListener('resize', invalidateAnchors);
@@ -1046,6 +1088,10 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     pane?.removeEventListener('load', invalidateAnchors, true);
     pane?.removeEventListener('click', onPreviewClick);
     view.scrollDOM.removeEventListener('scroll', syncFromEditor);
+    for (const type of LEAD_INPUTS) {
+      view.scrollDOM.removeEventListener(type, leadEditor);
+      pane?.removeEventListener(type, leadPane);
+    }
     // `window` outlives everything here, so this is the one of the four that
     // leaks for the life of the process if it is forgotten.
     window.removeEventListener('resize', invalidateAnchors);
