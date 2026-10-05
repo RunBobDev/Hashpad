@@ -37,12 +37,13 @@ import { MATH_DISPLAY_CLASS, MATH_INLINE_CLASS } from './rules/math';
  * KaTeX's stylesheet, which is not optional -- the class names its output
  * carries mean nothing without it.
  *
- * **Imported here rather than lazily, because `vite.config.ts` sets
- * `cssCodeSplit: false`** and every stylesheet in the build ends up in one
- * file regardless of where it is imported. So this is 24 kB in the entry
- * stylesheet for every document, math or not. The fonts stay lazy on their own:
- * a browser fetches a `@font-face` file only when a rule using it matches
- * something, and nothing matches until math is on screen.
+ * **Lazy, because this module is.** It lives in the preview pane's chunk, and
+ * `vite.config.ts` splits CSS per chunk, so this stylesheet is fetched with the
+ * pane and never by a session that does not open it. It used to be hoisted into
+ * the startup stylesheet -- 24 kB and 381 selectors in every mode, including
+ * source, where nothing can use it -- while `cssCodeSplit` was off. The fonts
+ * were always lazy on their own: a browser fetches a `@font-face` file only
+ * when a rule using it matches something.
  */
 import 'katex/dist/katex.min.css';
 

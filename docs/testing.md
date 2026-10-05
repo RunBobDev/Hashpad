@@ -2797,8 +2797,6 @@ value the compositor is still changing.
 `writeTo` under `scroll-behavior: smooth`. Nothing in `src/` sets that property;
 the wheel's own animation is a different mechanism and is on by default.
 
-### Open
-
 ### The height map was not it
 
 The first fix cut the estimation error by roughly three quarters and **changed
@@ -2807,10 +2805,11 @@ the measurement that never supported it: the visible movement error was zero all
 along. Whatever CodeMirror's `scrollTop` writes are doing, a person cannot see
 them.
 
-Kept anyway, because it is right on its own terms and costs nothing — but it is
-no longer offered as the fix. See below.
+**Reverted.** It changed the editor's heading leading, which nobody asked for,
+and bought nothing anyone could feel. `frontend/src/editor/` and
+`variables.css` are byte-identical to v0.5.0 again.
 
-### What was actually wrong: the page could not scroll on the compositor
+### The passive wheel listener was not it either
 
 `ui/zoom.ts` registered its `wheel` listener on `window` as `passive: false`,
 because it called `preventDefault()` to stop WebView2 running its own page zoom
@@ -2830,50 +2829,64 @@ WebView2's built-in zoom is gone and there is nothing left to cancel. The
 listener is `passive: true`; Hashpad's own zoom is unaffected, because it only
 ever *read* the event.
 
-- [ ] **Is the choppiness gone?** Still only answerable by a person on a real
-      build — see the note on smooth scrolling above.
-- [ ] **Does Ctrl+scroll still zoom, and still leave the chrome alone?** The
-      mechanism moved, so this is worth one deliberate check.
-- [ ] **Does Ctrl+Plus / Ctrl+Minus / Ctrl+0 still zoom?** Those go through
-      `keydown`, which is untouched, but WebView2's own handling of them is now
-      off as well.
-- [ ] **Anything odd about the window itself?** A non-nil `Windows` gives it
-      `WS_EX_CONTROLPARENT | WS_EX_APPWINDOW`, which it did not have before.
+Reported as **still choppy**; zoom confirmed working, window confirmed fine.
+**Kept**, because a non-passive `wheel` listener on `window` is a real defect
+whether or not it is this one, and it now has no visible cost.
 
-### Also shipped: the heading line cap
+### Comparing the builds, not the source
 
-Live mode already caps heading lines at `line-height: 1.25` (`livepreview.ts`,
-`liveTypography`), which is the one difference between it and the modes that
-stutter. `highlight.ts` now declares the same cap on all six heading levels, so
-source and split get it too. Measured in `harness/livepreview.html`:
+Three rounds of reasoning from the source produced three wrong answers, so the
+fourth compared what actually ships: v0.5.0 (`ff71771`, reported smooth) built
+in a worktree beside the current tree, bundle against bundle.
 
-| level | line box before | after | error before | after |
-|-------|-----------------|-------|--------------|-------|
-| h1 | 35.83 px | 28.39 | +13.44 | +6.00 |
-| h2 | 31.79 | 24.84 | +9.40 | +2.45 |
-| h3 | 28.67 | 23.39 | +6.27 | +1.00 |
-| h4 | 26.19 | 22.39 | +3.80 | 0 |
-| h5 | 24.19 | 22.39 | +1.80 | 0 |
-| h6 | 22.39 | 22.39 | 0 | 0 |
+**The JavaScript that runs in source mode is identical.** The entry chunk,
+with Vite's content hashes normalised out of the chunk references, differs from
+v0.5.0 in exactly four places: the heading cap and the passive wheel listener
+(both landed *after* the report), the preview pane's dynamic-import line, and
+the minifier's export names. CodeMirror and Lezer are the same versions to the
+patch. At the moment of the report, nothing on the source-mode code path had
+changed.
 
-One heading of each level costs 34.7 px of estimation error before and 9.5 px
-after. **This is a mitigation, not a cure** — the error shrinks, and nothing can
-remove it while a heading is taller than a line of prose.
+**The stylesheet had.** `vite.config.ts` sets `cssCodeSplit: false`, so every
+stylesheet in the build lands in the one file loaded at startup — including the
+one imported by the lazily-loaded preview pane. Checkpoint L added
+`import 'katex/dist/katex.min.css'` there, and the startup stylesheet went from
+19,384 bytes to 48,069: **381 KaTeX selectors and 20 `@font-face` rules, in every
+mode, for every document**, some keyed on `*` and `span`. `preview/math.ts`
+records this trade-off in its own comment and judged it harmless.
 
-- [ ] **Does it actually help?** The only instrument that can answer is a person
-      scrolling a real document in a real build, for the reason above.
-- [ ] **Does the tighter heading leading look wrong?** It is the leading live
-      mode has always had, now in source and split as well. A one-commit revert
-      if not.
-- [ ] **Does it happen in source mode with the preview never opened?** Reported
-      as yes. Worth one deliberate check, because in that mode nothing in
-      Hashpad writes the editor's `scrollTop` at all — which would leave
-      CodeMirror's own compensation as the only candidate.
-- [ ] **Is split worse than source?** In split the pane sync writes the editor's
-      `scrollTop` as well, and a smooth wheel gesture fires many scroll events
-      where the echo guard expects roughly one per frame.
-- [ ] **Does word wrap change it?** Probed both ways with no difference, but on
-      a synthetic document and without smooth scrolling. Wrapping makes the
-      estimate a multiple of an estimate, so it should make this worse, not
-      better.
+Measured harmless here too, A-B-A, forcing style recalculation and layout of the
+source panel's 285 rendered elements: 3.4 ms without, 3.4 ms with, 3.4 ms
+without again. Chromium's ancestor filter fast-rejects `.katex *` against
+anything not inside `.katex`. **But by elimination it is the only source-mode
+difference left**, and this browser has misjudged this bug every time. So it
+moves out of the startup stylesheet anyway — see below — and the owner's machine
+is the instrument that says whether that mattered.
+
+**Ruled out: the WebView2 update.** The runtime updated to 153 at 18:08 on
+2026-09-20, which looked like the answer for about a minute. The report was at
+08:55 the same morning, nine hours earlier — v0.5.0 and the build reported on
+ran on the same engine.
+
+### KaTeX's stylesheet now loads with the pane, not at startup
+
+`cssCodeSplit: true`. The entry stylesheet is still one file; the preview
+pane's chunk gets its own, which Vite's import helper loads before the chunk
+resolves — so math is styled the moment it can render, and a session that never
+opens the preview never loads it at all.
+
+**Not a complete answer if KaTeX's CSS turns out to be the cause.** Once the
+pane has been opened, the stylesheet stays in the document for the rest of the
+session, source mode included. That is also what makes it a clean experiment:
+
+- [ ] **v0.5.0, source mode** — smooth? If not, this was never a regression,
+      and the comparison is with a mode rather than a version (both view-mode
+      settings have defaulted to live preview since 0.4.0).
+- [ ] **Current build, source mode, preview never opened this session** —
+      smooth? If v0.5.0 is smooth and this is not, the cause is not in the
+      bundle at all, because there is nothing left in it that differs.
+- [ ] **Current build, open split once, back to source** — does it turn choppy?
+      If it does, KaTeX's stylesheet is the cause, and it needs to come out of
+      the document whenever the pane is hidden, not just until it is first
+      shown.
 

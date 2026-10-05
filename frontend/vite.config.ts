@@ -72,7 +72,17 @@ export default defineConfig({
     // WebView2 is evergreen Chromium, but WebKitGTK on Linux trails it. es2022
     // is the newest target both support, so the Linux port needs no build change.
     target: 'es2022',
-    cssCodeSplit: false,
+    // **Split, so a lazy chunk's stylesheet stays lazy.** With this off, every
+    // stylesheet in the build is hoisted into the one file loaded at startup,
+    // wherever it was imported -- which was harmless until Checkpoint L put
+    // KaTeX's 24 kB, 381 selectors and 20 `@font-face` rules into the preview
+    // pane's chunk, and so into every mode of every session, source included.
+    //
+    // The entry stylesheet is still a single file; the only chunk that imports
+    // CSS is the pane (through `preview/math.ts`), and Vite's import helper
+    // loads its stylesheet before the chunk resolves, so math is never drawn
+    // unstyled. A session that never opens the preview never fetches it.
+    cssCodeSplit: true,
     reportCompressedSize: true,
     rollupOptions: {
       // Single core bundle (design §2.4): assets come from Go's embedded handler,
