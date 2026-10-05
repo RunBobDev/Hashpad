@@ -34,8 +34,32 @@
  * only when `VITE_SCROLL_PROBE` is set, so nothing here reaches a release
  * bundle.
  */
+import { WriteFile } from '../../wailsjs/go/app/App';
 import { store } from '../state/appcontext';
 import { activeDocument } from '../state/documents';
+import { emitCommand } from './menubar';
+
+/**
+ * **The automated half.** The overlay needed a person to read it, and the
+ * owner's time was the bottleneck -- so the probe can also be driven from
+ * outside with real OS wheel input, and write a frame-by-frame trace to disk.
+ *
+ * The driver presses these chords, which nothing else in the app binds:
+ *
+ * - **Ctrl+Alt+Shift+S / L** -- switch the active document to source / live
+ *   preview through the same command the View menu runs, and start a fresh
+ *   trace phase named after the mode.
+ * - **Ctrl+Alt+Shift+D** -- write every phase to `scroll-probe.json` beside the
+ *   open document, through the app's own `WriteFile`.
+ *
+ * A trace rather than a summary, because the summary is what the overlay
+ * already had and what could not say *why*: whether a step backwards lands on
+ * the same frame as a change in the document's height is the difference
+ * between CodeMirror correcting its estimates and something else entirely.
+ */
+type Phase = { frames: number[][]; scrolls: number[][]; wheels: number[][] };
+
+const round = (value: number): number => Math.round(value * 10) / 10;
 
 interface Samples {
   frames: number[];
@@ -159,6 +183,9 @@ export function mountScrollProbe(): () => void {
   // was tried. A display that only repaints from it shows a blank instrument
   // and no way to tell that apart from a quiet one. The scroll event repaints
   // it too, so the numbers move whenever the thing being measured is happening.
+  const phases: Record<string, Phase> = {};
+  let phase: Phase | null = null;
+
   const tick = (): void => {
     const now = performance.now();
     const delta = now - lastFrame;
@@ -166,10 +193,59 @@ export function mountScrollProbe(): () => void {
     record(samples.frames, delta);
     if (delta > 32) slowFrames++;
     worstFrame = Math.max(worstFrame, Math.round(delta * 10) / 10);
+    phase?.frames.push([round(now), round(scroller.scrollTop), scroller.scrollHeight]);
     render();
     if (running) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+
+  const onWheel = (event: WheelEvent): void => {
+    phase?.wheels.push([round(event.timeStamp), event.deltaY, event.deltaMode]);
+  };
+  window.addEventListener('wheel', onWheel, { passive: true });
+
+  // **`keyCode`, deprecated or not.** Synthesised OS input (`keybd_event` with
+  // no scan code) arrives with an empty `event.code`, and `event.key` under
+  // Ctrl+Alt is layout-dependent -- AltGr on many European layouts. The virtual
+  // key code is the one field both a real keyboard and the driver agree on.
+  const S = 83;
+  const L = 76;
+  const P = 80;
+  const R = 82;
+  const D = 68;
+  // Which command reaches each mode. All four are the View menu's own toggles,
+  // so each is sent only when the document is not already there.
+  const modes: Record<number, ['source' | 'live' | 'split' | 'preview', string]> = {
+    [S]: ['source', 'view.livePreview'],
+    [L]: ['live', 'view.livePreview'],
+    [P]: ['split', 'view.preview'],
+    [R]: ['preview', 'view.readingMode'],
+  };
+  const onChord = (event: KeyboardEvent): void => {
+    if (!(event.ctrlKey && event.altKey && event.shiftKey)) return;
+    const mode = modes[event.keyCode];
+    if (mode) {
+      const [target, command] = mode;
+      if (activeDocument(store.getState())?.viewMode !== target) emitCommand(command);
+      phase = { frames: [], scrolls: [], wheels: [] };
+      phases[target] = phase;
+      onClick();
+    } else if (event.keyCode === D) {
+      phase = null;
+      const path = activeDocument(store.getState())?.filePath;
+      if (path) {
+        const out = path.replace(/[^\\/]+$/, 'scroll-probe.json');
+        const trace = { userAgent: navigator.userAgent, dpr: devicePixelRatio, phases };
+        void WriteFile(out, JSON.stringify(trace), 'utf-8', 'lf');
+      }
+    } else {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  // Capture, so the chord is seen before CodeMirror's keymap can claim it.
+  window.addEventListener('keydown', onChord, true);
 
   // Against the direction of travel, which is the original report: "scrolling
   // down it jumps a tiny bit up". Sign, not magnitude, is what makes it one.
@@ -181,8 +257,9 @@ export function mountScrollProbe(): () => void {
   // travel direction only changes when the scroll actually keeps going that
   // way, which is what `lastDirection` now holds.
   let lastDirection = 0;
-  const onScroll = (): void => {
+  const onScroll = (event: Event): void => {
     const top = scroller.scrollTop;
+    phase?.scrolls.push([round(event.timeStamp), round(top)]);
     const delta = top - lastTop;
     if (delta !== 0) {
       if (lastDirection !== 0 && Math.sign(delta) !== lastDirection) {
@@ -240,6 +317,8 @@ export function mountScrollProbe(): () => void {
     running = false;
     if (pending !== null) clearTimeout(pending);
     scroller.removeEventListener('scroll', onScroll);
+    window.removeEventListener('wheel', onWheel);
+    window.removeEventListener('keydown', onChord, true);
     box.removeEventListener('click', onClick);
     for (const observer of observers) observer.disconnect();
     box.remove();

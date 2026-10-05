@@ -2734,11 +2734,73 @@ would have caught them.
       grow with the font. Not a defect, but worth knowing before it is reported
       as one.
 
-## Known issue — the editor drifts slightly while scrolling
+## Fixed — split and reading view scrolled choppily
 
-**Reported after Checkpoint L, and not caused by it.** Scrolling down jumps a
-little up every few ticks; scrolling up jumps a little down. In every view mode
-*except* live preview.
+**Resolved by `381f2c5`.** Scrolling down jumped a little up every few ticks;
+scrolling up jumped a little down. The modes affected were **split and reading
+view** — the two with a preview pane. Source and live preview were always fine.
+
+**The cause was scroll sync**, twice over, in `preview/pane.ts`:
+
+1. **The echo guard could never work in a browser.** Writing one side armed a
+   token naming it, released by the next animation frame. Scroll events fire
+   *before* animation-frame callbacks in the same frame, and sync always runs
+   inside a scroll event, so the release ran in the same frame as the write and
+   the echo — dispatched a frame later — got through. Mapped back as if the user
+   had scrolled the other side, it pulled the source backwards, every frame.
+   Echoes are now recognised by position: a scroller exactly where sync put it.
+2. **A follower moving for its own reasons.** Reading view keeps the editor
+   laid out behind the pane, so CodeMirror corrects its height estimates while
+   following and writes a `scrollTop` sync never wrote. The side receiving the
+   user's input now leads while it keeps scrolling; the other cannot push back.
+
+Filmed in the real app with real wheel input (see below), 40 ticks per run:
+
+| | frames against travel, before | after | distance, before | after |
+|---|---|---|---|---|
+| split, wheel on editor | 52 | **0** | 3,028 / 6,000 px | **6,000** |
+| reading view | 53 | **0** | 3,067 / 6,000 px | **6,000** |
+| split, wheel on preview | not measured cleanly* | **0** | — | **6,000** |
+
+\* The early rig parked the pointer before switching to split, and Chromium
+aims a wheel at whatever was under the pointer when it last moved — so some
+"wheel on preview" runs were really scrolling the editor. `scroll-film.ps1`
+now moves the pointer after the layout settles; the *after* numbers use it.
+
+Both directions, starting from the top and from the end. jsdom fires no scroll
+events of its own, so every unit test delivered the echo immediately and passed;
+`pane.test.ts` now delivers one a frame late, after the source has moved on.
+
+### Why this took five rounds
+
+The report was read as "every mode except live preview *including source*", so
+the first four rounds investigated the editor in source mode — which never had
+the bug — and shipped three fixes to it: a heading line-height cap (reverted), a
+passive `wheel` listener (kept; a real defect, not this one), and KaTeX's
+stylesheet moved out of startup (kept; correct, not this one). Every one was
+reasoned from code because no browser available to development could show a
+scrolling bug at all. What ended it was measuring the real app — and then
+filming the modes that were actually reported.
+
+### How to measure scrolling for real
+
+```
+task build:probe
+./scripts/scroll-film.ps1 -Doc <a long .md> -Mode split -WheelAt 0.25 -Out split.png
+python scripts/scroll-film.py split.png
+```
+
+The probe build (`ui/scrollprobe.ts`) adds hidden mode chords; the script drives
+it with OS-level wheel input and films a strip of the screen at ~60 fps; the
+analysis reports distance travelled and every frame that moved against the
+direction of travel. `-WheelAt`/`-FilmAt` pick the side to scroll and to film
+(in split, ~0.25 is the editor and ~0.8 the preview). It moves the real mouse.
+
+**What follows is the investigation as it went, kept for the measurements in
+it — but read its conclusions against the above.** Its subject is source mode,
+which was not the reported problem.
+
+### The original investigation
 
 **It is the editor, not the preview pane.** The obvious suspect was scroll sync,
 which L had touched. It is not: a pane-side probe found no pull in either
