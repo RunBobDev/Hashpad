@@ -38,6 +38,14 @@ wrap, and zoom.
 with scroll synchronisation, GitHub-flavoured styling that follows the active
 theme, and fenced code highlighted by the same parsers the editor uses.
 
+**Math and diagrams** — `$inline$` and `$$display$$` math typeset by KaTeX, and
+` ```mermaid ` blocks drawn as diagrams: flowcharts, sequence diagrams, and the
+rest of what Mermaid draws. Both render in the preview, follow the theme, and
+work entirely offline: both libraries are bundled, nothing is fetched, and each
+loads only when a document first uses it. An expression or diagram that does not
+parse shows its source with the error, not a blank. A price like "$5 and $10"
+stays a price.
+
 **Live preview** — markdown markers hide themselves unless the cursor is on the
 line they sit on. Type `**bold**`, move away, and the asterisks vanish while the
 word stays bold; move back and they return, so the formatting stays editable.
@@ -81,12 +89,13 @@ that does not already exist.
 
 ## Installing
 
-Two downloads. Both are the same application.
+Two downloads on the [Releases](https://github.com/RunBobDev/Hashpad/releases)
+page. Both are the same application.
 
 | | What it does |
 |---|---|
-| **`Hashpad.exe`** (portable) | Runs from anywhere. Creates its `settings.json` beside itself on first launch and writes nothing else outside its own folder. Give it its own directory and it leaves no trace on the machine. |
-| **`Hashpad-amd64-installer.exe`** | Installs to Program Files or to your user profile — it asks which. Adds a Start Menu entry, and *offers* to associate `.md`, `.markdown`, `.mdown` and `.mkd`. The association is a checkbox, never forced, and the uninstaller asks before removing your settings. |
+| **`Hashpad-<version>-installer.exe`** | Installs to Program Files or to your user profile — it asks which. Adds a Start Menu entry, and *offers* to associate `.md`, `.markdown`, `.mdown` and `.mkd`. The association is a checkbox, never forced, and the uninstaller asks before removing your settings. |
+| **`Hashpad-<version>-portable.exe`** | Runs from anywhere. Creates its `settings.json` beside itself on first launch and writes nothing else outside its own folder. Give it its own directory and it leaves no trace on the machine. |
 
 Windows 10 or 11. The WebView2 runtime is required and is already present on
 current Windows installations; the installer will fetch it if it is missing.
@@ -151,10 +160,12 @@ SPEC.md              The requirements this was built against
 ```
 
 Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/),
-[markdown-it](https://github.com/markdown-it/markdown-it) and
-[DOMPurify](https://github.com/cure53/DOMPurify).
+[markdown-it](https://github.com/markdown-it/markdown-it),
+[DOMPurify](https://github.com/cure53/DOMPurify), [KaTeX](https://katex.org/) and
+[Mermaid](https://mermaid.js.org/).
 
-**Current state:** 12.7 MB executable, 1,440 automated tests, no known defects.
+**Current state:** 18.1 MB executable, 1,629 automated tests (1,511 frontend,
+118 Go), no known defects.
 
 ---
 
@@ -184,7 +195,7 @@ process, not the prompting:
   followed, not a description written afterwards.
 
 - **Work went in phases, and every phase was manually checked** before the next
-  one started. Nine of them. Several defects that no test could have caught — a
+  one started. Twelve of them. Several defects that no test could have caught — a
   preview pane that forgot it was open, clipped icons, a caret landing in the
   wrong place — were found exactly that way, by running the thing and looking at
   it.
@@ -205,7 +216,7 @@ process, not the prompting:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Twenty-six of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Twenty-nine of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 
