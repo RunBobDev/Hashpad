@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { LanguageDescription } from '@codemirror/language';
 import { MARKDOWN_CODE_LANGUAGES } from '../editor/languages';
-import { highlightCode, onLanguageLoaded } from './codehighlight';
+import { highlightCode, languagesSettled, onLanguageLoaded } from './codehighlight';
 
 /** The description `highlightCode` matches for `name`, so a test can await its load. */
 function descriptionFor(name: string): LanguageDescription {
@@ -166,5 +166,29 @@ describe('a grammar that fails to load', () => {
     // Let the second failure be handled too, so an unhandled rejection cannot
     // escape into the next test file instead of failing this one.
     await settle();
+  });
+});
+
+/**
+ * What export waits on (Checkpoint M): render once to learn the languages, wait
+ * here, render again. `lua`, because nothing else in this file loads it.
+ */
+describe('languagesSettled', () => {
+  it('answers null when no grammar is loading', async () => {
+    // Another case may have left a load running (`brainfuck` above starts one
+    // and does not wait); under a shuffled order it can be this case's problem.
+    await languagesSettled();
+    expect(languagesSettled()).toBeNull();
+  });
+
+  it('resolves once the grammars a render asked for have arrived', async () => {
+    expect(highlightCode('local x = 1', 'lua')).toBeNull();
+    const settled = languagesSettled();
+    expect(settled).not.toBeNull();
+
+    await settled;
+
+    expect(highlightCode('local x = 1', 'lua')).toContain('<span');
+    expect(languagesSettled()).toBeNull();
   });
 });

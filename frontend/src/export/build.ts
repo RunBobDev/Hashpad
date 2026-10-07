@@ -7,10 +7,11 @@
  * `display: none` would break it -- placed off-screen by `.export-root` in
  * app.css -- and `.theme-light`, because exports are light whatever the app is.
  *
- * **It resolves only once math and diagrams are finished.** The pane can show
- * LaTeX source for a moment and fill it in later; a file written at that moment
- * keeps the source for good.
+ * **It resolves only once code, math and diagrams are finished.** The pane can
+ * show a plain fence or LaTeX source for a moment and fill it in later; a file
+ * written at that moment keeps it for good.
  */
+import { languagesSettled } from '../preview/codehighlight';
 import { renderMarkdown } from '../preview/render';
 import { loadMath, renderMathIn, type MathOutput } from '../preview/math';
 import { loadDiagrams, renderDiagramsIn } from '../preview/diagrams';
@@ -35,7 +36,15 @@ export async function buildExport(
   root.className = `preview-pane theme-light ${EXPORT_CLASS}`;
   root.setAttribute('aria-hidden', 'true');
   // Sanitised by renderMarkdown, exactly as the pane's is.
-  root.innerHTML = renderMarkdown(text, { documentDir });
+  let html = renderMarkdown(text, { documentDir });
+  // That render started a load for every code language not yet here, and drew
+  // those fences plain. Wait for the grammars and draw them again.
+  const languages = languagesSettled();
+  if (languages !== null) {
+    await languages;
+    html = renderMarkdown(text, { documentDir });
+  }
+  root.innerHTML = html;
   document.body.append(root);
   try {
     await Promise.all([typeset(root, math), draw(root)]);

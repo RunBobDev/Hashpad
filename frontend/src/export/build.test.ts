@@ -60,6 +60,18 @@ describe('buildExport', () => {
     root.remove();
   });
 
+  /**
+   * Code grammars load on demand too, and the pane's first render of a fence
+   * is plain. The first real-exe export came out coloured only because the
+   * editor had already loaded JavaScript; the harness, which had not, exported
+   * every code block in one colour.
+   */
+  it('resolves only once code is highlighted', async () => {
+    const root = await buildExport('```js\nconst answer = 42;\n```\n', null);
+    expect(root.querySelector('pre code span')).not.toBeNull();
+    root.remove();
+  });
+
   it('typesets as MathML alone when asked', async () => {
     const root = await buildExport('$x^2$', null, 'mathml');
     expect(root.querySelector('math')).not.toBeNull();

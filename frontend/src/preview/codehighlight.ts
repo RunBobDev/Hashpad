@@ -54,6 +54,21 @@ export function onLanguageLoaded(callback: () => void): () => void {
   return () => listeners.delete(callback);
 }
 
+/** Grammar loads under way. Each settles without rejecting -- see below. */
+const inFlight = new Set<Promise<unknown>>();
+
+/**
+ * Resolves once every grammar load now under way has settled, or `null` when
+ * none is -- the common case. For export (Checkpoint M), which renders once to
+ * learn which languages its fences need, waits here, and renders again: the
+ * pane can show a fence plain for a moment, a file written at that moment
+ * keeps it plain.
+ */
+export function languagesSettled(): Promise<void> | null {
+  if (inFlight.size === 0) return null;
+  return Promise.all(inFlight).then(() => undefined);
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -74,7 +89,7 @@ export function highlightCode(code: string, lang: string): string | null {
   if (!description.support) {
     if (!requested.has(description.name)) {
       requested.add(description.name);
-      void description.load().then(
+      const loading = description.load().then(
         () => {
           for (const listener of listeners) listener();
         },
@@ -87,6 +102,8 @@ export function highlightCode(code: string, lang: string): string | null {
         // re-render, and a re-render is what retries, which is a loop.
         () => requested.delete(description.name),
       );
+      inFlight.add(loading);
+      void loading.finally(() => inFlight.delete(loading));
     }
     return null;
   }
