@@ -7,6 +7,7 @@
  * a one-rule stand-in so the font-embedding path has something to embed.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { codeHighlightStyle } from '../editor/codetheme';
 import {
   documentTitle,
   embedLocalImages,
@@ -132,6 +133,18 @@ describe('the page', () => {
     expect(html).toContain("default-src 'none'");
     expect(html).toContain('<main class="preview-pane"><h1>T</h1><p>body</p></main>');
     expect(html).not.toMatch(/<script/i);
+  });
+
+  /**
+   * The code colours are not in any `.css` file: CodeMirror generates their
+   * class names and injects the rules at runtime. The first real-exe export
+   * came out with every code block in one colour.
+   */
+  it('carries the syntax colours, which live in no stylesheet file', async () => {
+    const rules = codeHighlightStyle.module!.getRules();
+    const html = await standaloneHtml(rooted('<pre><code>x</code></pre>'), 'T');
+    expect(rules).toContain('var(--syn-code-keyword)');
+    expect(html).toContain(rules);
   });
 
   it('escapes the title', async () => {

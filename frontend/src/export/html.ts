@@ -15,6 +15,7 @@ import variablesCss from '../styles/variables.css?inline';
 import previewCss from '../styles/preview.css?inline';
 import katexCss from 'katex/dist/katex.min.css?inline';
 import { ShowExportDialog, WriteFile } from '../../wailsjs/go/app/App';
+import { codeHighlightStyle } from '../editor/codetheme';
 import { ASSET_ROUTE } from '../preview/rules/images';
 import { activeSource, buildExport, runExport } from './build';
 
@@ -26,6 +27,14 @@ import { activeSource, buildExport, runExport } from './build';
  */
 const EXPORT_CSP =
   "default-src 'none'; img-src data: http: https:; style-src 'unsafe-inline'; font-src data:";
+
+/**
+ * The syntax colours. Not in any `.css` file: CodeMirror generates the class
+ * names and style-mod injects the rules at runtime (`preview/codehighlight.ts`
+ * mounts them), so they have to be asked for. Without this every code block in
+ * an export came out in one colour.
+ */
+const CODE_CSS = codeHighlightStyle.module?.getRules() ?? '';
 
 /** What a page in a browser needs that a pane inside the app does not. */
 const PAGE_CSS = `
@@ -121,7 +130,7 @@ export async function standaloneHtml(root: HTMLElement, title: string): Promise<
     `<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`,
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     heading.outerHTML,
-    `<style>\n${variablesCss}\n${previewCss}\n${math}\n${PAGE_CSS}</style>`,
+    `<style>\n${variablesCss}\n${previewCss}\n${CODE_CSS}\n${math}\n${PAGE_CSS}</style>`,
     '</head>',
     '<body>',
     `<main class="preview-pane">${content.innerHTML}</main>`,
