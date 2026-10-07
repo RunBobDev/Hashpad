@@ -63,7 +63,9 @@ to close. One tab per file: opening a file that is already open switches to it.
 **Files** — UTF-8, UTF-8 with BOM and UTF-16LE are detected on open and
 preserved on save. CRLF and LF are detected, preserved, and never silently
 converted. Both are shown in the status bar. Drag files onto the window to open
-them; drag or paste images to add them to the document.
+them; drag or paste images to add them to the document. A file changed by
+another program reloads by itself; if you have unsaved edits, a bar asks whether
+to reload it or keep yours, and saving over the other version asks first.
 
 **Appearance** — light and dark themes that follow the Windows setting, an
 accent colour picker, and configurable fonts and sizes for the interface, the
@@ -164,8 +166,8 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [DOMPurify](https://github.com/cure53/DOMPurify), [KaTeX](https://katex.org/) and
 [Mermaid](https://mermaid.js.org/).
 
-**Current state:** 18.1 MB executable, 1,629 automated tests (1,511 frontend,
-118 Go), no known defects.
+**Current state:** 18.2 MB executable, 1,685 automated tests (1,558 frontend,
+127 Go), no known defects.
 
 ---
 
@@ -216,7 +218,7 @@ process, not the prompting:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Twenty-nine of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Thirty of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 

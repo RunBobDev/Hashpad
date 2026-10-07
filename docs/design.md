@@ -690,7 +690,9 @@ Deliberately avoided:
   roughly 30 lines, and SPEC §10 requires those tests regardless.
 - `github.com/google/uuid` — `crypto.randomUUID()` exists in both target webviews.
 
-Phase 2 adds `github.com/fsnotify/fsnotify` for SPEC §7.4, as specified.
+Phase 2 adds `github.com/fsnotify/fsnotify` (v1.10.1) for SPEC §7.4, as
+specified — see §4.30. Its one dependency, `golang.org/x/sys`, was already
+required.
 
 ### 6.2 Frontend — shipped in the binary
 
@@ -1662,7 +1664,7 @@ documents were short enough to contain no second `$$` — true of a fixture,
 never true of a document someone is actually writing.
 
 The search now stops at a blank line. Display math has no use for one inside it
-(`egin{aligned}` and friends are newline-separated, not
+(`\begin{aligned}` and friends are newline-separated, not
 paragraph-separated), so this costs nothing and bounds the damage of a
 half-written equation to the paragraph being written.
 
@@ -1670,3 +1672,51 @@ half-written equation to the paragraph being written.
 worth recording as a technique: the fixture parsed to one diagram where it
 should have had seven, and that count was the whole diagnosis.
 
+### 4.30 Changes on disk: what SPEC §7.4 leaves unsaid
+
+§7.4 says to watch open files, reload a clean buffer silently, and show a
+non-blocking "Reload / Keep mine / Compare" bar over a dirty one. Five things it
+does not say had to be decided.
+
+**Saving over a change asks first.** Ctrl+S on a document whose file changed on
+disk prompts *Overwrite / Cancel*, with Cancel the default. The bar does not
+block, which makes it easy never to look at, and saving out of habit after a
+`git pull` is exactly the loss §7.4 exists to prevent. Every save route —
+Ctrl+S, the close prompt, the quit prompt — goes through the one function that
+asks (`saveDocument`). **Autosave skips** such a document instead, because a
+dialog on a timer is worse than the problem.
+
+**A deleted file is a state, not an event.** The tab counts as unsaved, the bar
+says the file is gone, and saving recreates it without asking. Autosave does
+not, since SPEC §3.2 forbids it creating files. Ignoring deletion would leave a
+clean-looking tab over text that exists nowhere else.
+
+**Keep mine adopts the disk version as the saved state**, so "unsaved" keeps
+meaning "differs from the file", and the next save overwrites deliberately.
+**Reload is undoable**, silent or not, and always its own undo step: CodeMirror
+folds edits less than half a second apart into one, which made a Reload clicked
+just after typing undo together with the typing it had discarded.
+
+**Directories are watched, not files**, because a watch on a file is lost the
+first time anything replaces it by rename — which is how Hashpad itself saves.
+**Content decides what counts as a change**, not timestamps or a time window
+after our own writes: Go remembers a hash of what it last wrote or reported, so
+its own saves and touches that change nothing are silent by construction. The
+frontend makes the final comparison against what it believes is on disk, so Go
+reporting too much is harmless and reporting too little is the bug; `ReadFile`
+deliberately records nothing for that reason.
+
+**Compare is not in this checkpoint.** It is a later step; the document already
+holds the disk's version it will need.
+
+*Rejected:* checking open files when the window regains focus instead of using
+fsnotify. No dependency, and it covers a `git pull` in a terminal, but it misses
+every change made while Hashpad keeps focus — a sync client, a build step, a
+tool editing the file being read in reading view.
+
+**Known limits.** A change in the few milliseconds between reading a file and
+watching it is missed. A *folder* moved or recycled out from under an open file
+stops reporting, and the file is not flagged deleted. Matching paths on Windows
+lower-cases them, which is close to NTFS's case folding but not identical. An
+external write landing while a save is in flight ends with whichever rename was
+last — inherent to two programs writing one file.

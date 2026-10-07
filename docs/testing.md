@@ -2952,3 +2952,52 @@ session, source mode included. That is also what makes it a clean experiment:
       the document whenever the pane is hidden, not just until it is first
       shown.
 
+## Checkpoint N — files changed on disk (SPEC §7.4)
+
+A file open in Hashpad and changed by another program reloads by itself when
+there is nothing unsaved; with unsaved edits, a bar asks. Use any markdown file
+and a second program that can edit it — Notepad is fine. Open the file in
+Hashpad first.
+
+**Already verified on the built exe** (2026-10-07, a script changing, deleting
+and restoring an open file and screenshotting each step): clean reload with the
+caret kept, the bar over unsaved edits, Ctrl+S asking Overwrite / Cancel and
+Escape writing nothing, Reload, Keep mine then a save that does not ask, our own
+save not raising the bar, the deleted state, and Ctrl+S recreating the file. The
+boxes below are for your own look, on your machine.
+
+### Nothing unsaved
+
+- [ ] **Change and save the file in Notepad.** Hashpad shows the new text within
+      a moment, with no bar and no dot on the tab. The caret stays where it was.
+- [ ] **Ctrl+Z in Hashpad** brings back the text from before the reload.
+- [ ] **A background tab** whose file changes shows the new text when you
+      switch to it.
+
+### Unsaved edits
+
+- [ ] **Type in Hashpad, then save a change in Notepad.** A bar appears under
+      the toolbar: "This file changed on disk." with Reload and Keep mine. If you
+      are still typing when it appears, the typing carries on into the editor.
+- [ ] **Reload** shows Notepad's version. **Ctrl+Z** brings yours back.
+- [ ] **Keep mine** hides the bar and leaves your text, still marked unsaved.
+      Ctrl+S then saves without asking.
+- [ ] **Ctrl+S while the bar is showing** asks *Overwrite / Cancel*. Cancel —
+      or Escape — writes nothing; Overwrite writes your version.
+- [ ] **Autosave on, bar showing:** nothing is written after the delay.
+
+### Deleted
+
+- [ ] **Delete the file in Explorer.** The bar says "This file was deleted on
+      disk. Save to keep it.", and the tab gets the unsaved dot. Ctrl+S recreates
+      the file without asking, and the bar goes.
+
+### Hashpad's own saves
+
+- [ ] **Ctrl+S in Hashpad** never shows the bar.
+
+### For your judgement, not fixed
+
+- **The bar pushes the document down** by its own height while it shows, rather
+  than covering the top of it. A covering bar would hide the first lines
+  instead; pushing seemed the lesser cost.
