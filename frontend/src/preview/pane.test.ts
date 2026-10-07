@@ -21,8 +21,7 @@ import {
   DEFAULT_BEHAVIOUR,
 } from '../state/document';
 import { activateDocument } from '../state/documents';
-import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { LoadSettings, OpenURL, SaveSettings } from '../../wailsjs/go/app/App';
 import { confirmOpenLink } from '../ui/confirmdialog';
 import { mountPreview, type PreviewHandle } from './pane';
 
@@ -96,8 +95,6 @@ vi.mock('./diagrams', () => ({
   renderDiagramsIn: () => deferDiagrams?.promise ?? Promise.resolve(),
 }));
 
-vi.mock('../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
-
 /**
  * The real prompt calls `showModal`, which jsdom does not implement, so the
  * dialog itself is tested in `ui/confirmdialog.test.ts` and stubbed here. What
@@ -110,6 +107,8 @@ vi.mock('../ui/confirmdialog', () => ({ confirmOpenLink: vi.fn() }));
 vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
   LoadSettings: vi.fn(),
+  // Links leave through Go's shell launch, outside the app's job (export.go).
+  OpenURL: vi.fn(() => Promise.resolve()),
   ReadFile: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
@@ -1431,11 +1430,11 @@ describe('scroll sync', () => {
       handle.show();
 
       const event = clickLink(paneOf(split), 'https://example.com/a?b=1');
-      await vi.waitFor(() => expect(BrowserOpenURL).toHaveBeenCalled());
+      await vi.waitFor(() => expect(OpenURL).toHaveBeenCalled());
 
       expect(event.defaultPrevented).toBe(true);
       expect(confirmOpenLink).toHaveBeenCalledWith('https://example.com/a?b=1');
-      expect(BrowserOpenURL).toHaveBeenCalledWith('https://example.com/a?b=1');
+      expect(OpenURL).toHaveBeenCalledWith('https://example.com/a?b=1');
     });
 
     it('opens nothing when the prompt is declined', async () => {
@@ -1446,7 +1445,7 @@ describe('scroll sync', () => {
       clickLink(paneOf(split), 'https://example.com/');
       await vi.waitFor(() => expect(confirmOpenLink).toHaveBeenCalled());
 
-      expect(BrowserOpenURL).not.toHaveBeenCalled();
+      expect(OpenURL).not.toHaveBeenCalled();
     });
 
     /**
@@ -1480,7 +1479,7 @@ describe('scroll sync', () => {
 
       expect(event.defaultPrevented).toBe(true);
       expect(confirmOpenLink).not.toHaveBeenCalled();
-      expect(BrowserOpenURL).not.toHaveBeenCalled();
+      expect(OpenURL).not.toHaveBeenCalled();
     });
 
     it('catches a click on an element inside the link', () => {

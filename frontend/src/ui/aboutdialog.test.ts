@@ -12,9 +12,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { buildAboutDialog, REPOSITORY_URL } from './aboutdialog';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { OpenURL } from '../../wailsjs/go/app/App';
 
-vi.mock('../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
+vi.mock('../../wailsjs/go/app/App', () => ({ OpenURL: vi.fn(() => Promise.resolve()) }));
 
 /**
  * The version `wails.json` actually declares.
@@ -93,7 +93,7 @@ describe('the About dialog', () => {
     )!;
     view.click();
 
-    expect(BrowserOpenURL).toHaveBeenCalledWith(REPOSITORY_URL);
+    expect(OpenURL).toHaveBeenCalledWith(REPOSITORY_URL);
     expect(dialog.isConnected).toBe(false);
   });
 

@@ -32,8 +32,7 @@
  * paint the outgoing document.
  */
 import type { EditorView } from '@codemirror/view';
-import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { LoadSettings, OpenURL, SaveSettings } from '../../wailsjs/go/app/App';
 import { documentDirOf } from '../files/documentops';
 import { confirmOpenLink } from '../ui/confirmdialog';
 import { setTopSourceLineReader, store, topSourceLineChanged } from '../state/appcontext';
@@ -944,9 +943,12 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     }
 
     if (!EXTERNAL_SCHEME.test(href)) return;
-    void confirmOpenLink(href).then((open) => {
-      if (open) BrowserOpenURL(href);
-    });
+    // Through Go rather than the runtime's BrowserOpenURL, which starts the
+    // browser inside the app's kill-on-close job -- closing Hashpad then closed
+    // a browser it had started. `OpenExternal` launches it outside (design §4.33).
+    void confirmOpenLink(href)
+      .then((open) => (open ? OpenURL(href) : undefined))
+      .catch((error: unknown) => console.error('hashpad: could not open the link', error));
   }
 
   function invalidateAnchors(): void {

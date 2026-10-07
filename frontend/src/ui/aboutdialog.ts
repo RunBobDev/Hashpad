@@ -15,7 +15,7 @@
  * complicate a helper four prompts depend on, to serve the one dialog that
  * asks no question.
  */
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { OpenURL } from '../../wailsjs/go/app/App';
 
 /** Injected by Vite from `wails.json`'s `info.productVersion`. */
 declare const __APP_VERSION__: string;
@@ -88,7 +88,10 @@ export function buildAboutDialog(): HTMLDialogElement {
     // Straight to the browser, with no confirmation: `confirmOpenLink` exists
     // because a link in a *document* is untrusted content the user may not
     // have read. This URL is compiled in, and the user asked for it by name.
-    BrowserOpenURL(REPOSITORY_URL);
+    // Through Go, outside the app's job, like every link (preview/pane.ts).
+    void OpenURL(REPOSITORY_URL).catch((error: unknown) =>
+      console.error('hashpad: could not open the repository', error),
+    );
     finish();
   });
 
