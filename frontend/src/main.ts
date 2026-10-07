@@ -46,6 +46,7 @@ import { openAbout } from './ui/aboutdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
 import { mountOpenWith, openPendingFiles } from './files/openwith';
+import { mountDiskWatch } from './files/diskwatch';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
 import {
@@ -538,6 +539,11 @@ mountFileDrop();
 // *during* startup is still heard; anything earlier than this waits in Go's
 // queue and comes through `openPendingFiles` above. See files/openwith.ts.
 mountOpenWith();
+
+// SPEC §7.4: open files are watched for changes made by other programs.
+// Mounted here, beside the line above and for the same reason: a file opened
+// during startup has to be watched from the start.
+mountDiskWatch();
 
 // F11's state, read once from the window rather than assumed (ui/fullscreen.ts).
 // Fire-and-forget with its own error handling inside: nothing downstream waits

@@ -39,6 +39,9 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('../wailsjs/go/app/App', () => ({
+  // files/diskwatch.ts tells Go the open paths at mount and on every change,
+  // and chains .catch on the result, so this has to resolve.
+  SetWatchedFiles: vi.fn(async () => {}),
   PendingFiles: vi.fn().mockResolvedValue([]),
   ConfirmQuit: vi.fn(),
   ShowWindow: vi.fn(),

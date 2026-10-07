@@ -40,6 +40,9 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('../wailsjs/go/app/App', () => ({
+  // files/diskwatch.ts tells Go the open paths at mount and on every change,
+  // and chains .catch on the result, so this has to resolve.
+  SetWatchedFiles: vi.fn(async () => {}),
   // bootstrap asks Go which files this launch was given (files/openwith.ts).
   // Without it the default parameter throws on property access, which happens
   // outside that function's try/catch and lands as an unhandled rejection --
