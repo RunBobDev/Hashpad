@@ -161,12 +161,27 @@ describe('the print stylesheet', () => {
   const css = readFileSync(resolve(process.cwd(), 'src/styles/app.css'), 'utf8');
   const print = /@media print \{([\s\S]*)\}\s*$/.exec(css)?.[1] ?? '';
 
-  it('hides everything but the print copy', () => {
-    expect(print).toMatch(/body > :not\(\.export-root--print\)\s*\{\s*display: none;/);
+  /**
+   * `!important`, because `#app { display: flex }` is an ID selector and
+   * outranks this one. Without it the real exe printed the whole app -- menus,
+   * toolbar, editor -- across seven pages, while this file's earlier regex,
+   * which did not ask for it, passed.
+   */
+  it('hides everything but the print copy, whatever selector shows it', () => {
+    expect(print).toMatch(/body > :not\(\.export-root--print\)\s*\{\s*display: none !important;/);
   });
 
   it('puts the print copy back into the flow', () => {
     expect(print).toMatch(/\.export-root--print\s*\{[^}]*position: static;/);
+  });
+
+  /**
+   * Chromium drops backgrounds when printing unless the page asks. A highlight
+   * is nothing but its background; the real exe printed `==marked==` as plain
+   * text.
+   */
+  it('keeps backgrounds, which carry meaning in a document', () => {
+    expect(print).toMatch(/\.export-root--print\s*\{[^}]*print-color-adjust: exact;/);
   });
 
   it('lets the page run past one screen', () => {

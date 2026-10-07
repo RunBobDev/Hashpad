@@ -1290,15 +1290,25 @@ body {
   }
 
   /* The document and nothing else: no chrome, no dialog, no export still
-     being built for something else. */
+     being built for something else.
+
+     `!important` because `#app { display: flex }` is an ID selector and
+     outranks this one. Without it the real exe printed the whole app --
+     menus, toolbar, editor -- across seven pages. */
   body > :not(.export-root--print) {
-    display: none;
+    display: none !important;
   }
 
-  /* Back into the flow: a fixed element is repeated on every printed page. */
+  /* Back into the flow: a fixed element is repeated on every printed page.
+
+     And backgrounds kept, which Chromium drops by default: a highlight is
+     nothing but its background, and the code block's tint and the footnote
+     rule are structure. Inherited, so this one rule covers the subtree. */
   .export-root--print {
     position: static;
     width: auto;
     padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
