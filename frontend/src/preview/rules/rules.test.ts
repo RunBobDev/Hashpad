@@ -257,6 +257,26 @@ describe('images', () => {
     const { doc } = render(`![alt](${src})\n`);
     expect(doc.querySelector('img')?.getAttribute('src')).toBe(src);
   });
+
+  /**
+   * Export reads these back: HTML export turns the placeholder into the real
+   * `<img>` for the reader's browser, print decides whether to offer the
+   * browser route, and plain text writes `[image: alt]`. The aria-label holds
+   * the alt too, but joined to a sentence that would have to be parsed back out.
+   */
+  it('keeps a remote image’s address and alt on the placeholder, for export', () => {
+    const { doc } = render('![a cat](https://example.com/cat.png)\n');
+    const placeholder = doc.querySelector('.preview-image-placeholder')!;
+    expect(placeholder.getAttribute('data-src')).toBe('https://example.com/cat.png');
+    expect(placeholder.getAttribute('data-alt')).toBe('a cat');
+  });
+
+  it('gives an unavailable local image its alt but no address', () => {
+    const { doc } = render('![chart](assets/c.png)\n', null);
+    const placeholder = doc.querySelector('.preview-image-placeholder')!;
+    expect(placeholder.getAttribute('data-alt')).toBe('chart');
+    expect(placeholder.hasAttribute('data-src')).toBe(false);
+  });
 });
 
 describe('source-line anchors', () => {

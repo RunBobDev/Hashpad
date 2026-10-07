@@ -77,3 +77,18 @@ describe('ACCENT_PRESETS', () => {
     expect(ACCENT_PRESETS.map((p) => p.value)).toContain(base!.toLowerCase());
   });
 });
+
+describe('the light palette', () => {
+  /**
+   * Exports are light whatever the app is (Checkpoint M). The export container
+   * carries `.theme-light`, and redefining the tokens on that one element is
+   * what gives its whole subtree the light palette inside a dark window.
+   */
+  it('lets one class give any element the light palette, for export', () => {
+    const css = readFileSync(
+      fileURLToPath(new URL('../styles/variables.css', import.meta.url)),
+      'utf8',
+    );
+    expect(css).toMatch(/:root,\s*:root\[data-theme='light'\],\s*\.theme-light\s*\{/);
+  });
+});

@@ -45,10 +45,24 @@ const REMOTE = /^[a-z][a-z0-9+.-]+:/i;
  * the generic string is only the fallback. A screen reader announcing "Remote
  * image not loaded" tells the user nothing about what they are missing.
  */
-function placeholder(md: MarkdownIt, alt: string, text: string, detail: string): string {
+/**
+ * `data-alt` and, for an internet image, `data-src` are for export, which reads
+ * them back: HTML export turns the placeholder into the real `<img>` for the
+ * reader's browser, print asks whether to go through the browser, and plain
+ * text writes `[image: alt]`. Both survive DOMPurify (`ALLOW_DATA_ATTR`).
+ */
+function placeholder(
+  md: MarkdownIt,
+  alt: string,
+  text: string,
+  detail: string,
+  src?: string,
+): string {
   const label = alt.trim() === '' ? text : `${alt} -- ${text}`;
+  const source = src === undefined ? '' : ` data-src="${md.utils.escapeHtml(src)}"`;
   return (
-    `<span class="preview-image-placeholder" role="img" aria-label="${md.utils.escapeHtml(label)}">` +
+    `<span class="preview-image-placeholder" role="img" aria-label="${md.utils.escapeHtml(label)}"` +
+    ` data-alt="${md.utils.escapeHtml(alt)}"${source}>` +
     `${md.utils.escapeHtml(text)}<span class="preview-image-placeholder__detail">` +
     `${md.utils.escapeHtml(detail)}</span></span>`
   );
@@ -91,7 +105,7 @@ export function imagePlugin(md: MarkdownIt): void {
     if (src.startsWith('data:')) return self.renderToken(tokens, index, options);
 
     if (REMOTE.test(src)) {
-      return placeholder(md, alt, 'Remote image not loaded', src);
+      return placeholder(md, alt, 'Remote image not loaded', src, src);
     }
 
     if (ctx.documentDir === null) {

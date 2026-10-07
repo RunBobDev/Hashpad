@@ -103,8 +103,12 @@
   --accent-base: #0078d4;
 }
 
+/* `.theme-light` is the export container (export/build.ts). Exports are light
+   whatever the app is, and redefining the tokens on that one element gives its
+   whole subtree the light palette inside a dark window. */
 :root,
-:root[data-theme='light'] {
+:root[data-theme='light'],
+.theme-light {
   color-scheme: light;
 
   --bg-app: #f3f3f3;
