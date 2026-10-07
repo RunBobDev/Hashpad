@@ -41,23 +41,53 @@ export interface SourceLineEnv {
  * unanchored until someone asked whether the checkpoint was actually finished.
  * One helper, in the file that owns the attribute, so the next such rule has
  * something to reach for rather than a precedent to miss.
+ *
+ * Carries `data-line-number` too, for the same reason: reading view's line
+ * numbers are drawn from it, and a block that drops it has no number.
  */
 export function sourceLineAttr(md: MarkdownIt, token: Token): string {
-  const line = token.attrGet('data-source-line');
-  if (line === null) return '';
-  return ` data-source-line="${md.utils.escapeHtml(String(line))}"`;
+  return ['data-source-line', 'data-line-number']
+    .map((name) => {
+      const value = token.attrGet(name);
+      return value === null ? '' : ` ${name}="${md.utils.escapeHtml(String(value))}"`;
+    })
+    .join('');
 }
+
+/**
+ * The parts of a table that must not carry a line number. Drawn from a row, the
+ * number becomes a table cell of its own and pushes the row sideways; drawn
+ * from the table, it lands on top of the first body row's. Their number goes to
+ * the next cell instead.
+ */
+const TABLE_STRUCTURE = new Set(['table_open', 'thead_open', 'tbody_open', 'tr_open']);
 
 export function sourceLinePlugin(md: MarkdownIt): void {
   md.core.ruler.push('hashpad_source_line', (state: StateCore) => {
     const seen = new Set<number>();
+    // A table part's line number, waiting for the cell that will show it.
+    let pending: number | null = null;
     for (const token of state.tokens) {
+      // Cells have no `map` of their own, so this runs before the check below.
+      if (pending !== null && (token.type === 'th_open' || token.type === 'td_open')) {
+        token.attrSet('data-line-number', String(pending));
+        pending = null;
+      }
       // `nesting === -1` is a closing tag and carries no attributes worth
       // marking. Opening and self-closing tokens (`fence`, `hr`, `html_block`)
       // both have `nesting >= 0` and both matter.
       if (!token.map || token.nesting === -1) continue;
       const line = token.map[0]! + 1;
       token.attrSet('data-source-line', String(line));
+      // **Reading view's line numbers: the first block on each line only.** A
+      // list, its first item and that item's paragraph all start on one line,
+      // and numbering each would print that number several times over itself.
+      // Tokens arrive outermost first, so the one that keeps it is the block
+      // whose top is where the line starts.
+      if (!seen.has(line)) {
+        if (TABLE_STRUCTURE.has(token.type)) pending = line;
+        else token.attrSet('data-line-number', String(line));
+      }
       seen.add(line);
     }
     const env = state.env as SourceLineEnv;

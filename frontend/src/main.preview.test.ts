@@ -406,6 +406,26 @@ describe('view.editor', () => {
   });
 });
 
+/**
+ * Reading view's line numbers follow the editor's setting. The pane draws them
+ * in CSS from attributes the renderer stamps; this is the switch that turns
+ * that CSS on, and the stylesheet scopes it to reading view.
+ */
+describe('line numbers in reading view', () => {
+  it('follow View > Line Numbers', () => {
+    const split = document.querySelector('.editor-split')!;
+    // `Boolean`, because this file's settings mock leaves the field out and the
+    // store holds `undefined` until the first toggle writes a real value.
+    const before = Boolean(store.getState().editorBehaviour.showLineNumbers);
+
+    emit('view.lineNumbers');
+    expect(split.classList.contains('editor-split--line-numbers')).toBe(!before);
+
+    emit('view.lineNumbers');
+    expect(split.classList.contains('editor-split--line-numbers')).toBe(before);
+  });
+});
+
 describe('shortcuts with focus outside the editor', () => {
   it('opens the preview on a real Ctrl+Shift+P pressed on the body', async () => {
     const active = activeDocument(store.getState())!;

@@ -668,6 +668,18 @@ function setReadingLayout(reading: boolean): void {
   else editorArea.removeAttribute('inert');
 }
 
+// Reading view's line numbers follow the editor's own setting -- one switch for
+// both, asked for by the owner. The pane draws them in CSS from attributes the
+// renderer already stamps (rules/sourceline.ts), scoped there to reading view,
+// so all this has to do is say whether the setting is on. A subscription rather
+// than a call beside each writer: settings load, the View menu, the settings
+// dialog and Reset all write the store, and this hears every one of them.
+function setReadingLineNumbers(on: boolean): void {
+  editorSplit.classList.toggle('editor-split--line-numbers', on);
+}
+setReadingLineNumbers(store.getState().editorBehaviour.showLineNumbers);
+store.subscribe((state) => state.editorBehaviour.showLineNumbers, setReadingLineNumbers);
+
 /**
  * `viewMode` is per *document*, so the one shared pane has to follow whichever
  * document is on screen -- not just whichever one was toggled. Without this,

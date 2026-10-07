@@ -632,3 +632,48 @@ describe('block-level anchors for math and diagrams', () => {
     expect(anchors).toEqual([1, 5, 9]);
   });
 });
+
+/**
+ * Reading view's line numbers. Every block carries `data-source-line`, and a
+ * list, its first item and that item's paragraph all carry the *same* one --
+ * numbered from that attribute, one line would print three times over itself.
+ * `data-line-number` goes on the first block per line only.
+ */
+describe('line numbers for reading view', () => {
+  function numbered(markdown: string): string[] {
+    return [...render(markdown).doc.querySelectorAll('[data-line-number]')].map(
+      (element) => `${element.tagName}:${element.getAttribute('data-line-number')}`,
+    );
+  }
+
+  it('marks the first block on each line, and nothing nested on that same line', () => {
+    expect(numbered('- one\n- two\n  - nested\n\n> quote\n>\n> more')).toEqual([
+      'UL:1',
+      'LI:2',
+      'UL:3',
+      'BLOCKQUOTE:5',
+      'P:7',
+    ]);
+  });
+
+  /**
+   * On the first cell of each row, never on the table or a row. Drawn from a
+   * row, the number became a table cell of its own and pushed the row sideways;
+   * drawn from the table, it landed on top of the first body row's.
+   */
+  it('numbers each table row through its first cell', () => {
+    expect(numbered('| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |')).toEqual([
+      'TH:1',
+      'TD:3',
+      'TD:4',
+    ]);
+  });
+
+  // The same trap `sourceLineAttr` exists for: rules that write their own HTML.
+  it('survives the renderers that write their own HTML', () => {
+    const { doc } = render('Text\n\n$$\nx\n$$\n\n```mermaid\ngraph TD;\n```');
+
+    expect(doc.querySelector(`.${MATH_DISPLAY_CLASS}`)?.getAttribute('data-line-number')).toBe('3');
+    expect(doc.querySelector(`.${DIAGRAM_CLASS}`)?.getAttribute('data-line-number')).toBe('7');
+  });
+});

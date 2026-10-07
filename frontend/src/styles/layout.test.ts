@@ -300,3 +300,29 @@ describe('display math inside a sentence', () => {
     expect(rule('span.preview-math-display > .katex-display')).toContain('margin: 0;');
   });
 });
+
+/**
+ * Reading view's line numbers: drawn by CSS from `data-line-number`, which the
+ * renderer puts on the first block of each source line (rules/sourceline.ts).
+ * Scoped to reading view with the setting on -- split already has the editor's
+ * own numbers beside it.
+ */
+describe("reading view's line numbers", () => {
+  const PANE = '.editor-split--reading.editor-split--line-numbers .preview-pane';
+
+  it('draw each number from the attribute the renderer stamps', () => {
+    expect(rule(`${PANE} [data-line-number]::before`)).toContain(
+      'content: attr(data-line-number);',
+    );
+  });
+
+  // Centred on the block's first line, whatever its size: a heading's number
+  // otherwise sits at the top of a line twice as tall as the number.
+  it('centre each number on its first line', () => {
+    expect(rule(`${PANE} [data-line-number]::before`)).toContain('line-height: 1lh;');
+  });
+
+  it('get a column of their own beside the text', () => {
+    expect(rule(PANE)).toContain('padding-left:');
+  });
+});

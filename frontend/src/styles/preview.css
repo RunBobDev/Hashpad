@@ -431,6 +431,44 @@
   display: none;
 }
 
+/*
+ * Reading view's line numbers, when editor.showLineNumbers is on (design
+ * §4.31). Each number is the source line a block *starts* on: the renderer
+ * stamps `data-line-number` on the first block of every line
+ * (rules/sourceline.ts), so a paragraph over lines 12-15 shows 12. Reading view
+ * only -- split has the editor's own numbers beside it.
+ *
+ * Absolutely positioned against the pane, which is the positioned ancestor here
+ * (the rule above) and also the scroller, so the column scrolls with the text
+ * and lines up at the pane's left edge however deeply a block is nested. `top`
+ * is left to the static position: the top of the block's first line.
+ *
+ * `line-height: 1lh` is the block's own line height (for `line-height`, `lh`
+ * resolves against the parent, which for a pseudo-element is the block). The
+ * number is centred in a line exactly as tall as the block's first one -- a
+ * heading's number otherwise sat at the top of a line twice its height.
+ *
+ * Sized from the editor's font so the column reads like the editor's gutter,
+ * and wide enough for five digits at that size.
+ */
+.editor-split--reading.editor-split--line-numbers .preview-pane {
+  padding-left: calc(var(--pad-editor) + var(--size-editor) * 3.6);
+}
+
+.editor-split--reading.editor-split--line-numbers .preview-pane [data-line-number]::before {
+  content: attr(data-line-number);
+  position: absolute;
+  left: 0;
+  width: calc(var(--size-editor) * 3.6);
+  text-align: right;
+  color: var(--fg-muted);
+  font-family: var(--font-editor);
+  font-size: var(--size-editor);
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1lh;
+}
+
 /* ---- Math (SPEC 7.2) --------------------------------------------------- */
 
 /*
