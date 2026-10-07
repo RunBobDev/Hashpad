@@ -15,7 +15,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import katex from 'katex';
-import { onMathLoaded, renderMathIn } from './math';
+import { loadMath, onMathLoaded, renderMathIn } from './math';
 import { MATH_DISPLAY_CLASS, MATH_INLINE_CLASS } from './rules/math';
 
 /** A pane's worth of DOM holding the placeholders `rules/math.ts` emits. */
@@ -285,5 +285,34 @@ describe('what the pane subscribes to', () => {
     off();
     await rendered(placeholders([MATH_INLINE_CLASS, 'z']));
     expect(seen).toBe(0);
+  });
+});
+
+/**
+ * Export (Checkpoint M) needs math *finished*, not merely started: a file
+ * written before KaTeX lands holds LaTeX source where the equations should be.
+ */
+describe('loading for export', () => {
+  it('resolves once KaTeX is ready, so one pass typesets everything', async () => {
+    await loadMath();
+    const root = placeholders([MATH_INLINE_CLASS, 'x^2']);
+    renderMathIn(root);
+    expect(root.querySelector('.katex')).not.toBeNull();
+  });
+
+  it('can typeset as MathML alone, which is what a word processor takes', async () => {
+    await loadMath();
+    const root = placeholders([MATH_INLINE_CLASS, 'x^2']);
+    renderMathIn(root, 'mathml');
+    expect(root.querySelector('math')).not.toBeNull();
+    expect(root.querySelector('.katex-html')).toBeNull();
+  });
+
+  it('keeps both renderings by default, as the pane always has', async () => {
+    await loadMath();
+    const root = placeholders([MATH_INLINE_CLASS, 'x^2']);
+    renderMathIn(root);
+    expect(root.querySelector('math')).not.toBeNull();
+    expect(root.querySelector('.katex-html')).not.toBeNull();
   });
 });

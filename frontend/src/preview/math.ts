@@ -49,9 +49,19 @@ import 'katex/dist/katex.min.css';
 
 type Katex = typeof import('katex').default;
 
+/**
+ * What KaTeX emits. `htmlAndMathml` is its own default and what the pane has
+ * always had; Copy as Rich Text asks for MathML alone, which Word turns into an
+ * equation and a stylesheet-less paste cannot mangle.
+ */
+export type MathOutput = 'html' | 'mathml' | 'htmlAndMathml';
+
 let katex: Katex | null = null;
-/** So a second pass before the first load settles does not start it again. */
-let requested = false;
+/**
+ * The load in flight or done, so a second pass before the first settles does
+ * not start it again. `null` before the first request and after a failure.
+ */
+let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 /** Told when KaTeX arrives, so the pane can render again with math this time. */
@@ -60,23 +70,31 @@ export function onMathLoaded(callback: () => void): () => void {
   return () => listeners.delete(callback);
 }
 
-function load(): void {
-  if (requested) return;
-  requested = true;
-  void import('katex').then(
+/**
+ * KaTeX, as a promise -- what an export waits on, where the pane only needs the
+ * load *started*. A failure clears the slot, so math is not pinned as
+ * "requested" for the rest of the session and the next request retries.
+ */
+export function loadMath(): Promise<void> {
+  loading ??= import('katex').then(
     (module) => {
       katex = module.default;
       for (const listener of listeners) listener();
     },
-    () => {
-      // A chunk that fails to arrive must not land in the webview console as an
-      // unhandled rejection, and must not pin math as "requested" for the rest
-      // of the session. Deliberately no notification: telling listeners would
-      // re-render, and a re-render is what retries, which is a loop. The next
-      // edit tries again.
-      requested = false;
+    (error: unknown) => {
+      loading = null;
+      throw error;
     },
   );
+  return loading;
+}
+
+function load(): void {
+  // A chunk that fails to arrive must not land in the webview console as an
+  // unhandled rejection. Deliberately no notification: telling listeners would
+  // re-render, and a re-render is what retries, which is a loop. The next edit
+  // tries again.
+  void loadMath().catch(() => undefined);
 }
 
 /**
@@ -99,7 +117,7 @@ const SELECTOR = `.${MATH_INLINE_CLASS}:not(.${DONE}), .${MATH_DISPLAY_CLASS}:no
  * Takes a root rather than reaching for the pane itself, so it is testable
  * against a detached element and so the pane keeps ownership of its own DOM.
  */
-export function renderMathIn(root: ParentNode): void {
+export function renderMathIn(root: ParentNode, output: MathOutput = 'htmlAndMathml'): void {
   const nodes = root.querySelectorAll<HTMLElement>(SELECTOR);
   // The common case: no math in the document, nothing loaded, nothing to pay.
   if (nodes.length === 0) return;
@@ -127,6 +145,7 @@ export function renderMathIn(root: ParentNode): void {
       // friends stay inert, so nothing KaTeX emits can be a link or carry a
       // class the document chose.
       trust: false,
+      output,
     });
   }
 }

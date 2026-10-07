@@ -310,3 +310,52 @@ describe('drawing diagrams into the sanitised DOM', () => {
     expect(calls.length).toBe(1);
   });
 });
+
+/**
+ * An export draws light while a dark pane may be drawing at the same moment.
+ * Mermaid's theme is global -- `initialize` sets it for whatever renders next
+ -- so two draws interleaving would paint one diagram in the other's colours.
+ */
+describe('drawing for export', () => {
+  afterEach(() => {
+    vi.doUnmock('mermaid');
+  });
+
+  it('resolves once Mermaid is ready, so one pass draws', async () => {
+    stubMermaid(() => Promise.resolve({ svg: '<svg></svg>' }));
+    const module = await freshModule();
+    await module.loadDiagrams();
+    const root = paneWith('graph TD; A-->B;');
+    await module.renderDiagramsIn(root, false);
+    expect(root.querySelector('svg')).not.toBeNull();
+  });
+
+  it('does not re-theme Mermaid while another draw is still in flight', async () => {
+    const events: string[] = [];
+    let finishFirst: () => void = () => undefined;
+    vi.doMock('mermaid', () => ({
+      default: {
+        initialize: (config: { theme: string }) => events.push(`init:${config.theme}`),
+        render: (_id: string, source: string) => {
+          events.push(`render:${source}`);
+          if (source !== 'A') return Promise.resolve({ svg: '<svg></svg>' });
+          return new Promise((resolve) => {
+            finishFirst = () => resolve({ svg: '<svg></svg>' });
+          });
+        },
+      },
+    }));
+    const module = await freshModule();
+    await module.loadDiagrams();
+
+    const dark = module.renderDiagramsIn(paneWith('A'), true);
+    const light = module.renderDiagramsIn(paneWith('B'), false);
+    await vi.waitFor(() => expect(events).toContain('render:A'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual(['init:dark', 'render:A']);
+
+    finishFirst();
+    await Promise.all([dark, light]);
+    expect(events).toEqual(['init:dark', 'render:A', 'init:default', 'render:B']);
+  });
+});

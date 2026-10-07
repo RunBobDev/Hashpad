@@ -36,7 +36,8 @@ import { DIAGRAM_CLASS } from './rules/mermaid';
 type Mermaid = typeof import('mermaid').default;
 
 let mermaid: Mermaid | null = null;
-let requested = false;
+/** The load in flight or done; `null` before the first request and after a failure. */
+let loading: Promise<void> | null = null;
 /**
  * The two Mermaid themes this app uses, narrowed from the eleven it offers --
  * `initialize` types `theme` as a union, so a bare `string` does not compile.
@@ -132,7 +133,21 @@ function sweep(id: string): void {
   for (const leftover of document.querySelectorAll(`#${id}, #d${id}`)) leftover.remove();
 }
 
-async function draw(source: string, theme: MermaidTheme): Promise<string> {
+/**
+ * Draws run one at a time. Mermaid's theme is global -- `initialize` sets it
+ * for whatever renders next -- and an export draws light while a dark pane can
+ * be drawing too. Interleaved, one diagram would come out in the other's
+ * colours.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+
+function draw(source: string, theme: MermaidTheme): Promise<string> {
+  const turn = queue.then(() => drawNow(source, theme));
+  queue = turn.catch(() => undefined);
+  return turn;
+}
+
+async function drawNow(source: string, theme: MermaidTheme): Promise<string> {
   const module = mermaid;
   if (module === null) throw new Error('mermaid not loaded');
 
@@ -174,22 +189,30 @@ async function draw(source: string, theme: MermaidTheme): Promise<string> {
   }
 }
 
-function load(): void {
-  if (requested) return;
-  requested = true;
-  void import('mermaid').then(
+/**
+ * Mermaid, as a promise -- what an export waits on, where the pane only needs
+ * the load started. Same shape as `math.ts`'s `loadMath`.
+ */
+export function loadDiagrams(): Promise<void> {
+  loading ??= import('mermaid').then(
     (module) => {
       mermaid = module.default;
       for (const listener of listeners) listener();
     },
-    () => {
-      // Same reasoning as `math.ts`: no unhandled rejection in the webview
-      // console, and no permanent "requested" flag pinning the feature off for
-      // the session. No notification, because telling listeners re-renders and
-      // a re-render is what retries.
-      requested = false;
+    (error: unknown) => {
+      // No permanent "requested" state pinning the feature off for the session.
+      loading = null;
+      throw error;
     },
   );
+  return loading;
+}
+
+function load(): void {
+  // Same reasoning as `math.ts`: no unhandled rejection in the webview console,
+  // and no notification, because telling listeners re-renders and a re-render
+  // is what retries.
+  void loadDiagrams().catch(() => undefined);
 }
 
 /**
