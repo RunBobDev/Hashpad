@@ -42,6 +42,10 @@ export function SetWatchedFiles(arg1) {
   return window['go']['app']['App']['SetWatchedFiles'](arg1);
 }
 
+export function ShowExportDialog(arg1, arg2) {
+  return window['go']['app']['App']['ShowExportDialog'](arg1, arg2);
+}
+
 export function ShowOpenDialog() {
   return window['go']['app']['App']['ShowOpenDialog']();
 }
