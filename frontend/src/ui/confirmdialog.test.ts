@@ -30,6 +30,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildConfirmDialog,
+  buildNoticeDialog,
   buildOverwriteDialog,
   buildResetDialog,
   confirmSave,
@@ -254,5 +255,37 @@ describe('buildOverwriteDialog', () => {
 
     const message = dialog.querySelector('.confirm-dialog__message');
     expect(message?.textContent).toContain('notes.md');
+  });
+});
+
+describe('buildNoticeDialog', () => {
+  it('shows the message with a single OK', () => {
+    const dialog = buildNoticeDialog("Couldn't export: disk full", vi.fn());
+
+    expect(dialog.querySelector('.confirm-dialog__message')?.textContent).toBe(
+      "Couldn't export: disk full",
+    );
+    expect([...dialog.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['OK']);
+  });
+
+  it('closes once on OK', () => {
+    const onClose = vi.fn();
+    const dialog = buildNoticeDialog('x', onClose);
+    document.body.append(dialog);
+
+    click(dialog, 'OK');
+    click(dialog, 'OK');
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(dialog.isConnected).toBe(false);
+  });
+
+  it('closes on Escape too', () => {
+    const onClose = vi.fn();
+    const dialog = buildNoticeDialog('x', onClose);
+
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

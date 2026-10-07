@@ -1266,3 +1266,16 @@ body {
 .popup-menu__item--marked {
   font-weight: 600;
 }
+
+/* ---- Export ------------------------------------------------------------ */
+
+/* export/build.ts renders here: laid out, because Mermaid measures text and
+   `display: none` breaks it, but never on screen. At the end of this file so it
+   wins over `.preview-pane`'s padding and overflow without `!important`. */
+.export-root {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  width: 800px;
+  overflow: visible;
+}

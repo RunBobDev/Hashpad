@@ -166,6 +166,24 @@ export function confirmSaveForImage(): Promise<boolean> {
   });
 }
 
+/**
+ * A message with one button, for a failure the user has to hear about -- an
+ * export that wrote nothing. Escape dismisses it like OK does; there is no
+ * other answer to give.
+ */
+export function buildNoticeDialog(text: string, onClose: () => void): HTMLDialogElement {
+  return buildDialog(text, [{ choice: true, label: 'OK', primary: true }], true, () => onClose());
+}
+
+export function showNotice(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    const dialog = buildNoticeDialog(text, resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
+  });
+}
+
 export function confirmOpenLink(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     const dialog = buildLinkDialog(url, resolve);
