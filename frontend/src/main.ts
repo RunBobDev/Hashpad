@@ -1252,6 +1252,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       // and a session that never exports never pays for them.
       void import('./export/html').then((module) => module.exportActiveAsHtml());
       break;
+    case 'file.exportText':
+      void import('./export/plaintext').then((module) => module.exportActiveAsText());
+      break;
     case 'file.print':
       void import('./export/print').then((module) => module.printActive());
       break;

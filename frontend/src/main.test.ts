@@ -41,6 +41,7 @@ import { setWordWrap } from './editor/extensions';
 import { COMMAND_EVENT } from './ui/menubar';
 import { exportActiveAsHtml } from './export/html';
 import { printActive } from './export/print';
+import { exportActiveAsText } from './export/plaintext';
 import { DEFAULT_PINNED } from './ui/toolbar';
 import {
   ReadFile,
@@ -149,6 +150,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
 // file checks is only that the command reaches it.
 vi.mock('./export/html', () => ({ exportActiveAsHtml: vi.fn(() => Promise.resolve()) }));
 vi.mock('./export/print', () => ({ printActive: vi.fn(() => Promise.resolve()) }));
+vi.mock('./export/plaintext', () => ({ exportActiveAsText: vi.fn(() => Promise.resolve()) }));
 
 /** A clean document with a real, CodeMirror-usable EditorState. */
 function cleanDoc(id: string, text: string, filePath: string | null = null): Document {
@@ -1172,6 +1174,11 @@ describe('export commands', () => {
   it('routes File > Export as HTML to the exporter', async () => {
     emit('file.exportHtml');
     await vi.waitFor(() => expect(exportActiveAsHtml).toHaveBeenCalledOnce());
+  });
+
+  it('routes File > Export as Plain Text to the exporter', async () => {
+    emit('file.exportText');
+    await vi.waitFor(() => expect(exportActiveAsText).toHaveBeenCalledOnce());
   });
 
   it('routes File > Print or Save as PDF to the printer', async () => {

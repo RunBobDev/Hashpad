@@ -181,6 +181,7 @@ const MENUS: Menu[] = [
       // SPEC §7.3. Under the saves, because an export is a save into another
       // format, and after Autosave, which belongs beside Save As (see the test).
       { id: 'file.exportHtml', label: 'Export as HTML…', enabled: true, separatorBefore: true },
+      { id: 'file.exportText', label: 'Export as Plain Text…', enabled: true },
       // Not "Export as PDF": what opens is the system print dialog, and a name
       // that says so avoids the surprise. Its "Save as PDF" printer is the PDF.
       { id: 'file.print', label: 'Print or Save as PDF…', shortcut: 'Ctrl+P', enabled: true },

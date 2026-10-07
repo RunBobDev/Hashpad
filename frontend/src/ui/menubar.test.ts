@@ -255,10 +255,30 @@ describe('File > export', () => {
     );
   });
 
-  it('offers Print or Save as PDF after it, with Ctrl+P beside it', () => {
+  it('offers Export as Plain Text after it', () => {
+    const labels = [...open('File').querySelectorAll('.menu-item__label')].map(
+      (el) => el.textContent,
+    );
+    expect(labels[labels.indexOf('Export as HTML…') + 1]).toBe('Export as Plain Text…');
+  });
+
+  it('emits file.exportText when Export as Plain Text is chosen', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('File'), 'Export as Plain Text…').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['file.exportText']);
+  });
+
+  it('offers Print or Save as PDF after the exports, with Ctrl+P beside it', () => {
     const popup = open('File');
     const labels = [...popup.querySelectorAll('.menu-item__label')].map((el) => el.textContent);
-    expect(labels[labels.indexOf('Export as HTML…') + 1]).toBe('Print or Save as PDF…');
+    expect(labels[labels.indexOf('Export as Plain Text…') + 1]).toBe('Print or Save as PDF…');
     expect(item(popup, 'Print or Save as PDF…').querySelector('kbd')?.textContent).toBe('Ctrl+P');
   });
 
