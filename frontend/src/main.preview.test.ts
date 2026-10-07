@@ -335,6 +335,77 @@ describe('view.readingMode', () => {
   });
 });
 
+/**
+ * View > Editor. Asked for by the owner: from reading view the only way back to
+ * the editor was Preview, which goes to split first and needs a second click.
+ */
+describe('view.editor', () => {
+  /** Opens View and reads whether Editor carries a tick right now. */
+  function editorTicked(): string | null {
+    const view = document.querySelector<HTMLButtonElement>('#menubar-trigger-view')!;
+    view.click();
+    const entry = [...document.querySelectorAll('.menu-popup [role="menuitemcheckbox"]')].find(
+      (candidate) => candidate.querySelector('.menu-item__label')?.textContent === 'Editor',
+    )!;
+    const ticked = entry.getAttribute('aria-checked');
+    view.click();
+    return ticked;
+  }
+
+  it('goes from reading view straight to the editor', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    emit('view.readingMode');
+    await waitForPane(true);
+
+    emit('view.editor');
+    await waitForPane(false);
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+  });
+
+  // The editor mode the document was last in, not always source.
+  it('comes back to live preview when that is where the document was', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    emit('view.livePreview');
+    emit('view.preview');
+    await waitForPane(true);
+
+    emit('view.editor');
+    await waitForPane(false);
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('live');
+  });
+
+  // A choice, not a toggle: choosing the editor while in it leaves it there.
+  it('does nothing when the editor is already showing', () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    store.setState((prev) => ({ ...prev, recentViewModes: [] }));
+
+    emit('view.editor');
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+    expect(store.getState().recentViewModes).toEqual([]);
+  });
+
+  it('is ticked exactly when no preview is showing', async () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'source');
+    expect(editorTicked()).toBe('true');
+
+    emit('view.readingMode');
+    await waitForPane(true);
+    expect(editorTicked()).toBe('false');
+
+    emit('view.editor');
+    await waitForPane(false);
+    setViewModeOf(active.id, 'live');
+    expect(editorTicked()).toBe('true');
+  });
+});
+
 describe('shortcuts with focus outside the editor', () => {
   it('opens the preview on a real Ctrl+Shift+P pressed on the body', async () => {
     const active = activeDocument(store.getState())!;

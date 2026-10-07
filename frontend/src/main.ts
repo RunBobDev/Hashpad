@@ -123,6 +123,10 @@ mountMenuBar(root, (id) => {
       return id === `theme.${themeMode}`;
     // Per *document*, not per window -- switch tabs and this legitimately
     // changes, which is exactly why it is read at open time.
+    case 'view.editor': {
+      const mode = activeDocument(store.getState())?.viewMode;
+      return mode !== undefined && !showsPreview(mode);
+    }
     case 'view.preview':
       return activeDocument(store.getState())?.viewMode === 'split';
     // Not `showsPreview`: these two ticks are asking which *arrangement* is on,
@@ -817,8 +821,7 @@ async function toggleReadingMode(): Promise<void> {
   if (active === null) return;
 
   if (active.viewMode === 'preview') {
-    store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
-    void recordViewModeUsed(active.previousViewMode);
+    showEditor();
     return;
   }
 
@@ -874,13 +877,29 @@ async function togglePreview(): Promise<void> {
   if (active === null) return;
 
   if (active.viewMode === 'split') {
-    store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
-    void recordViewModeUsed(active.previousViewMode);
+    showEditor();
     return;
   }
 
   await showPaneMode('split');
   void recordViewModeUsed('split');
+}
+
+/**
+ * View > Editor: the editor alone, in whichever editor mode -- source or live --
+ * the document was last in. Asked for by the owner, because from reading view
+ * the only way back was Preview, which goes to split first.
+ *
+ * Also what both toggles above do on the way out, so "back to the editor" has
+ * one implementation. A choice rather than a toggle: already in the editor, it
+ * does nothing, and records nothing.
+ */
+function showEditor(): void {
+  const active = activeDocument(store.getState());
+  if (active === null || !showsPreview(active.viewMode)) return;
+
+  store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
+  void recordViewModeUsed(active.previousViewMode);
 }
 
 /**
@@ -1258,6 +1277,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       if (previousId !== null) switchToDocument(previousId);
       break;
     }
+    case 'view.editor':
+      showEditor();
+      break;
     case 'view.preview':
       void togglePreview();
       break;

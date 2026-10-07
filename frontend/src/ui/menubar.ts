@@ -214,19 +214,30 @@ const MENUS: Menu[] = [
       { id: 'theme.system', label: 'Theme: Follow System', enabled: true, toggle: 'radio' },
       { id: 'theme.light', label: 'Theme: Light', enabled: true, toggle: 'radio' },
       { id: 'theme.dark', label: 'Theme: Dark', enabled: true, toggle: 'radio' },
+      // The editor alone, no pane. Asked for by the owner: from reading view the
+      // only way back to the editor was Preview, which goes to split first and
+      // needs a second click. Not a toggle -- choosing it while it is showing
+      // leaves it showing.
+      {
+        id: 'view.editor',
+        label: 'Editor',
+        enabled: true,
+        separatorBefore: true,
+        toggle: 'check',
+      },
       {
         id: 'view.preview',
         label: 'Preview',
         shortcut: 'Ctrl+Shift+P',
         enabled: true,
-        separatorBefore: true,
         toggle: 'check',
       },
       // Reading view (design §4.27) -- the rendered pane at full width, no
       // editor. Directly below Preview because they are the same pane in two
-      // arrangements, and a `check` rather than a `radio` beside Preview even
-      // though only one can be on: a radio group implies "pick one of these",
-      // and both being off is not only legal but the normal state.
+      // arrangements. Exactly one of Editor, Preview and Reading View is ever
+      // ticked, and they are still `check`s rather than a `radio` group: Preview
+      // and Reading View toggle -- choosing the ticked one goes back to the
+      // editor -- and a radio item does not behave that way.
       //
       // **No shortcut, deliberately.** Ctrl+Shift+P keeps meaning source-split;
       // a three-way cycle would make the common toggle worse to serve the

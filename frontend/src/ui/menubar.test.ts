@@ -399,7 +399,11 @@ describe('separators', () => {
     const dividers = [...popup.querySelectorAll('.menu-separator')];
 
     expect(dividers).toHaveLength(2);
-    expect(children.indexOf(dividers[0]!)).toBe(children.indexOf(item(popup, 'Preview')) - 1);
+    // Editor heads the view modes, directly above Preview.
+    expect(children.indexOf(dividers[0]!)).toBe(children.indexOf(item(popup, 'Editor')) - 1);
+    expect(children.indexOf(item(popup, 'Preview'))).toBe(
+      children.indexOf(item(popup, 'Editor')) + 1,
+    );
     expect(children.indexOf(dividers[1]!)).toBe(children.indexOf(item(popup, 'Zoom In')) - 1);
   });
 
