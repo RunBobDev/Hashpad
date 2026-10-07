@@ -222,3 +222,36 @@ export function confirmReset(): Promise<boolean> {
     dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
   });
 }
+
+/**
+ * Saving over a file another program changed (SPEC §7.4, design §4.30).
+ *
+ * Cancel is the primary, as with Reset: the question is whether to throw away
+ * someone else's work, and Enter should not be the way to say yes. Escape
+ * declines, per `buildDialog`'s contract.
+ */
+export function buildOverwriteDialog(
+  filename: string,
+  onChoice: (overwrite: boolean) => void,
+): HTMLDialogElement {
+  return buildDialog(
+    `${filename} was changed by another program.\n\n` +
+      'Saving now replaces those changes with your version.',
+    [
+      { choice: true, label: 'Overwrite' },
+      { choice: false, label: 'Cancel', primary: true },
+    ],
+    false,
+    onChoice,
+  );
+}
+
+export function confirmOverwrite(filename: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialog = buildOverwriteDialog(filename, resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+    // Cancel, which is the primary here.
+    dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
+  });
+}

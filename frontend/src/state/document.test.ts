@@ -41,6 +41,23 @@ describe('isDirty', () => {
 
     expect(isDirty(saved)).toBe(false);
   });
+
+  // The file is gone, so the buffer is the only copy of the text: the tab dot,
+  // the close prompt and the quit prompt all have to say so.
+  it('counts a document whose file was deleted as unsaved', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: 'x' }));
+
+    expect(isDirty({ ...doc, filePath: 'C:\\a.md', diskChange: 'deleted' })).toBe(true);
+  });
+
+  // A change on disk is a conflict, not unsaved work: an untouched buffer
+  // under a changed file has nothing of the user's to lose.
+  it('does not count a change on disk as unsaved by itself', () => {
+    const doc = createUntitledDocument(EditorState.create({ doc: 'x' }));
+    const disk = { content: 'y', encoding: 'utf-8', lineEnding: 'crlf', mixed: false } as const;
+
+    expect(isDirty({ ...doc, filePath: 'C:\\a.md', diskChange: disk })).toBe(false);
+  });
 });
 
 /**

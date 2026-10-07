@@ -22,7 +22,7 @@
 import type { Text } from '@codemirror/state';
 import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
 import { openDocumentInNewTab } from './documentops';
-import type { SaveChoice } from '../ui/confirmdialog';
+import { confirmOverwrite, type SaveChoice } from '../ui/confirmdialog';
 import { isDirty, type Document, type Encoding, type LineEnding } from '../state/document';
 import { getEditorView, store } from '../state/appcontext';
 
@@ -65,8 +65,11 @@ function findDocument(id: string): Document | null {
  * current for a background document as `view.state.doc` is for the active
  * one. Reading the wrong one of these two sources for a given document is
  * the single easiest way to save a stale or wrong buffer.
+ *
+ * Exported for files/diskwatch.ts, which measures a change on disk against
+ * exactly this.
  */
-function currentText(doc: Document): Text {
+export function currentText(doc: Document): Text {
   return doc.id === store.getState().activeDocumentId
     ? getEditorView().state.doc
     : doc.editorState.doc;
@@ -84,6 +87,9 @@ function currentText(doc: Document): Text {
  * captured before the IPC round trip and replayed here, or a user who changes
  * the encoding again while a save is in flight ends up with a document that
  * claims to be clean while holding a setting the file does not have.
+ *
+ * A successful write also settles any change on disk (SPEC §7.4): whatever was
+ * there, the file now holds exactly this.
  */
 export function markSaved(
   id: string,
@@ -94,7 +100,7 @@ export function markSaved(
   store.setState((prev) => ({
     ...prev,
     documents: prev.documents.map((doc) =>
-      doc.id === id ? { ...doc, savedDoc, savedEncoding, savedLineEnding } : doc,
+      doc.id === id ? { ...doc, savedDoc, savedEncoding, savedLineEnding, diskChange: null } : doc,
     ),
   }));
 }
@@ -155,9 +161,23 @@ export async function openFiles(): Promise<void> {
  * failed write must never report true.
  */
 export async function saveDocument(id: string): Promise<boolean> {
-  const doc = findDocument(id);
+  let doc = findDocument(id);
   if (!doc) return false;
   if (doc.filePath === null) return saveDocumentAs(id);
+
+  // SPEC §7.4's bar does not block, which makes it easy never to look at. A
+  // save here would replace whatever another program put on disk -- a `git
+  // pull`, say -- so it asks first. Every save route comes through this one
+  // function: Ctrl+S, the close prompt, the quit prompt. Autosave filters these
+  // documents out before getting here (autosave.ts), so the question is never
+  // asked on a timer. A deleted file has nothing to overwrite, and saving is
+  // how it comes back, so that one goes straight through.
+  if (doc.diskChange !== null && doc.diskChange !== 'deleted') {
+    if (!(await confirmOverwrite(displayName(doc)))) return false;
+    // Re-read: the answer took as long as the user did.
+    doc = findDocument(id);
+    if (!doc || doc.filePath === null) return false;
+  }
 
   // Captured once, before the IPC round trip: if this read the text again
   // after the `await` instead, and the user kept typing while the write was
@@ -225,6 +245,9 @@ export async function saveDocumentAs(id: string): Promise<boolean> {
             // values handed to `WriteFile` above, read off the pre-await `doc`.
             savedEncoding: doc.encoding,
             savedLineEnding: doc.lineEnding,
+            // A new path is a new file. Whatever the old one's disk was doing is
+            // no longer this document's business.
+            diskChange: null,
           }
         : d,
     ),

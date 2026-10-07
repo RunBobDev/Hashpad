@@ -10,13 +10,14 @@ import {
   type Document,
   DEFAULT_BEHAVIOUR,
 } from '../state/document';
-import type { SaveChoice } from '../ui/confirmdialog';
+import { confirmOverwrite, type SaveChoice } from '../ui/confirmdialog';
 import {
   displayName,
   markSaved,
   openFiles,
   openPaths,
   resolveDocumentsBeforeQuit,
+  saveDocument,
   saveDocumentAs,
   windowTitle,
 } from './fileops';
@@ -37,6 +38,10 @@ vi.mock('../../wailsjs/go/app/App', () => ({
 // "were the right paths read and handed on", not about the tab machinery --
 // which documentops.test.ts already covers.
 vi.mock('./documentops', () => ({ openDocumentInNewTab: vi.fn() }));
+
+// The overwrite prompt is a real <dialog>, and jsdom cannot showModal() one --
+// this file does not even run under jsdom. confirmdialog.test.ts drives it.
+vi.mock('../ui/confirmdialog', () => ({ confirmOverwrite: vi.fn() }));
 
 function docWith(overrides: Partial<Document>): Document {
   const base = createUntitledDocument(EditorState.create({ doc: 'hello' }));
@@ -389,6 +394,102 @@ describe('save-as records the new path on the document it saved', () => {
     await saveDocumentAs('a');
 
     expect(pathOf('a')).toBeNull();
+  });
+});
+
+/**
+ * SPEC §7.4's bar does not block, so the save itself has to refuse to replace
+ * another program's changes without asking. Every save route -- Ctrl+S, the
+ * close prompt, the quit prompt -- goes through `saveDocument`.
+ */
+describe('saving over a change on disk', () => {
+  const disk = { content: 'theirs', encoding: 'utf-8', lineEnding: 'crlf', mixed: false } as const;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(WriteFile).mockResolvedValue(undefined as never);
+    // As in the save-as block above: `currentText` needs a view to exist, and
+    // `.state.doc` is all it reads. None of these documents is active.
+    const stub = { state: { doc: EditorState.create({ doc: 'hello' }).doc } };
+    setEditorView(stub as unknown as EditorView);
+  });
+
+  function seed(docs: Document[]): void {
+    store.setState(() => ({
+      documents: docs,
+      activeDocumentId: null,
+      isDark: false,
+      closedPaths: [],
+      activeFormats: '',
+      pinnedToolbarCommands: [],
+      previewSplitRatio: 0.5,
+      syncScroll: true,
+      wordWrap: true,
+      editorBehaviour: DEFAULT_BEHAVIOUR,
+      defaultViewMode: 'source',
+      openedViewMode: 'preview',
+      recentViewModes: [],
+      defaultEncoding: 'utf-8',
+      autosave: false,
+      autosaveDelayMs: 2000,
+      status: EMPTY_STATUS,
+      outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    }));
+  }
+
+  function stored(id: string): Document {
+    return store.getState().documents.find((d) => d.id === id)!;
+  }
+
+  it('asks first, and writes nothing when the answer is Cancel', async () => {
+    seed([dirtyDoc({ id: 'a', filePath: 'C:\\a.md', diskChange: disk })]);
+    vi.mocked(confirmOverwrite).mockResolvedValue(false);
+
+    expect(await saveDocument('a')).toBe(false);
+
+    expect(confirmOverwrite).toHaveBeenCalledWith('a.md');
+    expect(WriteFile).not.toHaveBeenCalled();
+    expect(stored('a').diskChange).toBe(disk);
+  });
+
+  it('writes, and settles the conflict, when the answer is Overwrite', async () => {
+    seed([dirtyDoc({ id: 'a', filePath: 'C:\\a.md', diskChange: disk })]);
+    vi.mocked(confirmOverwrite).mockResolvedValue(true);
+
+    expect(await saveDocument('a')).toBe(true);
+
+    expect(vi.mocked(WriteFile).mock.lastCall?.[1]).toBe('hello!');
+    expect(stored('a').diskChange).toBeNull();
+    expect(isDirty(stored('a'))).toBe(false);
+  });
+
+  // Nothing to overwrite, and saving is how a deleted file comes back.
+  it('recreates a deleted file without asking', async () => {
+    seed([cleanDoc({ id: 'a', filePath: 'C:\\a.md', diskChange: 'deleted' })]);
+
+    expect(await saveDocument('a')).toBe(true);
+
+    expect(confirmOverwrite).not.toHaveBeenCalled();
+    expect(WriteFile).toHaveBeenCalled();
+    expect(stored('a').diskChange).toBeNull();
+  });
+
+  it('does not ask when nothing changed on disk', async () => {
+    seed([dirtyDoc({ id: 'a', filePath: 'C:\\a.md' })]);
+
+    expect(await saveDocument('a')).toBe(true);
+
+    expect(confirmOverwrite).not.toHaveBeenCalled();
+  });
+
+  // A new path is a new file, whatever the old one's disk was doing.
+  it('lets Save As settle the conflict', async () => {
+    seed([dirtyDoc({ id: 'a', filePath: 'C:\\a.md', diskChange: disk })]);
+    vi.mocked(ShowSaveDialog).mockResolvedValue('D:\\b.md');
+
+    expect(await saveDocumentAs('a')).toBe(true);
+
+    expect(stored('a').diskChange).toBeNull();
   });
 });
 

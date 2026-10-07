@@ -158,6 +158,30 @@ describe('what autosave writes', () => {
     ).toEqual(['C:/notes/a.md', 'C:/notes/b.md']);
   });
 
+  /**
+   * SPEC §7.4 and §3.2 together. Writing over a file another program changed is
+   * the silent overwrite the bar exists to prevent, and writing a deleted one
+   * would create a file. The ordinary dirty document beside them proves a pass
+   * actually ran.
+   */
+  it('skips a document whose file changed or vanished on disk', async () => {
+    const disk = {
+      content: 'theirs',
+      encoding: 'utf-8',
+      lineEnding: 'crlf',
+      mixed: false,
+    } as const;
+    seed([
+      { ...dirtySaved('changed', 'C:/notes/changed.md'), diskChange: disk },
+      { ...dirtySaved('deleted', 'C:/notes/deleted.md'), diskChange: 'deleted' },
+      dirtySaved('ok', 'C:/notes/ok.md'),
+    ]);
+
+    await vi.waitFor(() => expect(WriteFile).toHaveBeenCalled());
+    await quietFor();
+    expect(vi.mocked(WriteFile).mock.calls.map((call) => call[0])).toEqual(['C:/notes/ok.md']);
+  });
+
   /** Writing marks them saved, or the next pass would write the same text again. */
   it('leaves the documents clean afterwards', async () => {
     seed([dirtySaved('a', 'C:/notes/a.md')]);

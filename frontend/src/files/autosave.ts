@@ -37,9 +37,18 @@ let timer: ReturnType<typeof setTimeout> | null = null;
  */
 let writing = false;
 
-/** Dirty, and safe to write without asking anyone anything. */
+/**
+ * Dirty, and safe to write without asking anyone anything.
+ *
+ * A file that changed on disk is not: writing it would silently replace another
+ * program's changes -- what SPEC §7.4 exists to prevent -- and asking first
+ * would put a dialog on a timer. A deleted one is not either: writing it would
+ * create a file, which SPEC §3.2 forbids autosave to do.
+ */
 function saveable(state: AppState): Document[] {
-  return state.documents.filter((doc) => doc.filePath !== null && isDirty(doc));
+  return state.documents.filter(
+    (doc) => doc.filePath !== null && doc.diskChange === null && isDirty(doc),
+  );
 }
 
 function cancel(): void {

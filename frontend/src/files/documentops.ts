@@ -325,6 +325,7 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
     savedLineEnding: contents.lineEnding as Document['lineEnding'],
     mixedLineEndings: contents.mixed ?? false,
     scrollSnapshot: null,
+    diskChange: null,
   };
 
   store.setState((prev) => addDocument(prev, doc));

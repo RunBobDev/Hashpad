@@ -30,6 +30,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildConfirmDialog,
+  buildOverwriteDialog,
   buildResetDialog,
   confirmSave,
   type SaveChoice,
@@ -216,5 +217,42 @@ describe('buildResetDialog', () => {
     expect(text).toContain('toolbar');
     expect(text).toContain('next launch');
     expect(text).toContain('cannot be undone');
+  });
+});
+
+describe('buildOverwriteDialog', () => {
+  it.each([
+    ['Overwrite', true],
+    ['Cancel', false],
+  ])('reports %s as %s', (label, expected) => {
+    const onChoice = vi.fn();
+
+    click(buildOverwriteDialog('notes.md', onChoice), label);
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith(expected);
+  });
+
+  it('treats Escape as Cancel', () => {
+    const onChoice = vi.fn();
+    const dialog = buildOverwriteDialog('notes.md', onChoice);
+
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  /** Enter must not be the way to throw away another program's changes. */
+  it('makes Cancel the primary button', () => {
+    const dialog = buildOverwriteDialog('notes.md', vi.fn());
+
+    const primary = dialog.querySelector('.confirm-dialog__button--primary');
+    expect(primary?.textContent).toBe('Cancel');
+  });
+
+  it('names the file', () => {
+    const dialog = buildOverwriteDialog('notes.md', vi.fn());
+
+    const message = dialog.querySelector('.confirm-dialog__message');
+    expect(message?.textContent).toContain('notes.md');
   });
 });

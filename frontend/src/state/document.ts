@@ -11,6 +11,18 @@ export type LineEnding = 'lf' | 'crlf';
  * category of bugs where the flag and reality drift apart. CodeMirror owns the
  * text; this model deliberately does not duplicate it.
  */
+/**
+ * A file's contents as Go read them (SPEC §7.4) -- `app.FileContents` without
+ * the path, which the document already has. Held by `diskChange` while they
+ * disagree with what the document last read or saved.
+ */
+export interface DiskFile {
+  content: string;
+  encoding: Encoding;
+  lineEnding: LineEnding;
+  mixed: boolean;
+}
+
 export interface Document {
   id: string;
   filePath: string | null;
@@ -75,6 +87,16 @@ export interface Document {
    * changes that a raw pixel offset would not.
    */
   scrollSnapshot: StateEffect<unknown> | null;
+  /**
+   * What is on disk when it no longer matches `savedDoc` (SPEC §7.4): the
+   * file's new contents, `'deleted'` when it is gone, or `null` when the disk
+   * still holds what was last read or saved. Set by files/diskwatch.ts and
+   * cleared by every successful save, Reload and Keep mine.
+   *
+   * The contents rather than a flag, because Reload and Keep mine each need
+   * them, and holding them is what keeps both synchronous.
+   */
+  diskChange: DiskFile | 'deleted' | null;
 }
 
 /**
@@ -531,12 +553,17 @@ export function clampOutlineWidth(value: unknown): number {
  * writes, so a document whose text is untouched but whose line ending the user
  * just changed has genuinely unsaved changes -- and the close prompt, the tab's
  * dirty dot and Ctrl+S all key off this one function.
+ *
+ * Or a file that no longer exists (SPEC §7.4): whatever the buffer holds is
+ * then the only copy of it. A file that merely *changed* on disk is not counted
+ * -- that is a conflict, and an untouched buffer under it has nothing to lose.
  */
 export function isDirty(doc: Document): boolean {
   return (
     !doc.editorState.doc.eq(doc.savedDoc) ||
     doc.encoding !== doc.savedEncoding ||
-    doc.lineEnding !== doc.savedLineEnding
+    doc.lineEnding !== doc.savedLineEnding ||
+    doc.diskChange === 'deleted'
   );
 }
 
@@ -666,5 +693,6 @@ export function createUntitledDocument(
     savedLineEnding: 'crlf',
     mixedLineEndings: false,
     scrollSnapshot: null,
+    diskChange: null,
   };
 }
