@@ -4,6 +4,9 @@ package platform
 
 import (
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -42,7 +45,12 @@ func ConfineChildProcesses() error {
 
 	info := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{
 		BasicLimitInformation: windows.JOBOBJECT_BASIC_LIMIT_INFORMATION{
-			LimitFlags: windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+			// BREAKAWAY_OK lets a child leave the job only if it is created
+			// with CREATE_BREAKAWAY_FROM_JOB, which OpenExternal below asks for
+			// and WebView2 does not -- its tree stays confined. (SILENT_BREAKAWAY
+			// would free every child, WebView2's included, and undo the point.)
+			LimitFlags: windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+				windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK,
 		},
 	}
 	if _, err := windows.SetInformationJobObject(
@@ -61,5 +69,43 @@ func ConfineChildProcesses() error {
 	}
 
 	jobHandle = job
+	return nil
+}
+
+// OpenExternal hands target -- a web address, or a file URL for an .html page
+// -- to the shell's default handler, from a process outside our job.
+//
+// Without that, a browser Hashpad starts is in the kill-on-close job above and
+// dies when Hashpad closes, unless it was already running. Wails'
+// BrowserOpenURL calls ShellExecute in-process, which is exactly that.
+//
+// rundll32's FileProtocolHandler is ShellExecute in a process we can create
+// with CREATE_BREAKAWAY_FROM_JOB. An outer job that forbids breakaway -- some
+// launchers and sandboxes run their children in one -- makes that fail, and
+// then it is opened inside our job, as before, rather than not at all.
+//
+// The caller vouches for target: rundll32 will open whatever it is given,
+// local programs included. App.OpenURL allows only web and mail addresses.
+func OpenExternal(target string) error {
+	dir, err := windows.GetSystemDirectory()
+	if err != nil {
+		return fmt.Errorf("open %s: %w", target, err)
+	}
+	start := func(flags uint32) error {
+		cmd := exec.Command(filepath.Join(dir, "rundll32.exe"), "url.dll,FileProtocolHandler", target)
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: flags}
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		// Not waited on: it exits once the handler has started.
+		return cmd.Process.Release()
+	}
+
+	if start(windows.CREATE_BREAKAWAY_FROM_JOB) == nil {
+		return nil
+	}
+	if err := start(0); err != nil {
+		return fmt.Errorf("open %s: %w", target, err)
+	}
 	return nil
 }

@@ -92,6 +92,8 @@ func main() {
 		StartHidden:   true,
 		OnStartup:     application.Startup,
 		OnBeforeClose: application.OnBeforeClose,
+		// Deletes the temporary pages "Open in Browser" wrote for printing.
+		OnShutdown: application.Shutdown,
 		// SPEC §6.4: double-clicking a .md in Explorer must reach the window
 		// that is already open rather than start a second Hashpad. Wails takes
 		// the lock, exits the second process, and forwards its arguments here.

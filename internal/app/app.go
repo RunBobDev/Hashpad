@@ -49,6 +49,12 @@ type App struct {
 	// Startup and otherwise reached only from frontend calls, like ctx. Nil if
 	// fsnotify could not start, and every method on it is then a no-op.
 	watch *watcher
+
+	// tempFiles are the pages OpenInBrowser wrote, deleted by Shutdown.
+	// Guarded because the frontend can call OpenInBrowser while Wails is
+	// already running Shutdown on its own goroutine.
+	tempMu    sync.Mutex
+	tempFiles []string
 }
 
 // New creates the application struct.

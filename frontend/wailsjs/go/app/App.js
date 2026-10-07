@@ -14,6 +14,14 @@ export function OpenFromCommandLine(arg1, arg2) {
   return window['go']['app']['App']['OpenFromCommandLine'](arg1, arg2);
 }
 
+export function OpenInBrowser(arg1) {
+  return window['go']['app']['App']['OpenInBrowser'](arg1);
+}
+
+export function OpenURL(arg1) {
+  return window['go']['app']['App']['OpenURL'](arg1);
+}
+
 export function PendingFiles() {
   return window['go']['app']['App']['PendingFiles']();
 }
