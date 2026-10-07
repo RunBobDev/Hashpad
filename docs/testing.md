@@ -3006,3 +3006,33 @@ boxes below are for your own look, on your machine.
 - **The bar pushes the document down** by its own height while it shows, rather
   than covering the top of it. A covering bar would hide the first lines
   instead; pushing seemed the lesser cost.
+
+## Reading view line numbers, and View > Editor
+
+**Already verified on the built exe** (2026-10-07): with Line Numbers on,
+reading view numbered a fixture's headings, paragraphs, list items, quote,
+code block and each table row by the line they start on; View showed Editor
+ticked above Preview, and choosing it from reading view went straight back to
+live preview.
+
+### Line numbers in reading view
+
+- [ ] **Line Numbers on, Reading View on.** A column of numbers runs down the
+      left, one per block, each the line that block starts on in the source.
+      Switch to Editor and compare a few: they match the editor's gutter.
+- [ ] **A paragraph over several source lines** shows only its first line.
+- [ ] **A table** numbers its header row and each body row, and no row is
+      pushed sideways.
+- [ ] **A heading's number** sits level with the heading, not above it.
+- [ ] **Line Numbers off** removes the column, and the text moves back left.
+- [ ] **Split view** shows no numbers on the preview side; the editor beside it
+      has its own.
+
+### View > Editor
+
+- [ ] **View menu:** Editor sits directly above Preview, and exactly one of
+      Editor, Preview and Reading View is ticked.
+- [ ] **From Reading View, choose Editor:** straight to the editor, in one
+      click, in the mode you were last in (source or live).
+- [ ] **From split, choose Editor:** the preview closes.
+- [ ] **Already in the editor, choose Editor:** nothing changes.

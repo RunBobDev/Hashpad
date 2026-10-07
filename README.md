@@ -55,7 +55,9 @@ still one editor and still plain markdown — the file on disk never changes.
 Fenced code keeps its fences, deliberately.
 
 **Four view modes** — source, live, split and reading — switchable per document
-from the View menu, with defaults for new and opened files in Settings.
+from the View menu, with defaults for new and opened files in Settings. With
+line numbers on, reading view numbers each block by the source line it starts
+on.
 
 **Tabs** — open, close, reopen a closed tab, reorder by dragging, middle-click
 to close. One tab per file: opening a file that is already open switches to it.
@@ -166,7 +168,7 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [DOMPurify](https://github.com/cure53/DOMPurify), [KaTeX](https://katex.org/) and
 [Mermaid](https://mermaid.js.org/).
 
-**Current state:** 18.2 MB executable, 1,689 automated tests (1,562 frontend,
+**Current state:** 18.2 MB executable, 1,700 automated tests (1,573 frontend,
 127 Go), no known defects.
 
 ---
@@ -218,7 +220,7 @@ process, not the prompting:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Thirty of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Thirty-two of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 

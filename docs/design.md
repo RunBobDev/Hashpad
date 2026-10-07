@@ -1720,3 +1720,54 @@ stops reporting, and the file is not flagged deleted. Matching paths on Windows
 lower-cases them, which is close to NTFS's case folding but not identical. An
 external write landing while a save is in flight ends with whichever rename was
 last — inherent to two programs writing one file.
+
+### 4.31 Reading view has line numbers
+
+SPEC §6.13's `showLineNumbers` is an editor setting, and reading view (§4.27)
+has no editor, so it showed none. Asked for by the owner. The same setting now
+drives both: on, reading view gets a column of numbers down its left edge.
+
+**Each number is the source line a block starts on**, not every line. A
+paragraph written over lines 12–15 shows 12; a table shows its header row's
+line and each body row's. Numbering every source line would need a map from
+rendered text back to individual lines, which a rendered page does not have —
+reflowed prose has no line breaks where the source had them.
+
+**Drawn in CSS from an attribute the renderer stamps**, not by a script
+measuring the page. `rules/sourceline.ts` already stamps every block with
+`data-source-line` for scroll sync; it now adds `data-line-number` to the
+*first* block on each line only, because a list, its first item and that
+item's paragraph all start on the same line and would print one number three
+times over itself. A `::before` positioned against the pane draws it, so the
+column follows reflow, images loading and diagrams arriving without any code
+having to notice.
+
+**Tables number through their first cell.** Drawn from a row, the number
+became a table cell of its own and pushed the row sideways; drawn from the
+table, it landed on top of the first body row's number. Both were seen in a
+browser before the rule existed.
+
+**Centred on the block's first line** with `line-height: 1lh`, which for a
+pseudo-element resolves against the block itself. A heading's number otherwise
+sat at the top of a line twice its height.
+
+**Reading view only.** Split already has the editor's own numbers beside the
+preview.
+
+### 4.32 View > Editor
+
+SPEC §6.6's view modes were reachable as toggles: Preview, Reading View and
+Live Preview each switched themselves on and off. From reading view, the only
+way back to the editor was Preview — which goes to split — and then Preview
+again. Reported by the owner.
+
+**Editor** now sits directly above Preview and goes straight to the editor in
+whichever mode the document was last in, source or live. It is ticked whenever
+no preview is showing, so exactly one of Editor, Preview and Reading View is
+always ticked. They stay checkmarks rather than becoming a radio group, because
+Preview and Reading View still toggle — choosing the ticked one goes back to the
+editor — and a radio item does not behave that way. Choosing Editor while it is
+showing does nothing.
+
+It is also what Preview and Reading View do when toggled off, so "back to the
+editor" has one implementation.
