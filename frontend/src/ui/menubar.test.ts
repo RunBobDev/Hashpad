@@ -255,6 +255,26 @@ describe('File > export', () => {
     );
   });
 
+  it('offers Print or Save as PDF after it, with Ctrl+P beside it', () => {
+    const popup = open('File');
+    const labels = [...popup.querySelectorAll('.menu-item__label')].map((el) => el.textContent);
+    expect(labels[labels.indexOf('Export as HTML…') + 1]).toBe('Print or Save as PDF…');
+    expect(item(popup, 'Print or Save as PDF…').querySelector('kbd')?.textContent).toBe('Ctrl+P');
+  });
+
+  it('emits file.print when Print is chosen', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('File'), 'Print or Save as PDF…').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['file.print']);
+  });
+
   it('emits file.exportHtml when chosen', () => {
     const seen: string[] = [];
     const listen = (event: Event): void => {

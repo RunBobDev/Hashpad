@@ -181,6 +181,9 @@ const MENUS: Menu[] = [
       // SPEC §7.3. Under the saves, because an export is a save into another
       // format, and after Autosave, which belongs beside Save As (see the test).
       { id: 'file.exportHtml', label: 'Export as HTML…', enabled: true, separatorBefore: true },
+      // Not "Export as PDF": what opens is the system print dialog, and a name
+      // that says so avoids the surprise. Its "Save as PDF" printer is the PDF.
+      { id: 'file.print', label: 'Print or Save as PDF…', shortcut: 'Ctrl+P', enabled: true },
       // File rather than Edit: SPEC §6.1 gives this app File/Edit/View/Help and
       // no Tools menu, and the closest thing to a convention for a Windows
       // editor of this shape is VS Code's File > Preferences > Settings. SPEC

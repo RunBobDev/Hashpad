@@ -1279,3 +1279,26 @@ body {
   width: 800px;
   overflow: visible;
 }
+
+@media print {
+  /* The app is one screen high and clips the rest; a document is not. */
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+    background: none;
+  }
+
+  /* The document and nothing else: no chrome, no dialog, no export still
+     being built for something else. */
+  body > :not(.export-root--print) {
+    display: none;
+  }
+
+  /* Back into the flow: a fixed element is repeated on every printed page. */
+  .export-root--print {
+    position: static;
+    width: auto;
+    padding: 0;
+  }
+}

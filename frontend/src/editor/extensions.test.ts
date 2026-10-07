@@ -244,6 +244,22 @@ describe('tab command keymap', () => {
    * matches on `KeyboardEvent.key` -- so "the string looks right" and "the chord
    * actually fires" are genuinely different claims here.
    */
+  /**
+   * Consumed, and that half matters as much as the dispatch: WebView2's own
+   * Ctrl+P prints the whole window, chrome and all.
+   */
+  it('dispatches file.print on Mod-p and consumes the key', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = press(view, 'p', { ctrlKey: true });
+
+    expect(seen).toEqual(['file.print']);
+    expect(notHandled).toBe(false);
+    stop();
+    view.destroy();
+  });
+
   it('dispatches settings.open on Mod-, and consumes the key', () => {
     const view = buildView();
     const { seen, stop } = captureCommands();
@@ -314,11 +330,23 @@ describe('tab command keymap', () => {
   // Ctrl+Shift+P is a Chromium chord (it opens the command menu in DevTools),
   // so like the Ctrl-Tab case below this one has to be consumed, not merely
   // observed.
+  //
+  // **The event a keyboard actually sends**: Shift makes `key` the capital, and
+  // CodeMirror reaches `Shift-Ctrl-p` through the keyCode. A lowercase `'p'`
+  // with Shift held -- what this test used to send -- matches plain `Ctrl-p`
+  // first, which since Checkpoint M is Print, and the test failed for an event
+  // no keyboard produces.
   it('dispatches view.preview on Mod-Shift-p and consumes the key', () => {
     const view = buildView();
     const { seen, stop } = captureCommands();
 
-    const notHandled = press(view, 'p', { ctrlKey: true, shiftKey: true });
+    const notHandled = pressKey(view, {
+      key: 'P',
+      code: 'KeyP',
+      keyCode: 80,
+      ctrlKey: true,
+      shiftKey: true,
+    });
 
     expect(seen).toEqual(['view.preview']);
     expect(notHandled).toBe(false);

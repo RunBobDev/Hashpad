@@ -32,6 +32,7 @@ import {
   buildConfirmDialog,
   buildNoticeDialog,
   buildOverwriteDialog,
+  buildPrintDialog,
   buildResetDialog,
   confirmSave,
   type SaveChoice,
@@ -287,5 +288,40 @@ describe('buildNoticeDialog', () => {
     dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('buildPrintDialog', () => {
+  it.each([
+    ['Open in Browser', 'browser'],
+    ['Print Here', 'here'],
+    ['Cancel', 'cancel'],
+  ])('reports %s as %s', (label, expected) => {
+    const onChoice = vi.fn();
+
+    click(buildPrintDialog(onChoice), label);
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith(expected);
+  });
+
+  it('treats Escape as Cancel', () => {
+    const onChoice = vi.fn();
+    const dialog = buildPrintDialog(onChoice);
+
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(onChoice).toHaveBeenCalledExactlyOnceWith('cancel');
+  });
+
+  /** The browser is the route that prints the images, so it is the default. */
+  it('makes Open in Browser the primary button', () => {
+    const primary = buildPrintDialog(vi.fn()).querySelector('.confirm-dialog__button--primary');
+    expect(primary?.textContent).toBe('Open in Browser');
+  });
+
+  it('says why: Hashpad does not load internet images', () => {
+    const text = buildPrintDialog(vi.fn()).querySelector('.confirm-dialog__message')!.textContent!;
+    expect(text).toContain('images from the internet');
+    expect(text).toContain('placeholders');
   });
 });

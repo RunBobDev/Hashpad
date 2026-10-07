@@ -184,6 +184,37 @@ export function showNotice(text: string): Promise<void> {
   });
 }
 
+export type PrintChoice = 'browser' | 'here' | 'cancel';
+
+/**
+ * Before printing a document with internet images (Checkpoint M). Hashpad never
+ * loads them (design §3), so printed here they are placeholders; the browser
+ * loads them, and prints or saves a PDF from there. Escape cancels.
+ */
+export function buildPrintDialog(onChoice: (choice: PrintChoice) => void): HTMLDialogElement {
+  return buildDialog<PrintChoice>(
+    `This document has images from the internet. Hashpad doesn't load them, so here they print as placeholders.
+
+Open it in your browser instead? The browser loads them, and can print or save a PDF from there.`,
+    [
+      { choice: 'browser', label: 'Open in Browser', primary: true },
+      { choice: 'here', label: 'Print Here' },
+      { choice: 'cancel', label: 'Cancel' },
+    ],
+    'cancel',
+    onChoice,
+  );
+}
+
+export function confirmPrintRemote(): Promise<PrintChoice> {
+  return new Promise((resolve) => {
+    const dialog = buildPrintDialog(resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
+  });
+}
+
 export function confirmOpenLink(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     const dialog = buildLinkDialog(url, resolve);
