@@ -3023,7 +3023,11 @@ live preview.
 - [ ] **A paragraph over several source lines** shows only its first line.
 - [ ] **A table** numbers its header row and each body row, and no row is
       pushed sideways.
-- [ ] **A heading's number** sits level with the heading, not above it.
+- [ ] **It looks like the editor's gutter.** Switch between Editor and
+      Reading View: the grey strip, the colour and size of the numbers, and
+      where the text starts stay put. Measured on the exe after the owner
+      reported the first version looking nothing like it: identical to the
+      pixel. Try it in both themes, and zoomed in.
 - [ ] **Line Numbers off** removes the column, and the text moves back left.
 - [ ] **Split view** shows no numbers on the preview side; the editor beside it
       has its own.

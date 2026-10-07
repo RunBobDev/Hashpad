@@ -13,7 +13,7 @@ import {
 } from '../state/document';
 import { COMMAND_EVENT } from '../ui/menubar';
 import { COMMANDS, toEditorCommand } from './commands';
-import { buildExtensions, setWordWrap } from './extensions';
+import { buildExtensions, setWordWrap, syncGutterWidth } from './extensions';
 
 /**
  * The baseline `AppState` every describe block below resets to in its
@@ -913,5 +913,61 @@ describe('pasting an image into the editor', () => {
 
     expect(view.state.doc.toString()).toBe('pastedhello');
     view.destroy();
+  });
+});
+
+/**
+ * Reading view copies the editor's line-number column (preview.css), and takes
+ * its width from here. Measured rather than recomputed: CodeMirror sizes the
+ * gutter to the document's widest line number in the editor's font at the
+ * current zoom, and the copy has to match it exactly or the text jumps sideways
+ * when switching between the two.
+ *
+ * jsdom has no layout, so the gutter's size is stubbed; what is under test is
+ * when the width is read and where it is published.
+ */
+describe('syncGutterWidth', () => {
+  function updateWith(width: number | null, geometryChanged: boolean) {
+    const dom = document.createElement('div');
+    if (width !== null) {
+      const gutters = document.createElement('div');
+      gutters.className = 'cm-gutters';
+      gutters.getBoundingClientRect = () => ({ width }) as DOMRect;
+      dom.append(gutters);
+    }
+    return { geometryChanged, view: { dom } } as unknown as Parameters<typeof syncGutterWidth>[0];
+  }
+
+  function published(): string {
+    return document.documentElement.style.getPropertyValue('--editor-gutter-width');
+  }
+
+  it('publishes the gutter width on the root when the geometry changes', () => {
+    syncGutterWidth(updateWith(31.5, true));
+    expect(published()).toBe('31.5px');
+  });
+
+  // Measure passes come constantly while scrolling; nothing else has moved then.
+  it('reads nothing when the geometry did not change', () => {
+    syncGutterWidth(updateWith(40, true));
+    syncGutterWidth(updateWith(52, false));
+    expect(published()).toBe('40px');
+  });
+
+  // Line numbers switched off: no gutter, and nothing for a copy to be as wide as.
+  it('publishes zero when there is no gutter', () => {
+    syncGutterWidth(updateWith(null, true));
+    expect(published()).toBe('0px');
+  });
+});
+
+describe('the editor publishes its gutter width', () => {
+  // Wiring, not arithmetic: the function above is only any use if every editor
+  // runs it. jsdom has no layout, so no measure pass ever reports a geometry
+  // change here -- the state is asked directly instead.
+  it('from every editor buildExtensions makes', () => {
+    const state = EditorState.create({ extensions: buildExtensions(false) });
+
+    expect(state.facet(EditorView.updateListener)).toContain(syncGutterWidth);
   });
 });

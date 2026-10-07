@@ -316,13 +316,25 @@ describe("reading view's line numbers", () => {
     );
   });
 
-  // Centred on the block's first line, whatever its size: a heading's number
-  // otherwise sits at the top of a line twice as tall as the number.
-  it('centre each number on its first line', () => {
-    expect(rule(`${PANE} [data-line-number]::before`)).toContain('line-height: 1lh;');
+  // A copy of the editor's gutter, value for value: the owner reported the
+  // first version, with its own colour, size and position, looking nothing like
+  // the line numbers in every other mode.
+  it("take the editor gutter's colours, width and line height", () => {
+    const number = rule(`${PANE} [data-line-number]::before`);
+    expect(number).toContain('color: var(--gutter-fg);');
+    expect(number).toContain('width: calc(var(--editor-gutter-width, 25px) - 1px);');
+    expect(number).toContain('padding: 0 3px 0 5px;');
+    expect(number).toContain('line-height: var(--line-editor);');
   });
 
-  it('get a column of their own beside the text', () => {
-    expect(rule(PANE)).toContain('padding-left:');
+  it("draw the gutter's background strip", () => {
+    expect(rule(PANE)).toContain('var(--gutter-bg)');
+  });
+
+  // Text starts where the editor's does: the gutter, then the usual padding.
+  it('start the text where the editor starts it', () => {
+    expect(rule(PANE)).toContain(
+      'padding-left: calc(var(--editor-gutter-width, 25px) + var(--pad-editor));',
+    );
   });
 });

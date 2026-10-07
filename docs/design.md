@@ -1747,9 +1747,18 @@ became a table cell of its own and pushed the row sideways; drawn from the
 table, it landed on top of the first body row's number. Both were seen in a
 browser before the rule existed.
 
-**Centred on the block's first line** with `line-height: 1lh`, which for a
-pseudo-element resolves against the block itself. A heading's number otherwise
-sat at the top of a line twice its height.
+**A copy of the editor's gutter, value for value.** The first version chose its
+own colour, size and position, and the owner reported it looking nothing like
+the line numbers in every other mode. The gutter's colours were CodeMirror's
+base-theme constants, which nothing outside the editor could use; they are now
+tokens in variables.css (`--gutter-bg`, `--gutter-fg`, `--gutter-border`, at
+CodeMirror's own values, so the editor looks as it did), read by both. The width
+is the editor's gutter, measured after each CodeMirror layout pass and published
+as `--editor-gutter-width` — CodeMirror sizes it to the document's line count in
+the editor's font, which CSS cannot work out. The number box is CodeMirror's:
+the same padding, font, size and line height. Measured on the built exe, the
+two columns match pixel for pixel: strip colour and width, digit colour, where
+the digits end, and where the text starts.
 
 **Reading view only.** Split already has the editor's own numbers beside the
 preview.

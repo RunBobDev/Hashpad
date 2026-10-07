@@ -60,6 +60,18 @@ export const hashpadTheme = EditorView.theme({
   '.cm-activeLine': {
     backgroundColor: 'var(--bg-active-line)',
   },
+  // The line-number gutter, for the same reason and one more. The base theme
+  // hard-codes #f5f5f5/#6c6c6c and #333338/#ccc; the values in variables.css are
+  // those same ones, so the editor looks as it did. What changes is that reading
+  // view's line numbers (preview.css) now draw from the same tokens -- the owner
+  // reported them looking nothing like these while the two lived in different
+  // places. The border is drawn in both themes, in the gutter's own colour in
+  // dark, so the column is the same width in both.
+  '.cm-gutters': {
+    backgroundColor: 'var(--gutter-bg)',
+    color: 'var(--gutter-fg)',
+    borderRight: '1px solid var(--gutter-border)',
+  },
   '.cm-scroller': {
     fontFamily: 'inherit',
     overflow: 'auto',

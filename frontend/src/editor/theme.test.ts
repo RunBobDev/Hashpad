@@ -66,3 +66,35 @@ describe('the editor content column', () => {
     expect(contentRule()).not.toMatch(/margin[a-z-]*:[^;]*auto/);
   });
 });
+
+/**
+ * The line-number gutter's colours come from variables.css, not from
+ * @codemirror/view's base theme. Reading view draws its own copy of the column
+ * from the same tokens (preview.css), and the owner reported the two looking
+ * nothing alike while the editor's took its colours from the library.
+ */
+describe('the line-number gutter', () => {
+  function guttersRule(): string {
+    const view = new EditorView({
+      state: EditorState.create({ doc: 'hello', extensions: [hashpadTheme] }),
+      parent: document.body,
+    });
+    const css = [...document.head.querySelectorAll('style')]
+      .map((style) => style.textContent ?? '')
+      .join('\n');
+    view.destroy();
+    // The base theme emits `.cm-gutters` rules too; ours is the one using a token.
+    const rules = [...css.matchAll(/\.cm-gutters \{([^}]*)\}/g)]
+      .map((match) => match[1]!)
+      .filter((declarations) => declarations.includes('var(--gutter-'));
+    expect(rules, 'the theme should emit exactly one .cm-gutters rule').toHaveLength(1);
+    return rules[0]!;
+  }
+
+  it('takes its colours from the gutter tokens', () => {
+    const rule = guttersRule();
+    expect(rule).toMatch(/background-color:\s*var\(--gutter-bg\)/);
+    expect(rule).toMatch(/color:\s*var\(--gutter-fg\)/);
+    expect(rule).toMatch(/border-right:\s*1px solid var\(--gutter-border\)/);
+  });
+});

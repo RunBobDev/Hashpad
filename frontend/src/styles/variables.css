@@ -156,6 +156,15 @@
      cursor's line without competing with the accent or with syntax colour. */
   --bg-active-line: rgb(0 0 0 / 4%);
 
+  /* The line-number gutter -- the editor's, and reading view's copy of it.
+     @codemirror/view's own base-theme values, moved here so the two columns
+     come from one place: reading view cannot borrow a library's hard-coded
+     colours, and the owner reported its numbers looking nothing like the
+     editor's while they lived in two places. */
+  --gutter-bg: #f5f5f5;
+  --gutter-fg: #6c6c6c; /* 4.82:1 on --gutter-bg */
+  --gutter-border: #dddddd;
+
   --syn-heading: #1a1a1a;
   /* Markers (#, *, >) are readable characters in source mode, not decoration,
      so they are bound by the AA floor. Dimmer than --fg-muted, but only as dim
@@ -248,6 +257,12 @@
 
   /* Lifts rather than darkens: a black wash is invisible on a near-black editor. */
   --bg-active-line: rgb(255 255 255 / 5%);
+
+  /* CodeMirror's dark gutter has no dividing line; one the colour of the
+     gutter keeps both themes the same width without drawing one. */
+  --gutter-bg: #333338;
+  --gutter-fg: #cccccc; /* 7.82:1 on --gutter-bg */
+  --gutter-border: #333338;
 
   --syn-heading: #e8e8e8;
   /* Same reasoning as the light theme: readable text, so bound by AA. */

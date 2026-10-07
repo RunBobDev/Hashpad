@@ -438,35 +438,50 @@
  * (rules/sourceline.ts), so a paragraph over lines 12-15 shows 12. Reading view
  * only -- split has the editor's own numbers beside it.
  *
- * Absolutely positioned against the pane, which is the positioned ancestor here
- * (the rule above) and also the scroller, so the column scrolls with the text
- * and lines up at the pane's left edge however deeply a block is nested. `top`
- * is left to the static position: the top of the block's first line.
+ * **A copy of the editor's own gutter, value for value.** The first version
+ * picked its own colour, size and position, and the owner reported it looking
+ * nothing like the line numbers in every other mode. Now:
  *
- * `line-height: 1lh` is the block's own line height (for `line-height`, `lh`
- * resolves against the parent, which for a pseudo-element is the block). The
- * number is centred in a line exactly as tall as the block's first one -- a
- * heading's number otherwise sat at the top of a line twice its height.
+ * - the colours are the tokens the editor's gutter uses (variables.css,
+ *   editor/theme.ts), including the gutter's background strip and its border;
+ * - the width is the editor's gutter, measured, published by
+ *   `syncGutterWidth` (editor/extensions.ts) -- CodeMirror sizes it to the
+ *   document's line count in the editor's font, which CSS cannot work out;
+ * - the number box is CodeMirror's: `padding: 0 3px 0 5px`, right-aligned, in
+ *   the editor's font and size, at the top of a line of the editor's height.
  *
- * Sized from the editor's font so the column reads like the editor's gutter,
- * and wide enough for five digits at that size.
+ * Text then starts where the editor's does: the gutter, then `--pad-editor`.
+ *
+ * The strip is the pane's background, which a scroller does not scroll, so it
+ * runs the full height. The numbers are positioned against the pane -- the
+ * positioned ancestor here (the rule above) and the scroller -- so they scroll
+ * with the text and sit in the strip however deeply a block is nested; `top`
+ * is left to the static position, the top of the block's first line.
  */
 .editor-split--reading.editor-split--line-numbers .preview-pane {
-  padding-left: calc(var(--pad-editor) + var(--size-editor) * 3.6);
+  padding-left: calc(var(--editor-gutter-width, 25px) + var(--pad-editor));
+  background: linear-gradient(
+    to right,
+    var(--gutter-bg) 0 calc(var(--editor-gutter-width, 25px) - 1px),
+    var(--gutter-border) 0 var(--editor-gutter-width, 25px),
+    var(--bg-editor) 0
+  );
 }
 
 .editor-split--reading.editor-split--line-numbers .preview-pane [data-line-number]::before {
   content: attr(data-line-number);
   position: absolute;
   left: 0;
-  width: calc(var(--size-editor) * 3.6);
+  box-sizing: border-box;
+  width: calc(var(--editor-gutter-width, 25px) - 1px);
+  padding: 0 3px 0 5px;
   text-align: right;
-  color: var(--fg-muted);
+  color: var(--gutter-fg);
   font-family: var(--font-editor);
   font-size: var(--size-editor);
   font-style: normal;
   font-weight: normal;
-  line-height: 1lh;
+  line-height: var(--line-editor);
 }
 
 /* ---- Math (SPEC 7.2) --------------------------------------------------- */

@@ -162,6 +162,28 @@ export function publishStatus(state: EditorState): void {
 }
 
 /**
+ * Publishes the line-number gutter's width as `--editor-gutter-width` on the
+ * document root, for reading view's copy of the column (preview.css).
+ *
+ * Measured rather than recomputed: CodeMirror sizes the gutter to the
+ * document's widest line number, in the editor's font, at the current zoom,
+ * and the copy has to match it exactly or the text jumps sideways on every
+ * switch between the two. In reading view the editor is still laid out, under
+ * the pane (design §4.27), so this keeps answering while it is out of sight.
+ *
+ * Only on geometry changes, which CodeMirror reports straight after its own
+ * measure pass -- so the layout this reads has already been done -- and which
+ * cover every way the width moves: line numbers switched on or off, a line
+ * count gaining a digit, zoom, a tab switch.
+ */
+export function syncGutterWidth(update: ViewUpdate): void {
+  if (!update.geometryChanged) return;
+  const gutters = update.view.dom.querySelector('.cm-gutters');
+  const width = gutters === null ? 0 : gutters.getBoundingClientRect().width;
+  document.documentElement.style.setProperty('--editor-gutter-width', `${width}px`);
+}
+
+/**
  * Assembled deliberately rather than using the `basicSetup` bundle: basicSetup
  * pulls in line numbers, fold gutters, autocompletion, and bracket matching,
  * most of which SPEC §6.13 has off by default and all of which cost bundle size.
@@ -385,6 +407,7 @@ export function buildExtensions(
     EditorView.updateListener.of(syncActiveDocument),
     EditorView.updateListener.of(syncActiveFormats),
     EditorView.updateListener.of(syncStatus),
+    EditorView.updateListener.of(syncGutterWidth),
   ];
 }
 
