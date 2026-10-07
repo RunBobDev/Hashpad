@@ -956,6 +956,12 @@ body {
 .confirm-dialog__message {
   margin: 0 0 20px;
   line-height: 1.5;
+  /* The prompts separate a question from its explanation -- or from the link
+     address, in the link prompt -- with a blank line in their text. Without
+     this the breaks fold into spaces and everything runs into one block. */
+  white-space: pre-line;
+  /* A link address is one unbroken token, as in the About dialog below. */
+  overflow-wrap: anywhere;
 }
 
 .confirm-dialog__actions {

@@ -255,3 +255,23 @@ describe('flex items that must be allowed to shrink', () => {
     expect(pane).not.toMatch(/overflow-x:\s*hidden/);
   });
 });
+
+/**
+ * Every prompt in ui/confirmdialog.ts that has more than one part separates the
+ * parts with a blank line in its text -- the question, then the explanation;
+ * or, in the link prompt, the question and then the address on its own line,
+ * which is the one thing the user must be able to read before saying yes.
+ * Without `pre-line` the browser folds those breaks into spaces and every part
+ * runs into one block. Reported by looking at the overwrite prompt in the real
+ * app; all four multi-part prompts had always rendered that way.
+ */
+describe('prompt messages', () => {
+  it('keep the line breaks their text is written with', () => {
+    expect(rule('.confirm-dialog__message')).toContain('white-space: pre-line;');
+  });
+
+  // An address is one unbroken token, and the dialog has a max-width.
+  it('wrap a long link instead of widening the dialog', () => {
+    expect(rule('.confirm-dialog__message')).toContain('overflow-wrap: anywhere;');
+  });
+});

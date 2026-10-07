@@ -166,7 +166,7 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [DOMPurify](https://github.com/cure53/DOMPurify), [KaTeX](https://katex.org/) and
 [Mermaid](https://mermaid.js.org/).
 
-**Current state:** 18.2 MB executable, 1,685 automated tests (1,558 frontend,
+**Current state:** 18.2 MB executable, 1,687 automated tests (1,560 frontend,
 127 Go), no known defects.
 
 ---
