@@ -44,6 +44,11 @@ type App struct {
 	// mutex; see showWindowEventually.
 	windowMu    sync.Mutex
 	windowShown bool
+
+	// watch reports open files changing on disk (SPEC §7.4). Written once by
+	// Startup and otherwise reached only from frontend calls, like ctx. Nil if
+	// fsnotify could not start, and every method on it is then a no-op.
+	watch *watcher
 }
 
 // New creates the application struct.
@@ -57,6 +62,14 @@ func (a *App) Startup(ctx context.Context) {
 	a.ctxMu.Lock()
 	a.ctx = ctx
 	a.ctxMu.Unlock()
+
+	w, err := newWatcher(func(event string, data any) { runtime.EventsEmit(ctx, event, data) })
+	if err != nil {
+		// Change detection is not worth failing to start over.
+		log.Printf("hashpad: file watching unavailable: %v", err)
+	} else {
+		a.watch = w
+	}
 
 	go a.showWindowEventually()
 }

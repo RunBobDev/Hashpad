@@ -38,6 +38,10 @@ export function SaveSettings(arg1) {
   return window['go']['app']['App']['SaveSettings'](arg1);
 }
 
+export function SetWatchedFiles(arg1) {
+  return window['go']['app']['App']['SetWatchedFiles'](arg1);
+}
+
 export function ShowOpenDialog() {
   return window['go']['app']['App']['ShowOpenDialog']();
 }

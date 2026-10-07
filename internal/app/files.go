@@ -90,7 +90,8 @@ func (a *App) WriteFile(path, content string, enc Encoding, ending LineEnding) e
 		}
 	}()
 
-	if _, err := tmp.Write(Encode(content, enc, ending)); err != nil {
+	data := Encode(content, enc, ending)
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return fmt.Errorf("write %s: %w", path, err)
 	}
@@ -99,6 +100,10 @@ func (a *App) WriteFile(path, content string, enc Encoding, ending LineEnding) e
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
+
+	// Before the rename, so the watcher never sees our own save as someone
+	// else's (watch.go).
+	a.watch.wrote(path, data)
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
