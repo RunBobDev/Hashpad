@@ -2525,6 +2525,11 @@ session, not once per document.
 - [ ] **`$$\alpha$$` inside a sentence** keeps the sentence in one paragraph.
       If the text breaks into two paragraphs around it, the span became a
       `<div>`.
+- [ ] **…and sits on the line, in its place in the sentence.** Reported after
+      0.6.0: the equation floated above the line, centred, leaving a gap in the
+      sentence where it belonged — an inline-block with `overflow` set takes its
+      bottom edge as its baseline. Fixed; the paragraph should be no taller
+      than a plain one-line paragraph unless the equation itself is.
 - [ ] **A very long equation scrolls inside its own box**, left and right. The
       pane must not scroll sideways, and neither must the window. Narrow the
       window until it bites.

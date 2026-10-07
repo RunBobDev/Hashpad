@@ -470,11 +470,27 @@
 
 /* `$$x$$` written inside a sentence. It keeps the display *size* -- that is
    what the author asked for -- but not the block layout, because a block inside
-   a paragraph is invalid HTML and the browser would close the paragraph. */
+   a paragraph is invalid HTML and the browser would close the paragraph.
+
+   **`overflow: visible` is what keeps it on its line.** The rule above sets
+   `overflow-x: auto` for the block form, and an inline-block whose overflow is
+   not visible takes its *bottom edge* as its baseline: the whole equation
+   stood on the text's baseline and floated above the sentence, leaving a gap
+   where it belonged. Visible overflow puts the baseline back on the math's own
+   last line. It costs nothing: an inline-block grows to fit its content, so the
+   overflow never scrolled anything here -- a long equation widens the pane
+   with or without it. */
 span.preview-math-display {
   display: inline-block;
   margin: 0;
+  overflow: visible;
   text-align: inherit;
+}
+
+/* KaTeX's own stylesheet gives its display wrapper a 1em margin above and
+   below, which inside a sentence only pushes the neighbouring lines apart. */
+span.preview-math-display > .katex-display {
+  margin: 0;
 }
 
 /*

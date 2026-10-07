@@ -275,3 +275,28 @@ describe('prompt messages', () => {
     expect(rule('.confirm-dialog__message')).toContain('overflow-wrap: anywhere;');
   });
 });
+
+/**
+ * `$$x$$` written inside a sentence is an inline-block holding KaTeX's display
+ * output. Reported by the owner: the equation sat *above* its line, leaving a
+ * gap in the sentence where it belonged.
+ *
+ * The span inherited `overflow-x: auto` from the rule meant for the centred
+ * block form, and CSS puts the baseline of an inline-block whose overflow is
+ * not `visible` at its bottom edge -- so the whole equation was stood on the
+ * text's baseline. Measured in a browser: the text line at 501-521px, the alpha
+ * at 483-500px. KaTeX's own 1em display margins then made the line taller.
+ *
+ * The overflow bought nothing in return: an inline-block grows to fit its
+ * content, so a long equation widened the pane exactly as much with it as
+ * without it.
+ */
+describe('display math inside a sentence', () => {
+  it('sits on the line instead of standing on its baseline', () => {
+    expect(rule('span.preview-math-display')).toContain('overflow: visible;');
+  });
+
+  it('does not take KaTeX display margins into the line', () => {
+    expect(rule('span.preview-math-display > .katex-display')).toContain('margin: 0;');
+  });
+});
