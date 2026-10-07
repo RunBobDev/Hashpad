@@ -39,6 +39,7 @@ import {
 import { getEditorView, store } from './state/appcontext';
 import { setWordWrap } from './editor/extensions';
 import { COMMAND_EVENT } from './ui/menubar';
+import { exportActiveAsHtml } from './export/html';
 import { DEFAULT_PINNED } from './ui/toolbar';
 import {
   ReadFile,
@@ -142,6 +143,10 @@ vi.mock('../wailsjs/go/app/App', () => ({
   SystemThemeIsDark: vi.fn().mockResolvedValue(false),
   WriteFile: vi.fn(),
 }));
+
+// Export lives behind a dynamic import (main.ts) and talks to Go; what this
+// file checks is only that the command reaches it.
+vi.mock('./export/html', () => ({ exportActiveAsHtml: vi.fn(() => Promise.resolve()) }));
 
 /** A clean document with a real, CodeMirror-usable EditorState. */
 function cleanDoc(id: string, text: string, filePath: string | null = null): Document {
@@ -1158,5 +1163,12 @@ describe('file.autosave', () => {
 
     emit('file.autosave');
     await vi.waitFor(() => expect(store.getState().autosave).toBe(false));
+  });
+});
+
+describe('export commands', () => {
+  it('routes File > Export as HTML to the exporter', async () => {
+    emit('file.exportHtml');
+    await vi.waitFor(() => expect(exportActiveAsHtml).toHaveBeenCalledOnce());
   });
 });

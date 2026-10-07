@@ -241,6 +241,34 @@ describe('File > Settings', () => {
   });
 });
 
+/** SPEC §7.3's exports, grouped after the saves they sit beside. */
+describe('File > export', () => {
+  beforeEach(() => mountMenuBar(root, () => false));
+
+  /** After Autosave, which stays beside Save As, and set apart as a group. */
+  it('offers Export as HTML after the saves, as its own group', () => {
+    const popup = open('File');
+    const labels = [...popup.querySelectorAll('.menu-item__label')].map((el) => el.textContent);
+    expect(labels[labels.indexOf('Autosave') + 1]).toBe('Export as HTML…');
+    expect(item(popup, 'Export as HTML…').previousElementSibling?.getAttribute('role')).toBe(
+      'separator',
+    );
+  });
+
+  it('emits file.exportHtml when chosen', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('File'), 'Export as HTML…').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['file.exportHtml']);
+  });
+});
+
 /**
  * SPEC §3.2's autosave, reachable without opening the settings dialog.
  *

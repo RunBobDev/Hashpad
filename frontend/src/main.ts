@@ -1247,6 +1247,11 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     case 'file.saveAs':
       void saveActiveAs();
       break;
+    case 'file.exportHtml':
+      // Lazy, like the preview pane: export carries its stylesheets as strings,
+      // and a session that never exports never pays for them.
+      void import('./export/html').then((module) => module.exportActiveAsHtml());
+      break;
     case 'edit.undo':
       undo(view);
       break;

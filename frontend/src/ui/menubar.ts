@@ -178,12 +178,21 @@ const MENUS: Menu[] = [
       // from a menu should not have to work out that "Autosave" in the dialog
       // is the same switch.
       { id: 'file.autosave', label: 'Autosave', enabled: true, toggle: 'check' },
+      // SPEC §7.3. Under the saves, because an export is a save into another
+      // format, and after Autosave, which belongs beside Save As (see the test).
+      { id: 'file.exportHtml', label: 'Export as HTML…', enabled: true, separatorBefore: true },
       // File rather than Edit: SPEC §6.1 gives this app File/Edit/View/Help and
       // no Tools menu, and the closest thing to a convention for a Windows
       // editor of this shape is VS Code's File > Preferences > Settings. SPEC
       // §6.14 requires every shortcut to be reachable from a menu, so Ctrl+,
       // needs an entry somewhere regardless.
-      { id: 'settings.open', label: 'Settings…', shortcut: 'Ctrl+,', enabled: true },
+      {
+        id: 'settings.open',
+        label: 'Settings…',
+        shortcut: 'Ctrl+,',
+        enabled: true,
+        separatorBefore: true,
+      },
       { id: 'file.exit', label: 'Exit', enabled: true },
     ],
   },
