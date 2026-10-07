@@ -57,6 +57,7 @@ import {
 } from './settings/live';
 import { mountOutline, type OutlineHandle } from './ui/outline';
 import { mountStatusBar, parseStatusCommand } from './ui/statusbar';
+import { mountDiskBar } from './ui/diskbar';
 import { DEFAULT_PINNED, mountToolbar, validatePinned } from './ui/toolbar';
 import { store, setEditorView, getEditorView } from './state/appcontext';
 import { mountZoom, zoomIn, zoomOut, zoomReset } from './ui/zoom';
@@ -174,6 +175,11 @@ mountTabBar(root);
 const workspace = document.createElement('div');
 workspace.className = 'workspace';
 root.append(workspace);
+
+// SPEC §7.4's bar, between the toolbar and the workspace. Mounted now so it
+// always exists: the toolbar, which mounts later from bootstrap(), inserts
+// itself before this rather than before `workspace`, or it would land below it.
+const diskBar = mountDiskBar(root, workspace).element;
 
 // #app is a flex *column*, so the editor and the preview need a flex row of
 // their own to sit side by side. Built at startup whether or not the preview
@@ -413,11 +419,13 @@ async function bootstrap(): Promise<void> {
     // `insertBefore` throws NotFoundError if handed a node that is not a
     // child of `root`, so this one call is worth its own guard.
     try {
-      // Inserted before `workspace`, the outermost of the three: `editorArea`
-      // and `editorSplit` are both nested inside it now, and `insertBefore`
-      // throws NotFoundError for a node that is not a child of `root` -- which
-      // is precisely the throw the guard around this call was written for.
-      if (toolbarVisible) mountToolbar(root!, pinnedCommands, workspace);
+      // Inserted before the disk bar, which sits directly above `workspace`.
+      // Not before `workspace` itself, which would put the toolbar below the
+      // bar; and not before `editorArea` or `editorSplit`, both nested inside
+      // `workspace` -- `insertBefore` throws NotFoundError for a node that is
+      // not a child of `root`, which is precisely the throw the guard around
+      // this call was written for.
+      if (toolbarVisible) mountToolbar(root!, pinnedCommands, diskBar);
     } catch (err) {
       console.error('hashpad: failed to mount the toolbar; continuing without it', err);
     }

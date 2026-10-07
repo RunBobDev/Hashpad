@@ -755,6 +755,56 @@ body {
 }
 
 /*
+ * SPEC §7.4's bar (ui/diskbar.ts): a row of #app's column, between the toolbar
+ * and the workspace. Tinted with the accent so it reads as a notice without
+ * borrowing the danger colour -- nothing has gone wrong yet. Not draggable: it
+ * is a message to read and two buttons, not empty chrome.
+ *
+ * The toolbar's height, fixed, whichever state it shows: sized by its content
+ * it was 35px with buttons and 27px without, so switching between a changed
+ * tab and a deleted one nudged the editor by 8px.
+ */
+.disk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 var(--h-toolbar);
+  padding: 0 8px 0 12px;
+  background: var(--accent-subtle);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-primary);
+  --wails-draggable: no-drag;
+}
+
+/* `display: flex` above outranks the user agent's `[hidden] { display: none }`. */
+.disk-bar[hidden] {
+  display: none;
+}
+
+.disk-bar__message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.disk-bar__button {
+  padding: 3px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+  color: var(--fg-primary);
+  font: inherit;
+  cursor: default;
+}
+
+.disk-bar__button:hover {
+  background: var(--bg-hover);
+}
+
+.disk-bar__button[hidden] {
+  display: none;
+}
+
+/*
  * Formatting toolbar (SPEC §6.1, §6.5). Same drag convention as .menubar and
  * .tabbar above: the row's own empty space drags the frameless window, and
  * every interactive child opts back out with no-drag.

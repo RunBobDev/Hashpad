@@ -193,6 +193,8 @@ describe('bootstrap', () => {
       'menubar',
       'tabbar',
       'toolbar',
+      // SPEC §7.4's bar: always a row, hidden until a file changes on disk.
+      'disk-bar',
       // The outline sidebar lives *inside* this row, not beside it in `#app` --
       // see main.ts for why the two rows are nested.
       'workspace',
