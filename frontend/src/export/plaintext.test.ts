@@ -29,11 +29,7 @@ describe('markdownToPlainText', () => {
     ['a quote, indented four', '> quoted\n> more', '    quoted\n    more\n'],
     ['a list inside a quote', '> - a\n> - b', '    - a\n    - b\n'],
     ['code, indented four', '```js\nlet a;\nlet b;\n```', '    let a;\n    let b;\n'],
-    [
-      'a table, padded into columns',
-      '| A | Bee |\n|---|---|\n| 1 | 2 |',
-      'A  Bee\n-  ---\n1  2\n',
-    ],
+    ['a table, padded into columns', '| A | Bee |\n|---|---|\n| 1 | 2 |', 'A  Bee\n-  ---\n1  2\n'],
     [
       'links as text and address, bare ones once',
       '[x](https://e.com) and https://f.com',
@@ -44,7 +40,11 @@ describe('markdownToPlainText', () => {
     ['an image with no alt', '![](https://e.com/c.png)', '[image]\n'],
     ['inline math as its source', 'Inline $x^2$ here', 'Inline x^2 here\n'],
     ['display math as its source, indented', '$$\n\\alpha\n$$', '    \\alpha\n'],
-    ['a diagram as its source, indented', '```mermaid\ngraph TD;\n  A-->B;\n```', '    graph TD;\n      A-->B;\n'],
+    [
+      'a diagram as its source, indented',
+      '```mermaid\ngraph TD;\n  A-->B;\n```',
+      '    graph TD;\n      A-->B;\n',
+    ],
     ['a hard break as a line break', 'a  \nb', 'a\nb\n'],
     ['front matter as key: value', '---\ntitle: X\n---\n\nBody', 'title: X\n\nBody\n'],
     ['a footnote, without its back-link', 'Note[^1]\n\n[^1]: Foot', 'Note[1]\n\n---\n\n1. Foot\n'],
