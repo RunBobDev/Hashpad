@@ -15,6 +15,7 @@ import {
   type Extension,
   type TransactionSpec,
 } from '@codemirror/state';
+import { ensureSyntaxTree } from '@codemirror/language';
 import { markdownSupport } from './highlight';
 
 /**
@@ -28,7 +29,7 @@ export function testState(
   head = anchor,
   extensions: Extension[] = [],
 ): EditorState {
-  return EditorState.create({
+  const state = EditorState.create({
     doc,
     selection: EditorSelection.single(anchor, head),
     // `allowMultipleSelections` defaults to false, in which case any
@@ -43,6 +44,12 @@ export function testState(
     // list rather than calling `buildExtensions`.
     extensions: [...markdownSupport(), EditorState.allowMultipleSelections.of(true), ...extensions],
   });
+  // `create` parses for about 20 ms and keeps whatever it has; a loaded suite
+  // sometimes left even a short document half-parsed. Finish the parse, then an
+  // empty transaction makes the state publish the finished tree -- `syntaxTree`
+  // reads the published one, which `ensureSyntaxTree` alone does not replace.
+  ensureSyntaxTree(state, state.doc.length, 10_000);
+  return state.update({}).state;
 }
 
 /**
