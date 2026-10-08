@@ -16,7 +16,7 @@ import { confirmSaveForImage } from '../ui/confirmdialog';
 import { createUntitledDocument, type Document } from '../state/document';
 import { store } from '../state/appcontext';
 import { saveActiveAs } from './fileops';
-import { clipboardImage, dropImages, isImagePath, pasteImage } from './imageops';
+import { clipboardImage, dropImages, isImagePath, pasteForTests, pasteImage } from './imageops';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   SaveClipboardImage: vi.fn(),
@@ -65,6 +65,9 @@ const pngFile = (): File =>
  * these first failed.
  */
 afterEach(async () => {
+  // The paste itself first: `settle`'s fixed delay alone was a guess, and under
+  // a loaded shuffled run it lost -- a paste's save landed in the next test.
+  await pasteForTests;
   await settle();
 });
 

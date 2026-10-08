@@ -203,7 +203,7 @@ export function pasteImage(view: EditorView, event: ClipboardEvent): boolean {
   const documentId = store.getState().activeDocumentId;
   if (documentId === null) return true;
 
-  void (async () => {
+  pasteForTests = (async () => {
     try {
       const path = await documentPath(documentId);
       if (path === null) return;
@@ -217,6 +217,13 @@ export function pasteImage(view: EditorView, event: ClipboardEvent): boolean {
 
   return true;
 }
+
+/**
+ * Test-only: the last paste's save, which never rejects. A fixed delay could
+ * not tell when it had finished -- part of it is a real `FileReader` read --
+ * and under a loaded shuffled run one test's paste landed in the next test.
+ */
+export let pasteForTests: Promise<void> = Promise.resolve();
 
 /**
  * Images dropped on the window (an extension of SPEC §6.4's drop, at the
