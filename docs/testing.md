@@ -3040,3 +3040,82 @@ live preview.
       click, in the mode you were last in (source or live).
 - [ ] **From split, choose Editor:** the preview closes.
 - [ ] **Already in the editor, choose Editor:** nothing changes.
+
+## Checkpoint M — export (SPEC §7.3)
+
+Use a document with a bit of everything: a heading, lists, a task list, a quote,
+a code block, a table, `$inline$` and `$$display$$` math, a ` ```mermaid `
+diagram, an image beside the file, an image from the internet, and a footnote.
+Put the app in the **dark** theme: exports must come out light anyway.
+
+**Already verified on the built exe** (2026-10-08, a fixture with all of the
+above, driven by a script, every output read back):
+
+- *HTML* opened in a browser with no network at all rendered completely — light,
+  math in KaTeX's fonts, the diagram, the local image — with only the internet
+  image missing. Inside the file: all 20 math fonts and the local image
+  embedded, no path from this machine, no script, its own CSP.
+- *Plain text* came out exactly in the format of design §4.33, UTF-8 without a
+  BOM, in the document's CRLF.
+- *Print* showed only the document; saved as PDF it kept the highlight, code and
+  table shading, typeset math and the light diagram.
+- *Copy as Rich Text* put HTML with MathML, a PNG for the diagram and styled
+  table cells on the clipboard, with plain text beside it; with a selection,
+  only the selection.
+- *Open in Browser* opened the page in the default browser, which survived
+  Hashpad closing; the temporary page was deleted on close, and the number of
+  WebView2 processes afterwards was unchanged.
+
+What cannot be checked here is the paste itself — there is no Word, LibreOffice
+or Docs on this machine. That is the first list below.
+
+### Copy as Rich Text — the paste (only you can do this)
+
+- [ ] **Select a few paragraphs and a table, Ctrl+Shift+C, paste into Word.**
+      Bold, italic, links, lists and the table's borders survive.
+- [ ] **Copy a document with math and paste into Word.** The math arrives as
+      Word equations, editable in Word's equation editor.
+- [ ] **A diagram** arrives as a picture, on white.
+- [ ] **Paste into Google Docs and into an email.** The same, or close to it;
+      Docs drops MathML and shows the equation's text.
+- [ ] **Paste into Notepad.** The plain text: no markup, structure kept.
+- [ ] **With nothing selected**, the whole document is copied. **In reading
+      view**, always the whole document.
+- [ ] **Plain Ctrl+C** in the editor still copies markdown, as before.
+
+### Export as HTML
+
+- [ ] **File > Export as HTML…** suggests the document's name with `.html`.
+- [ ] **Open the file in a browser:** light, the same as the preview, local
+      images showing. Then **copy it to another computer or a USB stick** and
+      open it there: still complete, since nothing points back to your folder.
+- [ ] **Internet images** load in the browser, which fetches them; Hashpad
+      never did.
+
+### Print or Save as PDF
+
+- [ ] **Ctrl+P** opens the print dialog showing the document only — no menus,
+      no toolbar — light, across as many pages as it needs.
+- [ ] **Choose "Save as PDF"** if the dialog offers it: the suggested name is the
+      document's. (Microsoft Print to PDF asks for a name of its own.)
+- [ ] **A highlight, a code block and the table** keep their shading on paper.
+- [ ] **A document with an internet image:** Ctrl+P asks first. *Open in
+      Browser* opens it in your browser with the image loaded; *Print Here*
+      prints with a placeholder; *Cancel* does nothing.
+- [ ] **Close Hashpad with that browser window still open.** The browser stays.
+- [ ] **A link in the preview, opened while your browser is closed,** then
+      Hashpad closed: the browser stays too. (It used to close with Hashpad.)
+
+### Export as Plain Text
+
+- [ ] **File > Export as Plain Text…** writes a `.txt` that reads sensibly in
+      Notepad: headings as lines, lists and quotes indented, the table in
+      columns, math and diagrams as their source.
+
+### For your judgement, not fixed
+
+- **The print dialog's header and footer** show the date, the document's name
+  and the app's own address (`wails.localhost`). They are the dialog's setting
+  ("Headers and footers"); the page cannot remove them without also removing
+  its margins.
+- **A very tall image** splits across pages when printed, as in any browser.

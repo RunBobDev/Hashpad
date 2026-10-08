@@ -86,6 +86,8 @@ func ConfineChildProcesses() error {
 //
 // The caller vouches for target: rundll32 will open whatever it is given,
 // local programs included. App.OpenURL allows only web and mail addresses.
+//
+// PLATFORM: Windows. Linux's xdg-open is in confine_linux.go.
 func OpenExternal(target string) error {
 	dir, err := windows.GetSystemDirectory()
 	if err != nil {

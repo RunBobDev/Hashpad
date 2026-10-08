@@ -815,14 +815,17 @@ dirty-close prompts, drag-and-drop, encoding round-trips, external file changes.
 
 ## 9. Platform-specific surface (SPEC §11.5)
 
-Four locations, each flagged in code with a `// PLATFORM:` comment:
+Five locations, each flagged in code with a `// PLATFORM:` comment:
 
 1. `internal/platform/platform_windows.go` — registry theme read, `WM_SETTINGCHANGE` live
    detection, `explorer.exe /select,` for reveal-in-file-manager
-2. `main.go` — `SingleInstanceLock` unique ID, plus the `WindowUnminimise` + `Show`
+2. `internal/platform/confine_windows.go` — the kill-on-close job that keeps WebView2's
+   processes from outliving the app, and `OpenExternal`, which opens links and pages from
+   outside that job (§4.33); `xdg-open` on Linux
+3. `main.go` — `SingleInstanceLock` unique ID, plus the `WindowUnminimise` + `Show`
    follow-up the Wails documentation warns is required
-3. `wails.json` and `build/windows/` — NSIS configuration, icons, file associations
-4. `styles/variables.css` — the UI font stack (Segoe UI Variable → Segoe UI → system sans)
+4. `wails.json` and `build/windows/` — NSIS configuration, icons, file associations
+5. `styles/variables.css` — the UI font stack (Segoe UI Variable → Segoe UI → system sans)
 
 ---
 
@@ -1780,3 +1783,82 @@ showing does nothing.
 
 It is also what Preview and Reading View do when toggled off, so "back to the
 editor" has one implementation.
+
+### 4.33 Export: what SPEC §7.3 leaves unsaid
+
+§7.3 asks for HTML, PDF through the print dialog, plain text, and rich text on
+the clipboard. What it leaves open, and the one place this departs from it:
+
+**One renderer.** Every export is built by `export/build.ts` through the
+preview's own pipeline — `renderMarkdown`, then KaTeX, then Mermaid — into an
+off-screen copy of the pane, so an export cannot disagree with the preview. It
+resolves only once **code grammars, math and diagrams have all finished**: the
+pane can show a plain fence or LaTeX source for a moment, but a file written at
+that moment keeps it. The copy is laid out rather than `display: none`, because
+Mermaid measures text.
+
+**Always light** (owner's call), whatever the app's theme. The light token block
+also answers to `.theme-light`, which the export copy carries; diagrams are drawn
+in Mermaid's light theme. Mermaid's theme is global, so diagram drawing is now
+serialised — a dark pane and a light export drawing at once would otherwise swap
+colours.
+
+**Internet images are not embedded — the deviation.** §7.3 says images are
+base64-embedded; embedding an internet image means fetching it, which §2.1 and
+design §3 rule out. Fetching after a prompt was offered and declined by the
+owner. Instead: HTML export keeps them as `<img src="https://…">` for the
+reader's browser to load, and printing a document that has any asks whether to
+print here (placeholders) or open it in the browser, which loads them and prints
+from there. Local images are embedded as data URIs; one that cannot be read loses
+its address rather than carry the document's folder into the file.
+
+**The browser route writes a temporary page** — the one file Hashpad writes
+without a save dialog — and deletes it when Hashpad closes. A crash leaves it in
+`%TEMP%`.
+
+**Links now open outside the app's job.** `platform.ConfineChildProcesses` puts
+Hashpad in a kill-on-close job, and Wails' `BrowserOpenURL` starts the browser
+from inside it: a browser Hashpad started closed when Hashpad did. The job now
+allows breakaway, and `OpenExternal` starts the shell's handler (rundll32's
+`FileProtocolHandler`) with `CREATE_BREAKAWAY_FROM_JOB`; WebView2 does not ask
+for breakaway, so its tree stays confined. Measured: a child started this way is
+outside the job, one started without the flag is inside it, and the WebView2
+process count after closing is unchanged. Preview links and the About link use
+the same route, through `OpenURL`, which accepts only web and mail addresses —
+the handler would open a local program as readily.
+
+**"Print or Save as PDF…", not "Export as PDF".** What opens is the system print
+dialog; its PDF printer is the PDF. Print shows only the document: everything
+else on the page is hidden with `!important`, because `#app`'s ID selector
+otherwise wins and the whole app printed. Backgrounds are kept
+(`print-color-adjust: exact`) — a highlight is nothing but its background — and
+the page title becomes the document's name while printing, which is what
+Chromium's own Save as PDF suggests as the file name.
+
+**The exported HTML carries its own CSP** (no scripts, images from anywhere,
+styles and fonts inline): nothing in it can run, and the policy makes that true
+for anyone who opens it. The syntax colours have to be asked for — CodeMirror
+generates them at runtime and they live in no stylesheet file.
+
+**Plain text** is walked from the untypeset render, so math and diagrams are
+their source. Headings and paragraphs are plain lines; lists are indented two
+spaces per level; quotes, code, display math and diagrams four; tables are padded
+into columns; links become `text (address)` and images `[image: alt]`. UTF-8, in
+the document's own line ending.
+
+**Copy as Rich Text** copies the editor's selection, or the whole document when
+there is none (owner's call); reading view always copies the whole document,
+since a plain Ctrl+C on the preview already copies formatted. A paste keeps
+inline styles and drops stylesheets, so table borders, the code font and the
+quote's rule are written onto the elements from the light copy's computed style
+— which also keeps every colour in variables.css. Math goes as MathML, which
+Word turns into equations; diagrams as PNG on the light background, because word
+processors do not take inline SVG and a transparent picture loses its lines on a
+dark page. The copy event is caught before CodeMirror's own handler, and a copy
+the clipboard refuses is reported.
+
+**Known limits.** Pasting into Word, LibreOffice or Docs cannot be tried in this
+VM; what reaches the clipboard was verified, the paste is the owner's check. The
+print dialog's headers and footers (date, title, the app's own address) are its
+setting. Table columns in plain text are padded by character count, so wide
+characters misalign. A pasted diagram is a picture at twice its on-screen size.

@@ -69,6 +69,14 @@ them; drag or paste images to add them to the document. A file changed by
 another program reloads by itself; if you have unsaved edits, a bar asks whether
 to reload it or keep yours, and saving over the other version asks first.
 
+**Export** — a standalone HTML file with its styles, fonts and local images
+inside it; PDF through the system print dialog; plain text with the markup
+stripped and the structure kept; and Copy as Rich Text, which puts the selection
+on the clipboard formatted for Word, Docs or an email, equations and diagrams
+included. Exports are always light. Images from the internet are never fetched:
+an exported page lets its reader's browser load them, and printing offers to
+hand the document to your browser to do the same.
+
 **Appearance** — light and dark themes that follow the Windows setting, an
 accent colour picker, and configurable fonts and sizes for the interface, the
 editor and the preview independently.
@@ -168,8 +176,8 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [DOMPurify](https://github.com/cure53/DOMPurify), [KaTeX](https://katex.org/) and
 [Mermaid](https://mermaid.js.org/).
 
-**Current state:** 18.2 MB executable, 1,700 automated tests (1,573 frontend,
-127 Go), no known defects.
+**Current state:** 18.3 MB executable, 1,820 automated tests (1,688 frontend,
+132 Go), no known defects.
 
 ---
 
@@ -220,7 +228,7 @@ process, not the prompting:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Thirty-two of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Thirty-three of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 
