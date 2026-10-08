@@ -273,6 +273,7 @@ export function buildExtensions(
         // Consumed like the rest, which matters here: WebView2's own Ctrl+P
         // prints the whole window, chrome included.
         { key: 'Mod-p', run: dispatchCommand('file.print') },
+        { key: 'Mod-Shift-c', run: dispatchCommand('edit.copyRich') },
         { key: 'Mod-n', run: dispatchCommand('file.new') },
         { key: 'Mod-w', run: dispatchCommand('tab.close') },
         { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },

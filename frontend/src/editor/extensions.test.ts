@@ -248,6 +248,37 @@ describe('tab command keymap', () => {
    * Consumed, and that half matters as much as the dispatch: WebView2's own
    * Ctrl+P prints the whole window, chrome and all.
    */
+  it('dispatches edit.copyRich on Mod-Shift-c and consumes the key', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = pressKey(view, {
+      key: 'C',
+      code: 'KeyC',
+      keyCode: 67,
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(seen).toEqual(['edit.copyRich']);
+    expect(notHandled).toBe(false);
+    stop();
+    view.destroy();
+  });
+
+  /** Ctrl+C has to stay the browser's own copy, which nothing here may take. */
+  it('leaves plain Ctrl+C alone', () => {
+    const view = buildView();
+    const { seen, stop } = captureCommands();
+
+    const notHandled = pressKey(view, { key: 'c', code: 'KeyC', keyCode: 67, ctrlKey: true });
+
+    expect(seen).toEqual([]);
+    expect(notHandled).toBe(true);
+    stop();
+    view.destroy();
+  });
+
   it('dispatches file.print on Mod-p and consumes the key', () => {
     const view = buildView();
     const { seen, stop } = captureCommands();

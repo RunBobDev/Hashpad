@@ -11,12 +11,15 @@
  *    layout, real Mermaid -- in the light theme, though the page is dark.
  * 3. **Does the standalone file render on its own?** Shown in an iframe with
  *    nothing of the app around it.
+ * 4. **Does rich copy turn diagrams into pictures?** Only a real canvas can
+ *    say, and only an untainted one can hand back a PNG (`copyReport`).
  *
  * Local images cannot be checked here -- Go's asset route does not exist under
  * Vite -- so the fixture has none; the real exe covers them.
  */
 import { buildExport } from '../src/export/build';
 import { standaloneHtml } from '../src/export/html';
+import { richHtml } from '../src/export/richtext';
 import '../src/styles/app.css';
 
 const FENCE = '```';
@@ -110,6 +113,49 @@ window.exportReport = async () => {
       remoteImgInHtml: html.includes('<img src="https://example.com/cat.png"'),
     };
     out.textContent = JSON.stringify(report, null, 2);
+    return report;
+  } finally {
+    root.remove();
+  }
+};
+
+interface CopyReport {
+  /** MathML, which Word turns into an equation, and none of KaTeX's HTML. */
+  mathml: number;
+  katexHtml: number;
+  /** Every diagram a PNG -- which proves the canvas was not tainted. */
+  pngs: number;
+  svgs: number;
+  /** Inline borders, since a paste drops stylesheets. */
+  styledCells: number;
+}
+
+declare global {
+  interface Window {
+    copyReport: () => Promise<CopyReport>;
+  }
+}
+
+const picture = document.createElement('div');
+app.append(picture);
+
+window.copyReport = async () => {
+  const root = await buildExport(DOC, null, 'mathml');
+  try {
+    const html = await richHtml(root);
+    const copy = document.createElement('div');
+    copy.innerHTML = html;
+    const pngs = copy.querySelectorAll('img[src^="data:image/png"]');
+    const report: CopyReport = {
+      mathml: copy.querySelectorAll('math').length,
+      katexHtml: copy.querySelectorAll('.katex-html').length,
+      pngs: pngs.length,
+      svgs: copy.querySelectorAll('.preview-mermaid svg').length,
+      styledCells: copy.querySelectorAll('td[style*="border"]').length,
+    };
+    // The first diagram, as a paste would get it -- for a screenshot. A clone,
+    // and after counting: moving the original out first counted it as missing.
+    picture.replaceChildren(...[...pngs].slice(0, 1).map((img) => img.cloneNode()));
     return report;
   } finally {
     root.remove();

@@ -241,6 +241,34 @@ describe('File > Settings', () => {
   });
 });
 
+/** SPEC §7.3's stand-in for DOCX export. */
+describe('Edit > Copy as Rich Text', () => {
+  beforeEach(() => mountMenuBar(root, () => false));
+
+  it('sits after Redo, set apart, with Ctrl+Shift+C beside it', () => {
+    const popup = open('Edit');
+    const labels = [...popup.querySelectorAll('.menu-item__label')].map((el) => el.textContent);
+    const entry = item(popup, 'Copy as Rich Text');
+
+    expect(labels[labels.indexOf('Redo') + 1]).toBe('Copy as Rich Text');
+    expect(entry.querySelector('kbd')?.textContent).toBe('Ctrl+Shift+C');
+    expect(entry.previousElementSibling?.getAttribute('role')).toBe('separator');
+  });
+
+  it('emits edit.copyRich when chosen', () => {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+
+    item(open('Edit'), 'Copy as Rich Text').click();
+    document.removeEventListener(COMMAND_EVENT, listen);
+
+    expect(seen).toEqual(['edit.copyRich']);
+  });
+});
+
 /** SPEC §7.3's exports, grouped after the saves they sit beside. */
 describe('File > export', () => {
   beforeEach(() => mountMenuBar(root, () => false));
@@ -511,9 +539,13 @@ describe('separators', () => {
     expect(document.activeElement).toBe(item(popup, 'Go to Tab 9'));
   });
 
-  /** Menus with nothing to group carry no dividers at all. */
+  /**
+   * Menus with nothing to group carry no dividers at all. Help rather than
+   * Edit, which this used to check until Checkpoint M gave Edit a group of its
+   * own (Copy as Rich Text).
+   */
   it('adds none to a menu that does not ask for them', () => {
-    expect(open('Edit').querySelectorAll('.menu-separator')).toHaveLength(0);
+    expect(open('Help').querySelectorAll('.menu-separator')).toHaveLength(0);
   });
 });
 

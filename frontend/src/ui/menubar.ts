@@ -205,6 +205,15 @@ const MENUS: Menu[] = [
     items: [
       { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: true },
       { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: true },
+      // SPEC §7.3's stand-in for DOCX export. Copies the selection, or the whole
+      // document when there is none; plain Ctrl+C stays the editor's copy.
+      {
+        id: 'edit.copyRich',
+        label: 'Copy as Rich Text',
+        shortcut: 'Ctrl+Shift+C',
+        enabled: true,
+        separatorBefore: true,
+      },
       // One entry rather than two, at the owner's request: the panel is a single
       // row carrying both halves, so two menu items for one bar read as two
       // features. Ctrl+H still opens it with the cursor in the replace field --

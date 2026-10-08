@@ -1255,6 +1255,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     case 'file.exportText':
       void import('./export/plaintext').then((module) => module.exportActiveAsText());
       break;
+    case 'edit.copyRich':
+      void import('./export/richtext').then((module) => module.copyActiveAsRichText());
+      break;
     case 'file.print':
       void import('./export/print').then((module) => module.printActive());
       break;
