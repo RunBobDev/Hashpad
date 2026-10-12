@@ -1280,6 +1280,15 @@ body {
   overflow: visible;
 }
 
+/* While the print view is open, the copy is the engine's alone, and the
+   engine prints in print media: on screen it leaves layout. Laid out, it cost
+   every frame of the view ~50 ms at 1,032 pages, idle or not. */
+@media screen {
+  .export-root--idle {
+    display: none;
+  }
+}
+
 /* ---- Print view (export/printview.ts) --------------------------------- */
 
 /* The whole window: nothing of the app shows, so nothing is clipped. */

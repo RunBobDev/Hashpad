@@ -5,11 +5,12 @@
  * The engine makes a **preview PDF** -- no title, date or numbers -- once, and
  * again only when paper or orientation moves the page breaks. Those three are
  * drawn over the pages (pdfpages.ts's marks layer), so every switch and number
- * shows at once at any length. The **final PDF**, with them, is made a second
- * after the last change, so Save rarely waits.
+ * shows at once at any length. The **final PDF**, with them, is made only for
+ * Save, while its dialog is up: the engine lays a PDF out on the page's own
+ * thread, so made at any other time it froze the view (about 5 ms a page).
  *
- * Once the preview exists, the page CSS is the final layout, kept current: so
- * Print… hands Windows' dialog exactly what Save would write.
+ * Save and Print… both write the final page CSS just before their engine job:
+ * so Print… hands Windows' dialog exactly what Save would write.
  *
  * Engine jobs run one at a time through `enqueue`.
  */
@@ -39,7 +40,8 @@ import {
   type PrintOptions,
 } from './printpage';
 
-const FINAL_DELAY_MS = 1000;
+/** app.css: the copy, out of the screen's layout but not out of print. */
+const IDLE_CLASS = 'export-root--idle';
 
 export type PrintViewOutcome = 'closed' | 'fallback';
 
@@ -152,7 +154,6 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
     let pages: PageList | null = null;
     let count = 0;
     let finalKey = '';
-    let finalTimer = 0;
     let outcome: PrintViewOutcome = 'closed';
     let queue: Promise<unknown> = Promise.resolve();
     const enqueue = <T>(job: () => Promise<T>): Promise<T> => {
@@ -214,6 +215,7 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
       viewer.setAttribute('aria-busy', String(on));
       print.disabled = save.disabled = on;
       if (on) status.textContent = text;
+      else if (pages) onPage(pages.currentPage(), count);
     }
 
     function onPage(page: number, total: number): void {
@@ -229,7 +231,10 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
     async function makePreview(): Promise<void> {
       busy(true, 'Updating…');
       const start = pages?.currentPage() ?? 1;
+      // Fitting measures, so the copy is laid out for that moment only.
+      root.classList.remove(IDLE_CLASS);
       fitWideMath(root, printableWidthMm(options));
+      root.classList.add(IDLE_CLASS);
       style.textContent = pageCss(options, meta, 0, false);
       const url = await MakePrintPdf('preview', options.paper, options.orientation);
       const data = new Uint8Array(await (await fetch(url)).arrayBuffer());
@@ -239,7 +244,6 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
       style.textContent = pageCss(options, meta, count, true);
       finalKey = '';
       busy(false);
-      onPage(pages.currentPage(), count);
     }
 
     async function makeFinal(): Promise<void> {
@@ -250,16 +254,12 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
       finalKey = key;
     }
 
-    function scheduleFinal(): void {
-      window.clearTimeout(finalTimer);
-      finalTimer = window.setTimeout(() => void enqueue(makeFinal).catch(report), FINAL_DELAY_MS);
-    }
-
-    /** Switches and numbers: drawn at once, the PDF follows in the background. */
+    /**
+     * Switches and numbers: drawn at once, no engine job. The page CSS waits
+     * for Save or Print…, which write it just before they need it.
+     */
     function marksChanged(): void {
       pages?.refreshMarks();
-      if (count > 0) style.textContent = pageCss(options, meta, count, true);
-      scheduleFinal();
     }
 
     const number = (key: 'countFrom' | 'firstShown'): HTMLInputElement => {
@@ -310,7 +310,7 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
       select.addEventListener('change', () => {
         Object.assign(options, { [key]: select.value });
         remember(options);
-        void enqueue(makePreview).then(scheduleFinal, report);
+        void enqueue(makePreview).catch(report);
       });
     }
 
@@ -341,9 +341,12 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
       () => {
         void (async () => {
           busy(true, 'Making the PDF…');
-          await enqueue(makeFinal);
+          // Both at once: the engine's freeze falls while the save dialog is up.
+          const [path] = await Promise.all([
+            ShowExportDialog(`${stem}.pdf`, 'pdf'),
+            enqueue(makeFinal),
+          ]);
           busy(false);
-          const path = await ShowExportDialog(`${stem}.pdf`, 'pdf');
           if (path === '') return;
           await SavePrintPdf(path);
           status.textContent = `Saved to ${path}`;
@@ -355,7 +358,8 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
     panel.append(heading, body, actions);
     dialog.append(panel, viewer);
     dialog.addEventListener('close', () => {
-      window.clearTimeout(finalTimer);
+      // The standard preview, if that is next, measures the copy again.
+      root.classList.remove(IDLE_CLASS);
       pages?.destroy();
       style.remove();
       dialog.remove();
@@ -364,6 +368,6 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
     });
     document.body.append(dialog);
     dialog.showModal();
-    await enqueue(makePreview).then(scheduleFinal, report);
+    await enqueue(makePreview).catch(report);
   }
 }

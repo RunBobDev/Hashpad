@@ -267,4 +267,10 @@ describe('the print stylesheet', () => {
       /\.preview-pane\.export-root--print \.preview-math-display\s*\{[^}]*overflow: visible;/,
     );
   });
+
+  /** Unscoped, the print view's PDFs would come out blank. */
+  it("takes the print view's idle copy out of the screen only", () => {
+    expect(css).toMatch(/@media screen \{\s*\.export-root--idle\s*\{\s*display: none;\s*\}\s*\}/);
+    expect(print).not.toMatch(/export-root--idle/);
+  });
 });
