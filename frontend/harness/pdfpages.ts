@@ -5,9 +5,13 @@
  * 1. pdf.js loads, its worker starts, and a page draws -- nothing refused.
  * 2. A 1,032-page PDF keeps only a handful of canvases, however far it scrolls.
  * 3. Rewriting every drawn page's marks takes well under 0.1 s.
+ * 4. openUrl: a PDF the engine made, with the view's own marks drawn over it,
+ *    to measure the drawn marks against the PDF's (docs/testing.md).
  */
 import '../src/styles/app.css';
 import { showPages, type PageList } from '../src/export/pdfpages';
+import { DEFAULT_PRINT_OPTIONS, pageMarks, type PageMeta } from '../src/export/printpage';
+import { drawPageMarks } from '../src/export/printview';
 import { testPdf } from './testpdf';
 
 const host = document.querySelector<HTMLElement>('#app')!;
@@ -23,6 +27,7 @@ declare global {
   interface Window {
     pdfPages: {
       open(pages: number): Promise<number>;
+      openUrl(url: string, meta: PageMeta): Promise<number>;
       canvases(): number;
       scrollTo(page: number): void;
       status(): typeof status;
@@ -37,6 +42,16 @@ window.pdfPages = {
     list = await showPages(host, testPdf(pages), {
       startPage: 1,
       marks,
+      onPage: (page, count) => Object.assign(status, { page, count }),
+    });
+    return list.count;
+  },
+  async openUrl(url, meta) {
+    list?.destroy();
+    const data = new Uint8Array(await (await fetch(url)).arrayBuffer());
+    list = await showPages(host, data, {
+      startPage: 1,
+      marks: (layer, n) => drawPageMarks(layer, pageMarks(n, DEFAULT_PRINT_OPTIONS, meta)),
       onPage: (page, count) => Object.assign(status, { page, count }),
     });
     return list.count;
