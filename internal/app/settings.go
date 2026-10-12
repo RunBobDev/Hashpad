@@ -148,6 +148,17 @@ type ToolbarSettings struct {
 	Pinned  []string `json:"pinned"`
 }
 
+// PrintSettings are the print view's remembered choices (design §4.34). The
+// two page-number fields are not here: they belong to one document, and a
+// remembered "start on page 3" would surprise the next one.
+type PrintSettings struct {
+	Title       bool   `json:"title"`
+	Date        bool   `json:"date"`
+	PageNumbers bool   `json:"pageNumbers"`
+	Paper       string `json:"paper"`
+	Orientation string `json:"orientation"`
+}
+
 // Settings is no longer comparable with == — ToolbarSettings.Pinned is a
 // slice, and a struct containing one is not comparable. Tests must use
 // reflect.DeepEqual instead of == or !=.
@@ -159,6 +170,7 @@ type Settings struct {
 	Files      FilesSettings      `json:"files"`
 	Window     WindowSettings     `json:"window"`
 	Toolbar    ToolbarSettings    `json:"toolbar"`
+	Print      PrintSettings      `json:"print"`
 }
 
 func DefaultSettings() Settings {
@@ -205,6 +217,9 @@ func DefaultSettings() Settings {
 				"bold", "italic", "strikethrough", "inlineCode", "heading",
 				"bulletList", "numberedList", "taskList", "link", "table",
 			},
+		},
+		Print: PrintSettings{
+			Title: true, Date: true, PageNumbers: true, Paper: "a4", Orientation: "portrait",
 		},
 	}
 }

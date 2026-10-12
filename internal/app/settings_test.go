@@ -535,3 +535,22 @@ func TestDefaultSettingsStartWithNoViewModeHistory(t *testing.T) {
 			got.Editor.RecentViewModes)
 	}
 }
+
+// A settings file written before the print view has no "print" key. The new
+// group must come up at its defaults, not at Go's zero values -- every switch
+// off would be a change nobody chose (defaults are decoded over, not copied).
+func TestOlderSettingsGetThePrintDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"version": 3, "appearance": {"theme": "dark"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := PrintSettings{Title: true, Date: true, PageNumbers: true, Paper: "a4", Orientation: "portrait"}
+	if s.Print != want {
+		t.Fatalf("print = %+v, want %+v", s.Print, want)
+	}
+}

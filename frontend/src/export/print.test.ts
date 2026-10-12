@@ -10,13 +10,20 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OpenInBrowser } from '../../wailsjs/go/app/App';
+import { OpenInBrowser, PrintSupported } from '../../wailsjs/go/app/App';
 import { confirmPrintRemote, type PrintChoice } from '../ui/confirmdialog';
 import { activeSource, type ExportSource } from './build';
 import { PRINT_CLASS, printActive, remoteImages } from './print';
 import { fitWideMath } from './printfit';
+import { openPrintView } from './printview';
 
-vi.mock('../../wailsjs/go/app/App', () => ({ OpenInBrowser: vi.fn(() => Promise.resolve()) }));
+// PrintSupported false: every case below the view's own runs the standard
+// preview, as File > Print did before the view existed.
+vi.mock('../../wailsjs/go/app/App', () => ({
+  OpenInBrowser: vi.fn(() => Promise.resolve()),
+  PrintSupported: vi.fn(() => Promise.resolve(false)),
+}));
+vi.mock('./printview', () => ({ openPrintView: vi.fn() }));
 
 // An ES module's exports cannot be spied on in place.
 vi.mock('./printfit', async (importOriginal) => ({
@@ -164,6 +171,47 @@ describe('printActive', () => {
     await printActive();
 
     expect(printed?.root?.querySelector('.preview-image-placeholder')).not.toBeNull();
+  });
+});
+
+describe('printActive, with the print view available', () => {
+  beforeEach(() => vi.mocked(PrintSupported).mockResolvedValue(true));
+
+  it('opens the view with the document title, then removes the copy', async () => {
+    source('# Hello');
+    vi.mocked(openPrintView).mockResolvedValue('closed');
+
+    await printActive();
+
+    expect(vi.mocked(openPrintView).mock.calls[0]![0]).toMatchObject({
+      stem: 'notes',
+      title: 'Hello',
+    });
+    expect(window.print).not.toHaveBeenCalled();
+    expect(document.querySelector('.export-root')).toBeNull();
+    expect(document.title).toBe('Hashpad');
+  });
+
+  it('names the PDF after the document while the view is open', async () => {
+    source('# Hello');
+    let titleWhileOpen = '';
+    vi.mocked(openPrintView).mockImplementation(() => {
+      titleWhileOpen = document.title;
+      return Promise.resolve('closed');
+    });
+
+    await printActive();
+
+    expect(titleWhileOpen).toBe('notes');
+  });
+
+  it('falls back to the standard preview when asked', async () => {
+    source('# Hello');
+    vi.mocked(openPrintView).mockResolvedValue('fallback');
+
+    await printActive();
+
+    expect(printed?.root?.querySelector('h1')?.textContent).toBe('Hello');
   });
 });
 

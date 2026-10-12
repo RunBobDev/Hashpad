@@ -102,6 +102,26 @@ export namespace app {
 	        this.syncScroll = source["syncScroll"];
 	    }
 	}
+	export class PrintSettings {
+	    title: boolean;
+	    date: boolean;
+	    pageNumbers: boolean;
+	    paper: string;
+	    orientation: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.date = source["date"];
+	        this.pageNumbers = source["pageNumbers"];
+	        this.paper = source["paper"];
+	        this.orientation = source["orientation"];
+	    }
+	}
 	export class ToolbarSettings {
 	    visible: boolean;
 	    pinned: string[];
@@ -148,6 +168,7 @@ export namespace app {
 	    files: FilesSettings;
 	    window: WindowSettings;
 	    toolbar: ToolbarSettings;
+	    print: PrintSettings;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -162,6 +183,7 @@ export namespace app {
 	        this.files = this.convertValues(source["files"], FilesSettings);
 	        this.window = this.convertValues(source["window"], WindowSettings);
 	        this.toolbar = this.convertValues(source["toolbar"], ToolbarSettings);
+	        this.print = this.convertValues(source["print"], PrintSettings);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
