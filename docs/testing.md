@@ -3094,6 +3094,9 @@ or Docs on this machine. That is the first list below.
 
 ### Print or Save as PDF
 
+*Since Checkpoint M.2, Ctrl+P opens Hashpad's print view (its own section
+below); these boxes now describe the fallback, the engine's own preview.*
+
 - [ ] **Ctrl+P** opens the print dialog showing the document only — no menus,
       no toolbar — light, across as many pages as it needs.
 - [ ] **Choose "Save as PDF"** if the dialog offers it: the suggested name is the
@@ -3117,5 +3120,73 @@ or Docs on this machine. That is the first list below.
 - **The print dialog's header and footer** show the date, the document's name
   and the app's own address (`wails.localhost`). They are the dialog's setting
   ("Headers and footers"); the page cannot remove them without also removing
-  its margins.
+  its margins. *Resolved in M.2: the print view prints its own, never the
+  address.*
 - **A very tall image** splits across pages when printed, as in any browser.
+
+## Checkpoint M.2 — the print view
+
+Design §4.34. Use three documents: a short one with a bit of everything (as for
+Checkpoint M), one of a few hundred pages, and one of about a thousand — any
+long file, pasted into itself until it is. Plus one with a code line and a
+display equation far wider than the page.
+
+**Already verified on the built exe** (2026-10-12, *measured*, driven by a
+script, PDFs read back with pdf.js):
+
+- *Opening* takes about 1 s at 5 pages and 6–12 s at 1,032; "Page 1 of 1032".
+- *A switch or a number* shows in under 0.1 s at 5, 344 and 1,032 pages: a
+  click to the screen changing, 36–100 ms in all three. Idle, the view runs at
+  60 frames a second at 1,032 pages.
+- *Numbering:* counting from page 2 and showing from page 3, at 1,032 pages,
+  pages 1–2 have no number, page 3 shows 2, page 501 shows 500, the last 1031.
+- *The drawn marks against the saved PDF:* within 0.7 pt on A4 portrait, A4
+  landscape and Letter. Page sizes 595 × 842 pt, 842 × 595, 612 × 792.
+- *Print… to Microsoft Print to PDF:* Hashpad's date, title and number, no
+  `wails.localhost`, the document complete.
+- *Save PDF… on 344 pages:* the save dialog opens in 0.5 s and the PDF is made
+  behind it; the saved file has all 344 pages and their marks.
+- *Clicking the view behind the save dialog* does nothing, and Hashpad keeps
+  running.
+- *Wide content:* the long code line wraps and the long equation shrinks; the
+  end of each is in the PDF's text.
+- *Temp files:* gone after Esc, gone after closing Hashpad with the view open;
+  after a forced kill the folder stays until the next start, which removes it.
+- *The keyboard:* after a click on the pages, Page Down scrolls them.
+
+### The view (only you can judge these)
+
+- [ ] **Ctrl+P** covers the whole window; the title bar is not clipped, and the
+      window still drags by the view's heading.
+- [ ] **The pages** look like paper: white, with the date top left, the title
+      top right, the number bottom right, small and grey.
+- [ ] **Untick Title, Date and time, Page numbers** in turn: each mark goes at
+      once, and comes back. With Page numbers off, the two number fields grey
+      out.
+- [ ] **Start counting on page 2, Show numbers from page 3:** pages 1 and 2 have
+      no number, page 3 shows 2. Close and reopen: both fields are back to 1.
+- [ ] **Paper → Letter, Orientation → Landscape:** "Updating…", then the same
+      page in the new shape. Close and reopen: Letter, landscape, as left.
+- [ ] **Save PDF…** asks where, with the document's name; the PDF opens in your
+      PDF reader with the marks exactly where the view showed them.
+- [ ] **Print…** opens Windows' print dialog; a page printed on a real printer
+      has the same marks and no address.
+- [ ] **The thousand-page document:** scroll far down, change a switch — at
+      once. Scrolling stays smooth.
+- [ ] **Esc** (or Close) returns to the document where you were.
+- [ ] **In the dark theme** the panel is dark and the pages stay white.
+
+### Not reachable by hand
+
+- **The fallback** — the engine's own preview, wherever the view cannot run
+  (another platform, an engine too old, a Wails update that moved what the view
+  reads). A test stops the build if Wails changes; the switch to the fallback is
+  covered by the automated tests, with the engine stood in for.
+
+### Known ceilings, deliberate
+
+- **Paper and orientation re-make the preview:** seconds at 1,000 pages.
+- **No margins, scale, page ranges or copies** in the view; Windows' print
+  dialog has them for paper.
+- **A Save finished before the PDF is ready** waits with "Making the PDF…" —
+  seconds only on very long documents.

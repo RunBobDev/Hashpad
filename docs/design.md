@@ -694,6 +694,10 @@ Phase 2 adds `github.com/fsnotify/fsnotify` (v1.10.1) for SPEC §7.4, as
 specified — see §4.30. Its one dependency, `golang.org/x/sys`, was already
 required.
 
+Checkpoint M.2 promotes `github.com/wailsapp/go-webview2` from transitive to
+direct: the print view's bridge (§4.34) names its types. Wails already bundled
+it, so it costs nothing.
+
 ### 6.2 Frontend — shipped in the binary
 
 CodeMirror 6: `@codemirror/state`, `/view`, `/commands`, `/language`, `/search`,
@@ -704,6 +708,12 @@ Markdown: `markdown-it`, `markdown-it-mark`, `markdown-it-footnote`, `dompurify`
 
 Sizes are to be measured, not estimated — a per-package bundle report is produced at
 Checkpoint A.
+
+Checkpoint M.2 adds `pdfjs-dist` (6.3.289, pinned exactly) for the print view's
+pages (§4.34): 448 KB plus a 1.2 MB worker, 1.7 MB of exe. The engine has a PDF
+viewer, but not one Hashpad can put in its own window and draw over. It loads the
+first time the view opens, never at start-up; it runs from Hashpad's own files
+under the unchanged content security policy, with WebAssembly off.
 
 ### 6.2.1 `==highlight==` in the editor: an addition, at no dependency cost
 
@@ -815,7 +825,7 @@ dirty-close prompts, drag-and-drop, encoding round-trips, external file changes.
 
 ## 9. Platform-specific surface (SPEC §11.5)
 
-Five locations, each flagged in code with a `// PLATFORM:` comment:
+Six locations, each flagged in code with a `// PLATFORM:` comment:
 
 1. `internal/platform/platform_windows.go` — registry theme read, `WM_SETTINGCHANGE` live
    detection, `explorer.exe /select,` for reveal-in-file-manager
@@ -826,6 +836,8 @@ Five locations, each flagged in code with a `// PLATFORM:` comment:
    follow-up the Wails documentation warns is required
 4. `wails.json` and `build/windows/` — NSIS configuration, icons, file associations
 5. `styles/variables.css` — the UI font stack (Segoe UI Variable → Segoe UI → system sans)
+6. `internal/app/print_windows.go` — the print view's engine calls (§4.34);
+   `print_other.go` reports them unsupported, so File > Print falls back
 
 ---
 
@@ -1827,8 +1839,9 @@ process count after closing is unchanged. Preview links and the About link use
 the same route, through `OpenURL`, which accepts only web and mail addresses —
 the handler would open a local program as readily.
 
-**"Print or Save as PDF…", not "Export as PDF".** What opens is the system print
-dialog; its PDF printer is the PDF. Print shows only the document: everything
+**"Print or Save as PDF…", not "Export as PDF".** What opened was the system print
+dialog, its PDF printer the PDF; since Checkpoint M.2 it is Hashpad's print view
+(§4.34), with that dialog as the fallback. Print shows only the document: everything
 else on the page is hidden with `!important`, because `#app`'s ID selector
 otherwise wins and the whole app printed. Backgrounds are kept
 (`print-color-adjust: exact`) — a highlight is nothing but its background — and
@@ -1860,5 +1873,103 @@ the clipboard refuses is reported.
 **Known limits.** Pasting into Word, LibreOffice or Docs cannot be tried in this
 VM; what reaches the clipboard was verified, the paste is the owner's check. The
 print dialog's headers and footers (date, title, the app's own address) are its
-setting. Table columns in plain text are padded by character count, so wide
+setting — superseded by the print view (§4.34), which leaves that dialog as the
+fallback. Table columns in plain text are padded by character count, so wide
 characters misalign. A pasted diagram is a picture at twice its on-screen size.
+
+### 4.34 The print view
+
+Checkpoint M.2. File > Print opened the engine's own print preview, which clipped
+Hashpad's title bar, offered the date, title, address and page numbers as one
+switch, and printed "wails.localhost" on every page. The owner asked for a preview
+that belongs to Hashpad, the three marks switched separately, numbering that
+starts on any page and first shows on any page, no address ever, and changes
+that show at once at any length.
+
+**What it is.** Ctrl+P opens a view over the whole window: Title, Date and time,
+Page numbers; Start counting on page and Show numbers from page ("start counting
+on page 2" makes page 2 number 1 — owner's reading); A4 or Letter, portrait or
+landscape; Close, Print…, Save PDF…. The pages are on the right, drawn by
+pdf.js, with "Page N of M". Margins and scale are gone (fixed 20 mm top and
+bottom, 16 mm sides, 100%); Windows' print dialog keeps its own for paper. The
+switches, paper and orientation are remembered in a `print` settings group; the
+two numbering fields reset to 1, since they belong to one document. Documents
+with internet images still get §4.33's question first.
+
+**Why the marks are drawn, not printed.** The engine (`PrintToPdf`) takes about
+0.6 s plus 7–8 ms a page, nearly all of it laying out the whole document; a
+spike that re-made the PDF on every change took 1.0 s at 5 pages, 3.0 s at 344
+and 8.7 s at 1,032. Asking for the first ten pages only still took 4.9 s at
+1,032, because the page breaks need the whole layout. So the engine makes a
+**preview PDF** without title, date or numbers — once on opening, again only
+when paper or orientation moves the page breaks — and Hashpad draws the three
+marks over the pages in view. A switch or a number rewrites the marks of the few
+drawn pages: under 0.1 s at every length.
+
+**The final PDF** is the same layout plus CSS page-margin boxes (date top left,
+title top right, number bottom right, 9 pt Segoe UI, grey). The margins are the
+same in both, so the page breaks are identical. Numbers that start anywhere come
+from a generated `@counter-style` with exactly one label per page, mapping each
+page's position to its label or to an invisible one; at 1,032 pages, counting
+from page 2 and showing from page 3, page 501 reads 500 and the last 1031.
+**It is made only for Save, while Save's dialog is up.** The brief had it made
+in the background a second after each change; on the real exe that froze the
+view about 5 ms a page (4–6 s at 1,032), because the engine lays a PDF out on
+the page's own thread. Made beside the dialog, which opens in 0.5 s, the freeze
+falls where nobody is looking. **Print…** needs no PDF: it writes the final page
+CSS and opens Windows' dialog, which prints from it — Hashpad's marks, no
+address (checked through Microsoft Print to PDF).
+
+**The drawn layer cannot drift from the PDF in Hashpad's code:** both read one
+set of values (`printpage.ts`: margins, font, size, colour, which box holds
+what). Against the engine, measured with the page-list harness drawing the
+view's own marks over a real final PDF: every mark within 0.7 pt of the PDF's
+text on A4 portrait, A4 landscape and Letter.
+
+**Facts the engine taught.** It ignores CSS `size`: paper is set on its print
+settings (page width and height in inches; landscape swaps them). It keeps CSS
+`@page` margins. Without `@page { background: #fff }` the margins print in the
+dark theme's colour. go-webview2 passes the page width by pointer where the COM
+method takes a double by value, so Hashpad's bridge passes the bits in the
+argument slot the callee reads.
+
+**The hidden copy leaves the screen's layout while the view is open.** It is the
+same `buildExport` copy as §4.33, laid out off-screen; with it laid out, every
+frame of the view cost 60–68 ms at 1,032 pages, even idle. The engine prints in
+print media, so a screen-only `display: none` hides it from nobody but the
+screen: frames are 17 ms. It is laid out again for the moment wide math is
+fitted, and on closing.
+
+**Wide content prints whole** — for the view and the fallback alike, and a bug
+in §4.33's print too: what passed a scrollbar was missing from the PDF. Code
+wraps; a display equation wider than the paper's printable width shrinks by
+font size to fit. And every export now waits for the fonts its text needs: math
+printed blank when no equation had been shown on screen first.
+
+**The bridge reaches past Wails.** The engine object sits in two private Wails
+fields, read by reflection; four COM calls on it are Hashpad's own (about 250
+lines), because go-webview2's ready-made ones crash at start. Wails' `Invoke`
+reports when it could not reach the UI thread, and the bridge fails instead of
+waiting forever. The fields live in a Wails `internal` package Go will not let
+Hashpad import, so a test reads that file from the pinned Wails source and stops
+the build if the fields or `Invoke` change. At run time a missing field, an
+engine too old for the calls, or any platform but Windows sends File > Print to
+the engine's own preview as before; a failure inside the view offers it too.
+
+**Temp files.** The two PDFs live in a folder named per process under `%TEMP%`,
+served only at `/__hashpad/print/…` and only those two names. The folder goes
+when the view closes and at shutdown; one left by a crash is swept at the next
+start. A second Hashpad exits before its start-up runs, so the sweep cannot
+reach a live session's folder.
+
+**Measured on the real exe:** opening takes about 1 s at 5 pages and 6–12 s at
+1,032; a click shows in under 0.1 s at every length. pdf.js costs 1.7 MB of exe
+(20.0 MB in all, against the 25 MB budget).
+
+**Known limits.** Changing paper or orientation re-makes the preview: seconds at
+1,000 pages, with "Updating…" over the old pages. A Save finished faster than the
+engine makes the PDF waits with "Making the PDF…". WebView2's developer tools
+cannot be reached in a built Hashpad: go-webview2's own loader ignores
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, so the frame costs above were measured
+by the page itself (long-animation-frame entries and frame gaps) in a throwaway
+build.

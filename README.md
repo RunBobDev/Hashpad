@@ -70,10 +70,12 @@ another program reloads by itself; if you have unsaved edits, a bar asks whether
 to reload it or keep yours, and saving over the other version asks first.
 
 **Export** — a standalone HTML file with its styles, fonts and local images
-inside it; PDF through the system print dialog; plain text with the markup
-stripped and the structure kept; and Copy as Rich Text, which puts the selection
-on the clipboard formatted for Word, Docs or an email, equations and diagrams
-included. Exports are always light. Images from the internet are never fetched:
+inside it; printing and PDF through Hashpad's own print view, with the title,
+date and page numbers each on or off, numbering that starts on any page, A4 or
+Letter, and every change shown at once even at a thousand pages; plain text
+with the markup stripped and the structure kept; and Copy as Rich Text, which
+puts the selection on the clipboard formatted for Word, Docs or an email,
+equations and diagrams included. Exports are always light. Images from the internet are never fetched:
 an exported page lets its reader's browser load them, and printing offers to
 hand the document to your browser to do the same.
 
@@ -174,10 +176,11 @@ SPEC.md              The requirements this was built against
 Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/),
 [markdown-it](https://github.com/markdown-it/markdown-it),
 [DOMPurify](https://github.com/cure53/DOMPurify), [KaTeX](https://katex.org/) and
-[Mermaid](https://mermaid.js.org/).
+[Mermaid](https://mermaid.js.org/); the print view's pages are drawn by
+[pdf.js](https://mozilla.github.io/pdf.js/).
 
-**Current state:** 18.3 MB executable, 1,820 automated tests (1,688 frontend,
-132 Go), no known defects.
+**Current state:** 20.0 MB executable, 1,881 automated tests (1,734 frontend,
+147 Go), no known defects.
 
 ---
 
