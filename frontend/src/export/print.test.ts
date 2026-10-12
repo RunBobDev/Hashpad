@@ -14,8 +14,15 @@ import { OpenInBrowser } from '../../wailsjs/go/app/App';
 import { confirmPrintRemote, type PrintChoice } from '../ui/confirmdialog';
 import { activeSource, type ExportSource } from './build';
 import { PRINT_CLASS, printActive, remoteImages } from './print';
+import { fitWideMath } from './printfit';
 
 vi.mock('../../wailsjs/go/app/App', () => ({ OpenInBrowser: vi.fn(() => Promise.resolve()) }));
+
+// An ES module's exports cannot be spied on in place.
+vi.mock('./printfit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./printfit')>()),
+  fitWideMath: vi.fn(),
+}));
 
 vi.mock('../ui/confirmdialog', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../ui/confirmdialog')>()),
@@ -142,6 +149,14 @@ describe('printActive', () => {
     expect(document.querySelector('.export-root')).toBeNull();
   });
 
+  it('shrinks wide equations to the page before printing', async () => {
+    source('$$\na_1 + a_2\n$$');
+
+    await printActive();
+
+    expect(fitWideMath).toHaveBeenCalledWith(expect.any(HTMLElement), 178);
+  });
+
   it('prints here with placeholders on Print Here', async () => {
     source(INTERNET_IMAGE);
     answer('here');
@@ -186,5 +201,22 @@ describe('the print stylesheet', () => {
 
   it('lets the page run past one screen', () => {
     expect(print).toMatch(/html,\s*body\s*\{[^}]*height: auto;[^}]*overflow: visible;/);
+  });
+
+  /**
+   * A scrollbar prints as a scrollbar, and whatever is past it does not print
+   * at all: the real exe lost the end of a long code line and of a long
+   * equation. Code wraps; an equation cannot, so printfit.ts shrinks it.
+   */
+  it('wraps long code lines instead of scrolling them', () => {
+    expect(print).toMatch(
+      /\.preview-pane\.export-root--print pre\s*\{[^}]*white-space: pre-wrap;[^}]*overflow: visible;/,
+    );
+  });
+
+  it('lets a wide equation overflow rather than scroll, for printfit to shrink', () => {
+    expect(print).toMatch(
+      /\.preview-pane\.export-root--print \.preview-math-display\s*\{[^}]*overflow: visible;/,
+    );
   });
 });

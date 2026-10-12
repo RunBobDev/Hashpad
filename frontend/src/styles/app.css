@@ -1311,4 +1311,24 @@ body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  /* A scrollbar prints as a scrollbar, and what is past it does not print at
+     all: the real exe lost the end of a long code line. So code wraps.
+     Both classes, to outrank preview.css's `.preview-pane pre` whatever the
+     import order. */
+  .preview-pane.export-root--print pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: visible;
+  }
+
+  .preview-pane.export-root--print code {
+    overflow-wrap: anywhere;
+  }
+
+  /* An equation cannot wrap. printfit.ts shrinks the wide ones; this keeps
+     the box from clipping what it shrank. */
+  .preview-pane.export-root--print .preview-math-display {
+    overflow: visible;
+  }
 }

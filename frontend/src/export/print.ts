@@ -13,8 +13,17 @@ import { OpenInBrowser } from '../../wailsjs/go/app/App';
 import { confirmPrintRemote } from '../ui/confirmdialog';
 import { activeSource, buildExport, runExport } from './build';
 import { documentTitle, standaloneHtml } from './html';
+import { fitWideMath } from './printfit';
 
 export const PRINT_CLASS = 'export-root--print';
+
+/**
+ * The narrowest page the print view offers -- A4 portrait less 16 mm a side.
+ * The standard dialog's paper and margins are the user's choice, made after
+ * this runs; fitting to the narrowest common page shrinks a little more than
+ * strictly needed on wider ones, and never too little.
+ */
+export const FALLBACK_PRINTABLE_MM = 178;
 
 const WEB = /^https?:/i;
 
@@ -62,6 +71,7 @@ export function printActive(): Promise<void> {
         }
       }
 
+      fitWideMath(root, FALLBACK_PRINTABLE_MM);
       root.classList.add(PRINT_CLASS);
       // Chromium suggests the page title as the PDF's file name, and the page
       // is called "Hashpad".
