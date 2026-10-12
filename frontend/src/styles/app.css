@@ -1280,6 +1280,36 @@ body {
   overflow: visible;
 }
 
+/* ---- Print view pages (export/pdfpages.ts) ---------------------------- */
+
+.print-pages {
+  position: relative;
+}
+
+/* White whatever the theme: it is paper. Each page carries `.theme-light`
+   (pdfpages.ts), so the token is the light palette's whatever the app's is. */
+.print-page {
+  position: absolute;
+  overflow: hidden;
+  background: var(--bg-editor);
+  box-shadow: var(--shadow-popup);
+}
+
+.print-page canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.print-page__marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
 @media print {
   /* The app is one screen high and clips the rest; a document is not. */
   html,

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The app's policy, verbatim from index.html: this page proves pdf.js
+         runs under it. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+      default-src 'none';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob:;
+      font-src 'self';
+      connect-src 'self';
+      base-uri 'none';
+      form-action 'none';
+    "
+    />
+    <title>Hashpad pdf pages harness</title>
+  </head>
+  <body>
+    <div id="app" style="position: fixed; inset: 0; overflow-y: auto"></div>
+    <script src="./pdfpages.ts" type="module"></script>
+  </body>
+</html>

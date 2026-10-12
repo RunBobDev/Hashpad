@@ -41,6 +41,7 @@
     "markdown-it-footnote": "4.0.0",
     "markdown-it-mark": "4.0.0",
     "mermaid": "12.0.0",
+    "pdfjs-dist": "6.3.289",
     "style-mod": "4.1.3"
   }
 }
