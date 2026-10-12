@@ -48,6 +48,12 @@ export async function buildExport(
   document.body.append(root);
   try {
     await Promise.all([typeset(root, math), draw(root)]);
+    // A web font loads when text first needs it, and the engine prints text
+    // in a font still loading as blank: with no math on screen yet, KaTeX's
+    // fonts had never been asked for and an equation printed as empty space.
+    // Layout asks for them; `ready` waits for them.
+    root.getBoundingClientRect();
+    if ('fonts' in document) await document.fonts.ready;
     return root;
   } catch (error) {
     root.remove();

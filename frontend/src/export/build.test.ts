@@ -54,6 +54,34 @@ describe('buildExport', () => {
     root.remove();
   });
 
+  /**
+   * A web font loads when text first needs it, and the engine prints text in
+   * a font still loading as blank. On the real exe a display equation printed
+   * as empty space whenever no math had been on screen yet: KaTeX's fonts had
+   * never been asked for.
+   */
+  it('resolves only once the fonts its text needs have loaded', async () => {
+    let loaded!: () => void;
+    const ready = new Promise<void>((resolve) => (loaded = resolve));
+    Object.defineProperty(document, 'fonts', { value: { ready }, configurable: true });
+    try {
+      let built = false;
+      const building = buildExport('$x$', null).then((root) => {
+        built = true;
+        return root;
+      });
+      await vi.waitFor(() => expect(document.querySelector('.katex')).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(built).toBe(false);
+
+      loaded();
+      (await building).remove();
+      expect(built).toBe(true);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
   it('resolves only once diagrams are drawn', async () => {
     const root = await buildExport('```mermaid\ngraph TD; A-->B;\n```\n', null);
     expect(root.querySelector('.preview-mermaid .stub-diagram')).not.toBeNull();
