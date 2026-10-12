@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -65,6 +66,8 @@ func New() *App {
 // Startup stores the Wails context, which the runtime methods require.
 // Exported because Wails calls it from main.
 func (a *App) Startup(ctx context.Context) {
+	sweepPrintTemp(os.TempDir())
+
 	a.ctxMu.Lock()
 	a.ctx = ctx
 	a.ctxMu.Unlock()

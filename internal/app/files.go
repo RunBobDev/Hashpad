@@ -68,6 +68,12 @@ func (a *App) ReadFile(path string) (FileContents, error) {
 // permissions rather than inheriting the original's. For a markdown editor
 // that matches the behaviour of most other editors.
 func (a *App) WriteFile(path, content string, enc Encoding, ending LineEnding) error {
+	return a.writeAtomic(path, Encode(content, enc, ending))
+}
+
+// writeAtomic is WriteFile's write, for any bytes; the comment above WriteFile
+// is why it goes through a temp file and a rename.
+func (a *App) writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -90,7 +96,6 @@ func (a *App) WriteFile(path, content string, enc Encoding, ending LineEnding) e
 		}
 	}()
 
-	data := Encode(content, enc, ending)
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return fmt.Errorf("write %s: %w", path, err)

@@ -60,6 +60,10 @@ var imageExtensions = map[string]bool{
 // which fails `tsc --noEmit`.
 func AssetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, printRoute) {
+			servePrint(w, r)
+			return
+		}
 		if r.URL.Path != assetRoute {
 			http.NotFound(w, r)
 			return

@@ -13,7 +13,7 @@ import (
 // An unknown kind is refused before any dialog opens, so this needs no
 // Wails context.
 func TestShowExportDialogRejectsAnUnknownKind(t *testing.T) {
-	if _, err := New().ShowExportDialog("a.pdf", "pdf"); err == nil {
+	if _, err := New().ShowExportDialog("a.docx", "docx"); err == nil {
 		t.Fatal("want an error for an unknown kind")
 	}
 }
@@ -21,7 +21,7 @@ func TestShowExportDialogRejectsAnUnknownKind(t *testing.T) {
 // The extension added when Windows' dialog leaves it off, which it does
 // whenever "All files" is the chosen filter.
 func TestExportKindsAddTheirExtension(t *testing.T) {
-	for kind, want := range map[string]string{"html": ".html", "text": ".txt"} {
+	for kind, want := range map[string]string{"html": ".html", "text": ".txt", "pdf": ".pdf"} {
 		k, ok := exportKinds[kind]
 		if !ok {
 			t.Fatalf("no export kind %q", kind)

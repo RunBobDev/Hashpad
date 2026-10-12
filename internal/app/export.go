@@ -14,8 +14,8 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// exportKinds are the files Export can write (SPEC §7.3). PDF is not one: it
-// goes through the system print dialog, which brings its own.
+// exportKinds are the files Export can write (SPEC §7.3). The print view asks
+// where a PDF goes through this same dialog (print.go).
 var exportKinds = map[string]struct {
 	filters []runtime.FileFilter
 	ext     string
@@ -33,6 +33,13 @@ var exportKinds = map[string]struct {
 			{DisplayName: "All files (*.*)", Pattern: "*.*"},
 		},
 		ext: ".txt",
+	},
+	"pdf": {
+		filters: []runtime.FileFilter{
+			{DisplayName: "PDF (*.pdf)", Pattern: "*.pdf"},
+			{DisplayName: "All files (*.*)", Pattern: "*.*"},
+		},
+		ext: ".pdf",
 	},
 }
 
@@ -115,11 +122,10 @@ func (a *App) OpenInBrowser(html string) error {
 	return nil
 }
 
-// Shutdown deletes the pages OpenInBrowser wrote. Exported because Wails calls
-// it from main, after the window is gone.
+// Shutdown deletes the pages OpenInBrowser wrote and the print view's PDFs.
+// Exported because Wails calls it from main, after the window is gone.
 //
-// Known limit: a crash skips this and leaves them in %TEMP% for Windows to clear;
-// sweep hashpad-print-* at startup if that ever matters.
+// A crash skips this; Startup's sweepPrintTemp clears what it left.
 func (a *App) Shutdown(ctx context.Context) {
 	a.tempMu.Lock()
 	defer a.tempMu.Unlock()
@@ -127,4 +133,5 @@ func (a *App) Shutdown(ctx context.Context) {
 		os.Remove(p)
 	}
 	a.tempFiles = nil
+	removePrintDir()
 }
