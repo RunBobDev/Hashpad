@@ -183,6 +183,16 @@ describe('openPrintView', () => {
     expect(SavePrintPdf).toHaveBeenCalledWith('C:\\out\\notes.pdf');
   });
 
+  /** Owner's call: once the PDF is written, back to the document. */
+  it('closes the view once the PDF is saved', async () => {
+    const { done, button } = await open();
+    button('Save PDF…').click();
+
+    await expect(done).resolves.toBe('closed');
+    expect(SavePrintPdf).toHaveBeenCalledOnce();
+    expect(document.querySelector('dialog.print-view')).toBeNull();
+  });
+
   it('saves nothing when the save dialog is cancelled, and says so', async () => {
     vi.mocked(ShowExportDialog).mockResolvedValueOnce('');
     const { view, button } = await open();
@@ -191,6 +201,7 @@ describe('openPrintView', () => {
     await flush();
 
     expect(SavePrintPdf).not.toHaveBeenCalled();
+    expect(view.open).toBe(true);
     // Not "Making the PDF…" for as long as the view stays open.
     expect(view.querySelector('[role="status"]')?.textContent).toBe('Page 2 of 3');
   });

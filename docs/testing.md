@@ -3167,8 +3167,9 @@ script, PDFs read back with pdf.js):
       no number, page 3 shows 2. Close and reopen: both fields are back to 1.
 - [ ] **Paper → Letter, Orientation → Landscape:** "Updating…", then the same
       page in the new shape. Close and reopen: Letter, landscape, as left.
-- [ ] **Save PDF…** asks where, with the document's name; the PDF opens in your
-      PDF reader with the marks exactly where the view showed them.
+- [ ] **Save PDF…** asks where, with the document's name, then goes back to the
+      document; the PDF opens in your PDF reader with the marks exactly where
+      the view showed them. Cancelling the save dialog stays in the view.
 - [ ] **Print…** opens Windows' print dialog; a page printed on a real printer
       has the same marks and no address.
 - [ ] **The thousand-page document:** scroll far down, change a switch — at

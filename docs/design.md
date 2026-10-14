@@ -1890,7 +1890,8 @@ that show at once at any length.
 Page numbers; Start counting on page and Show numbers from page ("start counting
 on page 2" makes page 2 number 1 — owner's reading); A4 or Letter, portrait or
 landscape; Close, Print…, Save PDF…. The pages are on the right, drawn by
-pdf.js, with "Page N of M". Margins and scale are gone (fixed 20 mm top and
+pdf.js, with "Page N of M". A saved PDF closes the view, back to the document,
+as the other exports do (owner's call); a cancelled save stays. Margins and scale are gone (fixed 20 mm top and
 bottom, 16 mm sides, 100%); Windows' print dialog keeps its own for paper. The
 switches, paper and orientation are remembered in a `print` settings group; the
 two numbering fields reset to 1, since they belong to one document. Documents

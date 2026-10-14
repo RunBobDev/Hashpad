@@ -349,7 +349,8 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
           busy(false);
           if (path === '') return;
           await SavePrintPdf(path);
-          status.textContent = `Saved to ${path}`;
+          // Saved: back to the document, as the other exports go (owner's call).
+          dialog.close();
         })().catch(report);
       },
       true,
