@@ -3171,7 +3171,8 @@ script, PDFs read back with pdf.js):
       document; the PDF opens in your PDF reader with the marks exactly where
       the view showed them. Cancelling the save dialog stays in the view.
 - [ ] **Print…** opens Windows' print dialog; a page printed on a real printer
-      has the same marks and no address.
+      has the same marks and no address. When the dialog closes — Print or
+      Cancel — Hashpad is back at the document.
 - [ ] **The thousand-page document:** scroll far down, change a switch — at
       once. Scrolling stays smooth.
 - [ ] **Esc** (or Close) returns to the document where you were.

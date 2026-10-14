@@ -207,6 +207,11 @@ describe('openPrintView', () => {
   });
 
   it('prints through Windows with the current marks in the page CSS', async () => {
+    let css: string | null | undefined;
+    vi.mocked(ShowPrintDialog).mockImplementationOnce(() => {
+      css = document.head.querySelector('style')?.textContent;
+      return Promise.resolve();
+    });
     const { control, button } = await open();
     const title = control('Title');
     title.checked = false;
@@ -215,9 +220,27 @@ describe('openPrintView', () => {
     await flush();
 
     expect(ShowPrintDialog).toHaveBeenCalledOnce();
-    const css = document.head.querySelector('style')?.textContent;
     expect(css).toContain('@top-left');
     expect(css).not.toContain('@top-right');
+  });
+
+  /**
+   * Owner's call. Windows' dialog runs inside ShowPrintDialog: on the real exe
+   * the call returned only once the dialog closed, after `afterprint`. It does
+   * not say whether that was Print or Cancel, so either goes back.
+   */
+  it("goes back to the document once Windows' print dialog closes", async () => {
+    let close = (): void => undefined;
+    vi.mocked(ShowPrintDialog).mockImplementationOnce(
+      () => new Promise((resolve) => (close = () => resolve())),
+    );
+    const { done, view, button } = await open();
+    button('Print…').click();
+    await flush();
+    expect(view.open).toBe(true);
+
+    close();
+    await expect(done).resolves.toBe('closed');
   });
 
   /**

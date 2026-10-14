@@ -333,8 +333,10 @@ export function openPrintView({ stem, title, root }: PrintViewArgs): Promise<Pri
     const print = button('Print…', () => {
       void enqueue(async () => {
         style.textContent = pageCss(options, meta, count, true);
+        // Returns once Windows' dialog closes, the page already printed (measured):
+        // back to the document. It does not say Print from Cancel, so both go back.
         await ShowPrintDialog();
-      }).catch(report);
+      }).then(() => dialog.close(), report);
     });
     const save = button(
       'Save PDF…',
