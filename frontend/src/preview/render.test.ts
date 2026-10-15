@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LanguageDescription } from '@codemirror/language';
 import { MARKDOWN_CODE_LANGUAGES } from '../editor/languages';
@@ -26,6 +27,27 @@ describe('renderMarkdown', () => {
     const doc = render('| A | B |\n| --- | --- |\n| 1 | 2 |\n');
     expect(doc.querySelectorAll('th')).toHaveLength(2);
     expect(doc.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  /**
+   * markdown-it writes a column's alignment as `style="text-align:…"`, which
+   * the sanitiser strips: every column read left, in every view and export.
+   * As `data-align` it survives, and preview.css applies it.
+   */
+  it("keeps a GFM table's column alignment", () => {
+    const doc = render('| L | C | R | N |\n| :-- | :-: | --: | --- |\n| 1 | 2 | 3 | 4 |\n');
+    const align = (selector: string): (string | null)[] =>
+      [...doc.querySelectorAll(selector)].map((cell) => cell.getAttribute('data-align'));
+
+    expect(align('th')).toEqual(['left', 'center', 'right', null]);
+    expect(align('td')).toEqual(['left', 'center', 'right', null]);
+    expect(doc.querySelector('[style]')).toBeNull();
+  });
+
+  it('applies the column alignment in the stylesheet', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/preview.css'), 'utf8');
+    expect(css).toMatch(/\.preview-pane \[data-align='center'\]\s*\{\s*text-align: center;/);
+    expect(css).toMatch(/\.preview-pane \[data-align='right'\]\s*\{\s*text-align: right;/);
   });
 
   it('renders ==highlight== through markdown-it-mark', () => {
@@ -186,6 +208,16 @@ describe('sanitisation', () => {
     expect(doc.querySelector('a')).toBeNull();
     // Left as literal text rather than silently dropped.
     expect(doc.body.textContent).toContain('[x]');
+  });
+
+  /** Table alignment moved to `data-align`; the ban on `style` itself stands. */
+  it('still strips a style attribute written in raw HTML', () => {
+    const doc = render(
+      '<p style="position:fixed">kept</p>\n\n<table><tr><td style="text-align:center">c</td></tr></table>\n',
+    );
+    expect(doc.querySelector('[style]')).toBeNull();
+    expect(doc.querySelector('[data-align]')).toBeNull();
+    expect(doc.body.textContent).toContain('kept');
   });
 
   it('keeps benign raw HTML', () => {

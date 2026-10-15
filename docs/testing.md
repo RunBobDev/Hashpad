@@ -3192,3 +3192,17 @@ script, PDFs read back with pdf.js):
   dialog has them for paper.
 - **A Save finished before the PDF is ready** waits with "Making the PDF…" —
   seconds only on very long documents.
+
+## Fixed — table columns lost their alignment in the preview
+
+A column marked `:-:` or `--:` showed left-aligned in the split preview,
+reading view and every export: markdown-it writes the alignment as a `style`
+attribute, and the sanitiser removes every `style`. It is now carried as
+`data-align` and applied by the preview stylesheet; a `style` written in raw
+HTML is still removed.
+
+**Verified on the built exe** (2026-10-15, *measured*): a table with left,
+centre, right and default columns lines up correctly in the split preview,
+reading view and the print view. Not run on the exe: Export as HTML and Copy
+as Rich Text, which take the alignment from the same stylesheet (the HTML
+embeds it; the rich copy writes each cell's computed alignment onto the cell).

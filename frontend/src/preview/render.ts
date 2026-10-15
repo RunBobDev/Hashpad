@@ -17,6 +17,7 @@ import { imagePlugin } from './rules/images';
 import { mathPlugin } from './rules/math';
 import { mermaidPlugin } from './rules/mermaid';
 import { sourceLinePlugin, type SourceLineEnv } from './rules/sourceline';
+import { tableAlignPlugin } from './rules/tablealign';
 import { taskListPlugin } from './rules/tasklist';
 
 export interface RenderContext {
@@ -94,6 +95,7 @@ const md = new MarkdownIt({
   // runs is what a non-mermaid fence still gets -- including the `highlight`
   // hook configured above.
   .use(mermaidPlugin)
+  .use(tableAlignPlugin)
   .use(sourceLinePlugin);
 
 // Not `as const`: DOMPurify's `Config.FORBID_TAGS`/`FORBID_ATTR` are typed as

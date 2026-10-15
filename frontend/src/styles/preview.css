@@ -235,6 +235,15 @@
   text-align: left;
 }
 
+/* A column's `:-:` or `--:`, moved to data-align by rules/tablealign.ts. */
+.preview-pane [data-align='center'] {
+  text-align: center;
+}
+
+.preview-pane [data-align='right'] {
+  text-align: right;
+}
+
 .preview-pane thead th {
   background: var(--bg-hover);
 }
