@@ -42,6 +42,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
   ShowWindow: vi.fn(),
   LoadSettings: vi.fn().mockResolvedValue({
+    session: { recentFiles: [], openTabs: [], activeTab: -1 },
     appearance: { theme: 'system', accentColor: '#0078d4' },
     toolbar: { visible: true, pinned: ['bold'] },
     window: {

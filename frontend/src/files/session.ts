@@ -4,9 +4,11 @@
  * Paths only. Nothing here writes a document's contents: a document is still
  * written only by Save, or by autosave when it is on (owner's condition).
  */
-import { RememberTabs } from '../../wailsjs/go/app/App';
+import { ReadFile, RememberTabs } from '../../wailsjs/go/app/App';
 import { store } from '../state/appcontext';
 import type { AppState } from '../state/document';
+import { openDocumentInNewTab, switchToDocument } from './documentops';
+import { openPendingFiles } from './openwith';
 
 /** Long enough that switching through tabs writes once, short enough to survive a quick quit. */
 export const TAB_SAVE_DELAY_MS = 300;
@@ -63,4 +65,48 @@ export function mountTabTracking(
 /** Writes a change still waiting out its delay; awaited before quitting. */
 export function flushTabTracking(): Promise<void> {
   return flushPending?.() ?? Promise.resolve();
+}
+
+/**
+ * Reopens the saved tabs in order. A file that has gone or cannot be read is
+ * skipped quietly; the saved active tab is activated, or the first when an
+ * unsaved document was active. Not recorded as opening: restoring leaves the
+ * recent list's order alone.
+ */
+export async function restoreTabs(
+  paths: readonly string[],
+  active: number,
+  read: typeof ReadFile = ReadFile,
+): Promise<void> {
+  for (const path of paths) {
+    let contents;
+    try {
+      contents = await read(path);
+    } catch {
+      continue;
+    }
+    openDocumentInNewTab(contents);
+  }
+  const wanted = paths[active] ?? paths[0];
+  const doc = store.getState().documents.find((candidate) => candidate.filePath === wanted);
+  if (doc !== undefined) switchToDocument(doc.id);
+}
+
+/**
+ * Start-up, once the window is shown: the last tabs (the caller passes none
+ * when the switch is off), then the files this launch was given -- which end
+ * up active -- then the tracking, whose unmount it resolves to.
+ */
+export async function startSession(
+  tabs: readonly string[],
+  active: number,
+  openPending: () => Promise<void> = openPendingFiles,
+): Promise<() => void> {
+  try {
+    await restoreTabs(tabs, active);
+  } catch (error) {
+    console.error('hashpad: could not reopen the last tabs', error);
+  }
+  await openPending();
+  return mountTabTracking();
 }

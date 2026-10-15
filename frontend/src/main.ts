@@ -45,7 +45,9 @@ import { closeSettings, openSettings } from './ui/settingsdialog';
 import { openAbout } from './ui/aboutdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
-import { mountOpenWith, openPendingFiles } from './files/openwith';
+import { mountOpenWith } from './files/openwith';
+import { setRecentFiles } from './files/recent';
+import { flushTabTracking, startSession } from './files/session';
 import { mountDiskWatch } from './files/diskwatch';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
@@ -299,6 +301,11 @@ async function bootstrap(): Promise<void> {
   // the user's files on a timer they never switched on.
   let autosave = false;
   let autosaveDelayMs = 2000;
+  // Go's default: reopen the last tabs (design §4.35). With no settings there
+  // are no saved tabs either, so the fallback opens nothing extra.
+  let reopenTabs = true;
+  let savedTabs: string[] = [];
+  let savedActiveTab = -1;
 
   try {
     const settings = await LoadSettings();
@@ -393,6 +400,10 @@ async function bootstrap(): Promise<void> {
     // here. The delay is clamped for the same reason `tabSize` is.
     autosave = settings.files.autosave;
     autosaveDelayMs = clampAutosaveDelay(settings.files.autosaveDelayMs);
+    reopenTabs = settings.files.reopenTabs;
+    savedTabs = settings.session.openTabs ?? [];
+    savedActiveTab = settings.session.activeTab;
+    setRecentFiles(settings.session.recentFiles);
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -506,7 +517,10 @@ async function bootstrap(): Promise<void> {
     // Fire-and-forget: it handles its own failures, and nothing here waits on
     // it. That also keeps a file that cannot be read from stranding the window
     // behind a rejected promise.
-    void openPendingFiles();
+    //
+    // The last session's tabs come first (design §4.35), so a launch file ends
+    // up active; with the switch off there are none to reopen.
+    void startSession(reopenTabs ? savedTabs : [], savedActiveTab);
   }
 }
 
@@ -1462,7 +1476,12 @@ EventsOn('app:close-requested', () => {
       // another close request is still vetoed and re-emitted, restarting the
       // whole sequence. A document just dismissed with Don't Save is still
       // dirty by design, so it would be prompted for a second time.
-      if (canQuit) await ConfirmQuit();
+      if (canQuit) {
+        // A tab change still waiting out its delay is written before the
+        // window goes, or the next start would miss it.
+        await flushTabTracking();
+        await ConfirmQuit();
+      }
     } finally {
       // Stay latched once the quit is confirmed. The window is on its way down,
       // and no further close request should be able to restart the prompts.

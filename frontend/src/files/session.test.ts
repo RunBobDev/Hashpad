@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RememberTabs } from '../../wailsjs/go/app/App';
+import { ReadFile, RememberOpened, RememberTabs } from '../../wailsjs/go/app/App';
 import { store } from '../state/appcontext';
 import type { Document } from '../state/document';
-import { flushTabTracking, mountTabTracking, sessionTabs, TAB_SAVE_DELAY_MS } from './session';
+import { openDocumentInNewTab, switchToDocument } from './documentops';
+import { openPendingFiles } from './openwith';
+import {
+  flushTabTracking,
+  mountTabTracking,
+  restoreTabs,
+  sessionTabs,
+  startSession,
+  TAB_SAVE_DELAY_MS,
+} from './session';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   ReadFile: vi.fn(),
@@ -90,5 +99,62 @@ describe('mountTabTracking', () => {
     tabs([doc('a', 'C:\\a.md')], 'a');
     await flushTabTracking();
     expect(RememberTabs).toHaveBeenCalledWith(['C:\\a.md'], 0);
+  });
+});
+
+const contents = (path: string) =>
+  ({ path, content: '', encoding: 'utf-8', lineEnding: 'lf', mixed: false }) as never;
+
+describe('restoreTabs', () => {
+  beforeEach(() => {
+    vi.mocked(ReadFile).mockImplementation((path: string) =>
+      path === 'C:\\gone.md' ? Promise.reject('not found') : Promise.resolve(contents(path)),
+    );
+    // openDocumentInNewTab is mocked: add the document the way the real one does.
+    vi.mocked(openDocumentInNewTab).mockImplementation((c) => {
+      store.setState((prev) => ({
+        ...prev,
+        documents: [...prev.documents, doc(c.path, c.path)],
+        activeDocumentId: c.path,
+      }));
+    });
+  });
+
+  it('opens the files in order, skipping one that has gone, and activates the saved one', async () => {
+    await restoreTabs(['C:\\a.md', 'C:\\gone.md', 'C:\\b.md'], 0);
+    expect(vi.mocked(openDocumentInNewTab).mock.calls.map(([c]) => c.path)).toEqual([
+      'C:\\a.md',
+      'C:\\b.md',
+    ]);
+    expect(switchToDocument).toHaveBeenLastCalledWith('C:\\a.md');
+  });
+
+  it('activates the first when an unsaved document was active', async () => {
+    await restoreTabs(['C:\\a.md', 'C:\\b.md'], -1);
+    expect(switchToDocument).toHaveBeenLastCalledWith('C:\\a.md');
+  });
+
+  it('leaves the recent list alone', async () => {
+    await restoreTabs(['C:\\a.md'], 0);
+    expect(RememberOpened).not.toHaveBeenCalled();
+  });
+});
+
+describe('startSession', () => {
+  it('restores, then opens the launch files, then starts tracking', async () => {
+    const order: string[] = [];
+    vi.mocked(ReadFile).mockImplementation((path: string) => {
+      order.push(`read ${path}`);
+      return Promise.resolve(contents(path));
+    });
+    vi.mocked(openPendingFiles).mockImplementation(async () => {
+      order.push('launch files');
+    });
+    vi.mocked(RememberTabs).mockImplementation(async () => {
+      order.push('tracking');
+    });
+
+    unmount = await startSession(['C:\\a.md'], 0);
+    expect(order).toEqual(['read C:\\a.md', 'launch files', 'tracking']);
   });
 });

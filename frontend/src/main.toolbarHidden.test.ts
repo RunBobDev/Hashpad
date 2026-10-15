@@ -47,6 +47,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
   ShowWindow: vi.fn(),
   LoadSettings: vi.fn().mockResolvedValue({
+    session: { recentFiles: [], openTabs: [], activeTab: -1 },
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
     window: {

@@ -99,6 +99,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
   // 'defaults to the pinned set SPEC §6.13 names' test in toolbar.test.ts,
   // which is what pins DEFAULT_PINNED to this exact list.
   LoadSettings: vi.fn().mockResolvedValue({
+    session: { recentFiles: [], openTabs: [], activeTab: -1 },
     appearance: { theme: 'system', accentColor: '#0078d4' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
     window: {

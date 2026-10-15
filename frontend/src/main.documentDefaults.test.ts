@@ -83,6 +83,7 @@ vi.mock('../wailsjs/go/app/App', () => ({
     probe.paneWasUpAtShowWindow = document.querySelector('.preview-pane') !== null;
   }),
   LoadSettings: vi.fn().mockResolvedValue({
+    session: { recentFiles: [], openTabs: [], activeTab: -1 },
     appearance: { theme: 'system', accentColor: '#0078d4' },
     toolbar: { visible: true, pinned: ['bold'] },
     window: {

@@ -550,7 +550,16 @@ function filesGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
   const autosaveDelay = numberField(LIMITS.autosaveDelayMs, 100, store.getState().autosaveDelayMs);
   onNumber(autosaveDelay, (delayMs) => void setAutosaveDelaySetting(delayMs));
 
+  // Design §4.35. Read once, at start-up -- nothing to apply now.
+  const reopenTabs = checkbox(settings.files.reopenTabs);
+  reopenTabs.addEventListener('change', () => {
+    saves.schedule('files.reopenTabs', (next) => {
+      next.files.reopenTabs = reopenTabs.checked;
+    });
+  });
+
   return group('Files', [
+    row('Reopen last tabs on start', reopenTabs, 'Files only, not unsaved documents'),
     row('Image folder', assetFolder, 'Beside the document'),
     row('Encoding for new documents', encoding, 'Opened files keep their own'),
     row('Autosave', autosave, 'Saved files only'),

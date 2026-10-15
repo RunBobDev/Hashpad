@@ -96,7 +96,9 @@ function settingsFixture(overrides: Partial<app.AppearanceSettings> = {}): app.S
       autosaveDelayMs: 2000,
       assetFolder: 'assets',
       defaultEncoding: 'utf-8',
+      reopenTabs: true,
     },
+    session: { recentFiles: [], openTabs: [], activeTab: -1 },
     window: {
       width: 1000,
       height: 700,
@@ -764,6 +766,17 @@ describe('the Files group', () => {
    * file on every image save, so the next paste picks the new folder up with no
    * reconfiguration on this side.
    */
+  /** Read once, at the next start (design §4.35): nothing to apply now, only to write. */
+  it('persists the reopen-tabs switch', async () => {
+    const box = byLabel<HTMLInputElement>(group(mount(), 'Files'), 'Reopen last tabs on start');
+    expect(box.checked).toBe(true);
+
+    box.checked = false;
+    box.dispatchEvent(new Event('change'));
+
+    expect((await savedSettings()).files.reopenTabs).toBe(false);
+  });
+
   it('persists the asset folder', async () => {
     const folder = byLabel<HTMLInputElement>(group(mount(), 'Files'), 'Image folder');
 
