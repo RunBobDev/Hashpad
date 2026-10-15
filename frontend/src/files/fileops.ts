@@ -22,6 +22,7 @@
 import type { Text } from '@codemirror/state';
 import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
 import { openDocumentInNewTab } from './documentops';
+import { rememberOpened } from './recent';
 import { confirmOverwrite, type SaveChoice } from '../ui/confirmdialog';
 import { isDirty, type Document, type Encoding, type LineEnding } from '../state/document';
 import { getEditorView, store } from '../state/appcontext';
@@ -125,6 +126,7 @@ export async function openPaths(paths: readonly string[]): Promise<void> {
     }
 
     openDocumentInNewTab(contents);
+    void rememberOpened(contents.path);
   }
 }
 
@@ -257,6 +259,9 @@ export async function saveDocumentAs(id: string): Promise<boolean> {
   // relative image paths in the preview resolve against a directory
   // `preview/pane.ts` derives from it on every render (design §5.7). Nothing
   // is published, so there is nothing here to keep in step.
+  //
+  // A new name is a file opened, as far as File > Open Recent is concerned.
+  void rememberOpened(path);
   return true;
 }
 

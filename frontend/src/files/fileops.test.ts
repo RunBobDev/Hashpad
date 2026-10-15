@@ -21,13 +21,20 @@ import {
   saveDocumentAs,
   windowTitle,
 } from './fileops';
-import { ReadFile, ShowOpenDialog, ShowSaveDialog, WriteFile } from '../../wailsjs/go/app/App';
+import {
+  ReadFile,
+  RememberOpened,
+  ShowOpenDialog,
+  ShowSaveDialog,
+  WriteFile,
+} from '../../wailsjs/go/app/App';
 import { openDocumentInNewTab } from './documentops';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
   LoadSettings: vi.fn(),
   ReadFile: vi.fn(),
+  RememberOpened: vi.fn(() => Promise.resolve([])),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
@@ -394,6 +401,17 @@ describe('save-as records the new path on the document it saved', () => {
     await saveDocumentAs('a');
 
     expect(pathOf('a')).toBeNull();
+    expect(RememberOpened).not.toHaveBeenCalled();
+  });
+
+  /** A new name is a file opened, as far as File > Open Recent is concerned. */
+  it('puts the new name at the top of Open Recent', async () => {
+    seed('a', [cleanDoc({ id: 'a' })]);
+    vi.mocked(ShowSaveDialog).mockResolvedValue('D:\\elsewhere\\moved.md');
+
+    await saveDocumentAs('a');
+
+    expect(RememberOpened).toHaveBeenCalledWith('D:\\elsewhere\\moved.md');
   });
 });
 
@@ -537,6 +555,20 @@ describe('opening paths as tabs', () => {
     await openPaths(['gone.md', 'here.md']);
 
     expect(vi.mocked(openDocumentInNewTab).mock.calls.map(([c]) => c.path)).toEqual(['here.md']);
+  });
+
+  /** Every route into openPaths -- the dialog, a drop, a launch -- feeds Open Recent. */
+  it('puts each file it opened in Open Recent, and none it could not read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(RememberOpened).mockClear();
+    vi.mocked(ReadFile).mockImplementation(async (path: string) => {
+      if (path === 'gone.md') throw new Error('ENOENT');
+      return contentsFor(path) as never;
+    });
+
+    await openPaths(['a.md', 'gone.md', 'b.md']);
+
+    expect(vi.mocked(RememberOpened).mock.calls).toEqual([['a.md'], ['b.md']]);
   });
 
   it('opens what the dialog returned', async () => {

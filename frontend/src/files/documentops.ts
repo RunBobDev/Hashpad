@@ -38,6 +38,7 @@ import {
 import { getEditorView, store } from '../state/appcontext';
 import { isMarkdownPath } from '../ui/filedrop';
 import { displayName, saveDocument } from './fileops';
+import { rememberOpened } from './recent';
 
 /**
  * The shape `openDocumentInNewTab` needs from a freshly read file. Structurally
@@ -387,4 +388,5 @@ export async function reopenLastClosed(): Promise<void> {
   }
 
   openDocumentInNewTab(contents);
+  void rememberOpened(contents.path);
 }

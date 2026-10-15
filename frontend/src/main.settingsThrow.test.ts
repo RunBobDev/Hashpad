@@ -65,6 +65,10 @@ vi.mock('../wailsjs/go/app/App', () => ({
     throw new TypeError("Cannot read properties of undefined (reading 'app')");
   }),
   ReadFile: vi.fn(),
+  RememberOpened: vi.fn(() => Promise.resolve([])),
+  RememberTabs: vi.fn(() => Promise.resolve()),
+  ForgetRecent: vi.fn(() => Promise.resolve([])),
+  ClearRecent: vi.fn(() => Promise.resolve([])),
   ResetSettings: vi.fn(),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),

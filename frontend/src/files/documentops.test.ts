@@ -19,7 +19,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { confirmSave } from '../ui/confirmdialog';
-import { ReadFile, WriteFile } from '../../wailsjs/go/app/App';
+import { ReadFile, RememberOpened, WriteFile } from '../../wailsjs/go/app/App';
 import { buildExtensions } from '../editor/extensions';
 import { getEditorView, setEditorView, store } from '../state/appcontext';
 import {
@@ -45,6 +45,7 @@ vi.mock('../../wailsjs/go/app/App', () => ({
   ConfirmQuit: vi.fn(),
   LoadSettings: vi.fn(),
   ReadFile: vi.fn(),
+  RememberOpened: vi.fn(() => Promise.resolve([])),
   SaveSettings: vi.fn(),
   ShowOpenDialog: vi.fn(),
   ShowSaveDialog: vi.fn(),
@@ -1010,6 +1011,8 @@ describe('reopenLastClosed', () => {
     expect(store.getState().closedPaths).toEqual([]);
     expect(store.getState().documents).toHaveLength(2);
     expect(getEditorView().state.doc.toString()).toBe('reopened text');
+    // Ctrl+Shift+T is an open like any other, as far as Open Recent is concerned.
+    expect(RememberOpened).toHaveBeenCalledWith('C:\\notes\\b.md');
   });
 
   it('drops the path and logs when the file can no longer be read, without wedging the stack', async () => {
