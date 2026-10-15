@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReadFile, RememberOpened, RememberTabs } from '../../wailsjs/go/app/App';
+import { ForgetRecent, ReadFile, RememberOpened, RememberTabs } from '../../wailsjs/go/app/App';
 import { store } from '../state/appcontext';
 import type { Document } from '../state/document';
+import { showNotice } from '../ui/confirmdialog';
 import { openDocumentInNewTab, switchToDocument } from './documentops';
 import { openPendingFiles } from './openwith';
+import { setRecentFiles } from './recent';
 import {
   flushTabTracking,
   mountTabTracking,
+  openRecent,
+  recentMenuItems,
   restoreTabs,
   sessionTabs,
   startSession,
@@ -156,5 +160,53 @@ describe('startSession', () => {
 
     unmount = await startSession(['C:\\a.md'], 0);
     expect(order).toEqual(['read C:\\a.md', 'launch files', 'tracking']);
+  });
+});
+
+describe('Open Recent', () => {
+  beforeEach(() => {
+    setRecentFiles(['C:\\docs\\notes.md', 'C:\\gone.md']);
+    vi.mocked(ReadFile).mockImplementation((path: string) =>
+      path === 'C:\\gone.md' ? Promise.reject('not found') : Promise.resolve(contents(path)),
+    );
+  });
+
+  it('lists each file by name with its folder, then Clear', () => {
+    expect(recentMenuItems()).toEqual([
+      { id: 'file.openRecent.0', label: 'notes.md', detail: 'C:\\docs', enabled: true },
+      { id: 'file.openRecent.1', label: 'gone.md', detail: 'C:', enabled: true },
+      {
+        id: 'file.clearRecent',
+        label: 'Clear Recently Opened',
+        enabled: true,
+        separatorBefore: true,
+      },
+    ]);
+  });
+
+  it('says so when there is nothing, with Clear disabled', () => {
+    setRecentFiles([]);
+    expect(recentMenuItems()).toEqual([
+      { id: 'file.noRecent', label: 'No recent files', enabled: false },
+      {
+        id: 'file.clearRecent',
+        label: 'Clear Recently Opened',
+        enabled: false,
+        separatorBefore: true,
+      },
+    ]);
+  });
+
+  it('opens the chosen file and moves it to the top', async () => {
+    await openRecent(0);
+    expect(openDocumentInNewTab).toHaveBeenCalledWith(contents('C:\\docs\\notes.md'));
+    expect(RememberOpened).toHaveBeenCalledWith('C:\\docs\\notes.md');
+  });
+
+  it('tells you about a file that has gone, and drops it from the list', async () => {
+    await openRecent(1);
+    expect(openDocumentInNewTab).not.toHaveBeenCalled();
+    expect(ForgetRecent).toHaveBeenCalledWith('C:\\gone.md');
+    expect(vi.mocked(showNotice).mock.calls[0]![0]).toContain('gone.md');
   });
 });

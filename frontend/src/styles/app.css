@@ -493,6 +493,23 @@ body {
   margin-left: 14px;
 }
 
+/* A submenu item's marker, where a shortcut would sit (design §4.35). */
+.menu-item__arrow {
+  color: var(--fg-muted);
+  margin-left: 14px;
+}
+
+/* Open Recent's folders: dimmed, and cut short rather than widening the menu
+   to the longest path -- the full path is the item's tooltip. */
+.menu-popup .menu-item__detail {
+  max-width: 24em;
+  margin-left: 14px;
+  overflow: hidden;
+  color: var(--fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /*
  * The state of a toggle, in the menu that toggles it.
  *

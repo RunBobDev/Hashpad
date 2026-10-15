@@ -14,7 +14,7 @@
  * that matters most below is the one that changes the answer between two opens.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { COMMAND_EVENT, mountMenuBar } from './menubar';
+import { COMMAND_EVENT, mountMenuBar, type MenuItem } from './menubar';
 
 let root: HTMLElement;
 
@@ -577,5 +577,130 @@ describe('Help > About Hashpad', () => {
     document.removeEventListener(COMMAND_EVENT, listen);
 
     expect(seen).toEqual(['help.about']);
+  });
+});
+
+/** Checkpoint O (design §4.35): the menu bar's first submenu. */
+describe('File > Open Recent', () => {
+  const children = (id: string): MenuItem[] =>
+    id === 'file.openRecent'
+      ? [
+          { id: 'file.openRecent.0', label: 'notes.md', detail: 'C:\\docs', enabled: true },
+          { id: 'file.openRecent.1', label: 'todo.md', detail: 'C:\\work', enabled: true },
+          {
+            id: 'file.clearRecent',
+            label: 'Clear Recently Opened',
+            enabled: true,
+            separatorBefore: true,
+          },
+        ]
+      : [];
+  const submenu = (): HTMLElement | null => document.querySelector('.menu-popup--sub');
+  const key = (target: HTMLElement, name: string): void => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+  };
+  function emitted(run: () => void): string[] {
+    const seen: string[] = [];
+    const listen = (event: Event): void => {
+      seen.push((event as CustomEvent<string>).detail);
+    };
+    document.addEventListener(COMMAND_EVENT, listen);
+    run();
+    document.removeEventListener(COMMAND_EVENT, listen);
+    return seen;
+  }
+
+  it('sits after Open…, marked as opening a submenu', () => {
+    mountMenuBar(root, undefined, children);
+    const popup = open('File');
+    const labels = [...popup.querySelectorAll('.menu-item__label')].map((l) => l.textContent);
+    expect(labels.indexOf('Open Recent')).toBe(labels.indexOf('Open…') + 1);
+    const recent = item(popup, 'Open Recent');
+    expect(recent.getAttribute('aria-haspopup')).toBe('menu');
+    expect(recent.querySelector('.menu-item__arrow')?.textContent).toBe('▸');
+  });
+
+  it('opens the submenu on a click, showing each file and its folder, and emits nothing', () => {
+    mountMenuBar(root, undefined, children);
+    const popup = open('File');
+    const seen = emitted(() => item(popup, 'Open Recent').click());
+    expect(seen).toEqual([]);
+    const sub = submenu()!;
+    expect(item(sub, 'notes.md').querySelector('.menu-item__detail')?.textContent).toBe('C:\\docs');
+    expect(item(sub, 'notes.md').title).toBe('C:\\docs');
+    expect(item(popup, 'Open Recent').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('emits the chosen file and closes both popups', () => {
+    mountMenuBar(root, undefined, children);
+    item(open('File'), 'Open Recent').click();
+    const seen = emitted(() => item(submenu()!, 'todo.md').click());
+    expect(seen).toEqual(['file.openRecent.1']);
+    expect(document.querySelector('.menu-popup')).toBeNull();
+  });
+
+  it('opens with Right, moves with Down, and Left goes back to Open Recent', () => {
+    mountMenuBar(root, undefined, children);
+    const popup = open('File');
+    const recent = item(popup, 'Open Recent');
+    recent.focus();
+
+    key(popup, 'ArrowRight');
+    const sub = submenu()!;
+    expect(document.activeElement).toBe(item(sub, 'notes.md'));
+
+    key(sub, 'ArrowDown');
+    expect(document.activeElement).toBe(item(sub, 'todo.md'));
+
+    key(sub, 'ArrowLeft');
+    expect(submenu()).toBeNull();
+    expect(document.activeElement).toBe(recent);
+    expect(document.querySelector('.menu-popup')).not.toBeNull();
+  });
+
+  it('opens with Enter rather than emitting', () => {
+    mountMenuBar(root, undefined, children);
+    const popup = open('File');
+    item(popup, 'Open Recent').focus();
+    const seen = emitted(() => key(popup, 'Enter'));
+    expect(seen).toEqual([]);
+    expect(submenu()).not.toBeNull();
+  });
+
+  it('closes only the submenu on Escape', () => {
+    mountMenuBar(root, undefined, children);
+    const popup = open('File');
+    item(popup, 'Open Recent').focus();
+    key(popup, 'ArrowRight');
+    key(submenu()!, 'Escape');
+    expect(submenu()).toBeNull();
+    expect(document.querySelector('.menu-popup')).not.toBeNull();
+  });
+
+  it('opens on hover, and closes when the pointer moves to another item', () => {
+    mountMenuBar(root, undefined, children);
+    const popup = open('File');
+    item(popup, 'Open Recent').dispatchEvent(new MouseEvent('mouseenter'));
+    expect(submenu()).not.toBeNull();
+    item(popup, 'Save').dispatchEvent(new MouseEvent('mouseenter'));
+    expect(submenu()).toBeNull();
+  });
+
+  it('does nothing for a disabled entry', () => {
+    mountMenuBar(root, undefined, () => [
+      { id: 'file.noRecent', label: 'No recent files', enabled: false },
+    ]);
+    item(open('File'), 'Open Recent').click();
+    const seen = emitted(() => item(submenu()!, 'No recent files').click());
+    expect(seen).toEqual([]);
+    expect(submenu()).not.toBeNull();
+  });
+
+  it('goes with its menu when a click lands outside', () => {
+    mountMenuBar(root, undefined, children);
+    item(open('File'), 'Open Recent').click();
+    document.body.click();
+    expect(submenu()).toBeNull();
+    expect(document.querySelector('.menu-popup')).toBeNull();
   });
 });

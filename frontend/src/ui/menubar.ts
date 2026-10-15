@@ -49,7 +49,7 @@ export function emitCommand(id: string): void {
   document.dispatchEvent(new CustomEvent<string>(COMMAND_EVENT, { detail: id }));
 }
 
-interface MenuItem {
+export interface MenuItem {
   id: string;
   label: string;
   /** Displayed beside the label; every shortcut is discoverable here (SPEC §6.14). */
@@ -80,6 +80,10 @@ interface MenuItem {
    * collected into `items`.
    */
   separatorBefore?: boolean;
+  /** Opens a side list, built by `mountMenuBar`'s `submenuItems` as it opens (Open Recent). */
+  submenu?: true;
+  /** Dimmed text after the label, and the item's tooltip: a recent file's folder. */
+  detail?: string;
 }
 
 /**
@@ -164,6 +168,8 @@ const MENUS: Menu[] = [
     items: [
       { id: 'file.new', label: 'New', shortcut: 'Ctrl+N', enabled: true },
       { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', enabled: true },
+      // Design §4.35. Its entries come from `submenuItems` each time it opens.
+      { id: 'file.openRecent', label: 'Open Recent', enabled: true, submenu: true },
       { id: 'tab.close', label: 'Close Tab', shortcut: 'Ctrl+W', enabled: true },
       { id: 'tab.reopen', label: 'Reopen Closed Tab', shortcut: 'Ctrl+Shift+T', enabled: true },
       { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: true },
@@ -369,7 +375,11 @@ function emit(id: string): void {
 /** Which end of a popup's item list should receive focus when it opens. */
 type FocusTarget = 'first' | 'last' | 'none';
 
-export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = () => false): void {
+export function mountMenuBar(
+  parent: HTMLElement,
+  isChecked: MenuItemChecked = () => false,
+  submenuItems: (id: string) => MenuItem[] = () => [],
+): void {
   const bar = document.createElement('div');
   bar.className = 'menubar';
 
@@ -383,6 +393,8 @@ export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = (
   // when nothing is open. `openPopup` is that popup's DOM node.
   let openIndex: number | null = null;
   let openPopup: HTMLElement | null = null;
+  // An open submenu (Open Recent), a sibling of `openPopup` in <body>.
+  let openSub: HTMLElement | null = null;
 
   // Roving tabindex over the top-level buttons: exactly one is a Tab stop at
   // a time. This is what makes Tab enter/exit the bar as a single stop
@@ -395,8 +407,18 @@ export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = (
     activeIndex = newIndex;
   }
 
+  /** Removes an open submenu, leaving its parent menu open. */
+  function closeSubmenu(): void {
+    openSub?.remove();
+    openSub = null;
+    openPopup
+      ?.querySelector('[aria-haspopup="menu"][aria-expanded="true"]')
+      ?.setAttribute('aria-expanded', 'false');
+  }
+
   /** Tears down the open popup without touching focus. */
   function removeOpenPopup(): void {
+    closeSubmenu();
     if (openIndex !== null) topButtons[openIndex]?.setAttribute('aria-expanded', 'false');
     openPopup?.remove();
     openPopup = null;
@@ -434,6 +456,110 @@ export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = (
     if (itemButton.getAttribute('aria-disabled') === 'true') return;
     closePopup();
     emit(item.id);
+  }
+
+  /**
+   * The side list of a submenu item, built afresh each time it opens -- Open
+   * Recent's entries change between openings. Up/Down/Home/End move within it;
+   * Enter or Space picks; Left or Escape go back to the parent item, leaving
+   * the parent menu open; Tab closes everything.
+   */
+  function openSubmenu(
+    parentItem: MenuItem,
+    parentButton: HTMLButtonElement,
+    focusTarget: FocusTarget,
+  ): void {
+    closeSubmenu();
+    const children = submenuItems(parentItem.id);
+    const sub = document.createElement('div');
+    sub.className = 'menu-popup menu-popup--sub';
+    sub.setAttribute('role', 'menu');
+    sub.setAttribute('aria-label', parentItem.label);
+    sub.addEventListener('click', (event) => event.stopPropagation());
+
+    const buttons: HTMLButtonElement[] = [];
+    for (const child of children) {
+      if (child.separatorBefore === true) {
+        const divider = document.createElement('div');
+        divider.className = 'menu-separator';
+        divider.setAttribute('role', 'separator');
+        sub.append(divider);
+      }
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'menuitem');
+      button.tabIndex = -1;
+      if (!child.enabled) button.setAttribute('aria-disabled', 'true');
+      const label = document.createElement('span');
+      label.className = 'menu-item__label';
+      label.textContent = child.label;
+      button.append(label);
+      if (child.detail !== undefined) {
+        const detail = document.createElement('span');
+        detail.className = 'menu-item__detail';
+        detail.textContent = child.detail;
+        button.append(detail);
+        button.title = child.detail;
+      }
+      button.addEventListener('click', () => activateItem(child, button));
+      buttons.push(button);
+      sub.append(button);
+    }
+
+    sub.addEventListener('keydown', (event) => {
+      const index = buttons.findIndex((el) => el === document.activeElement);
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          buttons[(index + 1) % buttons.length]?.focus();
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          buttons[(index - 1 + buttons.length) % buttons.length]?.focus();
+          break;
+        case 'Home':
+          event.preventDefault();
+          buttons[0]?.focus();
+          break;
+        case 'End':
+          event.preventDefault();
+          buttons[buttons.length - 1]?.focus();
+          break;
+        case 'Enter':
+        case ' ': {
+          event.preventDefault();
+          const child = children[index];
+          const button = buttons[index];
+          if (child && button) activateItem(child, button);
+          break;
+        }
+        case 'ArrowLeft':
+        case 'Escape':
+          event.preventDefault();
+          parentButton.focus();
+          closeSubmenu();
+          break;
+        case 'Tab':
+          closePopup();
+          break;
+        default:
+          break;
+      }
+      // Never the document's Escape too: that would close the parent menu.
+      event.stopPropagation();
+    });
+
+    document.body.append(sub);
+    const anchor = parentButton.getBoundingClientRect();
+    sub.style.top = `${anchor.top}px`;
+    sub.style.left = `${anchor.right}px`;
+    // Flip to the left when the window is too narrow on the right.
+    if (anchor.right + sub.offsetWidth > window.innerWidth) {
+      sub.style.left = `${Math.max(0, anchor.left - sub.offsetWidth)}px`;
+    }
+    parentButton.setAttribute('aria-expanded', 'true');
+    openSub = sub;
+    if (focusTarget === 'first') buttons[0]?.focus();
   }
 
   function openMenuAt(index: number, focusTarget: FocusTarget): void {
@@ -553,13 +679,52 @@ export function mountMenuBar(parent: HTMLElement, isChecked: MenuItemChecked = (
         button.append(shortcut);
       }
 
-      button.addEventListener('click', () => activateItem(item, button));
+      if (item.detail !== undefined) {
+        const detail = document.createElement('span');
+        detail.className = 'menu-item__detail';
+        detail.textContent = item.detail;
+        button.append(detail);
+        button.title = item.detail;
+      }
+      if (item.submenu === true) {
+        button.setAttribute('aria-haspopup', 'menu');
+        button.setAttribute('aria-expanded', 'false');
+        const arrow = document.createElement('span');
+        arrow.className = 'menu-item__arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        arrow.textContent = '▸';
+        button.append(arrow);
+      }
+      // Hovering a submenu item opens it; hovering any other closes one.
+      button.addEventListener('mouseenter', () => {
+        if (item.submenu === true) openSubmenu(item, button, 'none');
+        else closeSubmenu();
+      });
+
+      button.addEventListener('click', () => {
+        if (item.submenu === true) openSubmenu(item, button, 'first');
+        else activateItem(item, button);
+      });
       items.push(button);
       popup.append(button);
     }
 
     popup.addEventListener('keydown', (event) => {
       const currentIndex = items.findIndex((el) => el === document.activeElement);
+
+      // On a submenu item, Right, Enter and Space open it rather than moving
+      // to the next menu or emitting.
+      const focused = menu.items[currentIndex];
+      const focusedButton = items[currentIndex];
+      if (
+        focused?.submenu === true &&
+        focusedButton !== undefined &&
+        (event.key === 'ArrowRight' || event.key === 'Enter' || event.key === ' ')
+      ) {
+        event.preventDefault();
+        openSubmenu(focused, focusedButton, 'first');
+        return;
+      }
 
       switch (event.key) {
         case 'ArrowDown':

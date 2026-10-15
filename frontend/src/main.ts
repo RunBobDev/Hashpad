@@ -46,8 +46,8 @@ import { openAbout } from './ui/aboutdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
 import { mountOpenWith } from './files/openwith';
-import { setRecentFiles } from './files/recent';
-import { flushTabTracking, startSession } from './files/session';
+import { clearRecent, setRecentFiles } from './files/recent';
+import { flushTabTracking, openRecent, recentMenuItems, startSession } from './files/session';
 import { mountDiskWatch } from './files/diskwatch';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
@@ -117,49 +117,54 @@ if (!root) throw new Error('#app not found');
 // worth saying so given this file's history: the callback only ever runs from a
 // click, long after module evaluation, so neither is in its temporal dead zone
 // -- unlike bootstrap's `finally`, which does run during evaluation.
-mountMenuBar(root, (id) => {
-  switch (id) {
-    case 'theme.system':
-    case 'theme.light':
-    case 'theme.dark':
-      return id === `theme.${themeMode}`;
-    // Per *document*, not per window -- switch tabs and this legitimately
-    // changes, which is exactly why it is read at open time.
-    case 'view.editor': {
-      const mode = activeDocument(store.getState())?.viewMode;
-      return mode !== undefined && !showsPreview(mode);
+mountMenuBar(
+  root,
+  (id) => {
+    switch (id) {
+      case 'theme.system':
+      case 'theme.light':
+      case 'theme.dark':
+        return id === `theme.${themeMode}`;
+      // Per *document*, not per window -- switch tabs and this legitimately
+      // changes, which is exactly why it is read at open time.
+      case 'view.editor': {
+        const mode = activeDocument(store.getState())?.viewMode;
+        return mode !== undefined && !showsPreview(mode);
+      }
+      case 'view.preview':
+        return activeDocument(store.getState())?.viewMode === 'split';
+      // Not `showsPreview`: these two ticks are asking which *arrangement* is on,
+      // and the whole point of two entries is that they are distinguishable. A
+      // shared predicate here would tick both rows in either mode.
+      case 'view.readingMode':
+        return activeDocument(store.getState())?.viewMode === 'preview';
+      case 'view.livePreview':
+        return activeDocument(store.getState())?.viewMode === 'live';
+      // The handle doubles as the visibility flag for both of these; a separate
+      // boolean beside it is a second source of truth that can disagree with the
+      // DOM.
+      case 'view.outline':
+        return outlineHandle !== null;
+      case 'view.statusBar':
+        return statusBarTeardown !== null;
+      // The store, not the settings file: a failed disk write is logged rather
+      // than thrown, so the two can disagree, and the tick has to say what the
+      // app is actually doing.
+      case 'file.autosave':
+        return store.getState().autosave;
+      case 'view.wordWrap':
+        return store.getState().wordWrap;
+      case 'view.lineNumbers':
+        return store.getState().editorBehaviour.showLineNumbers;
+      case 'view.fullscreen':
+        return isFullscreen();
+      default:
+        return false;
     }
-    case 'view.preview':
-      return activeDocument(store.getState())?.viewMode === 'split';
-    // Not `showsPreview`: these two ticks are asking which *arrangement* is on,
-    // and the whole point of two entries is that they are distinguishable. A
-    // shared predicate here would tick both rows in either mode.
-    case 'view.readingMode':
-      return activeDocument(store.getState())?.viewMode === 'preview';
-    case 'view.livePreview':
-      return activeDocument(store.getState())?.viewMode === 'live';
-    // The handle doubles as the visibility flag for both of these; a separate
-    // boolean beside it is a second source of truth that can disagree with the
-    // DOM.
-    case 'view.outline':
-      return outlineHandle !== null;
-    case 'view.statusBar':
-      return statusBarTeardown !== null;
-    // The store, not the settings file: a failed disk write is logged rather
-    // than thrown, so the two can disagree, and the tick has to say what the
-    // app is actually doing.
-    case 'file.autosave':
-      return store.getState().autosave;
-    case 'view.wordWrap':
-      return store.getState().wordWrap;
-    case 'view.lineNumbers':
-      return store.getState().editorBehaviour.showLineNumbers;
-    case 'view.fullscreen':
-      return isFullscreen();
-    default:
-      return false;
-  }
-});
+  },
+  // File > Open Recent's entries, read as the submenu opens (design §4.35).
+  (id) => (id === 'file.openRecent' ? recentMenuItems() : []),
+);
 // Between the menu bar and the editor area, per SPEC §6.1's chrome layout --
 // the window is frameless, so this row is the only place a filename appears.
 mountTabBar(root);
@@ -1209,6 +1214,11 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     void setToolbarPinned(id.slice('toolbar.unpin:'.length), false);
     return;
   }
+  // File > Open Recent's entries carry their place in the list (design §4.35).
+  if (id.startsWith('file.openRecent.')) {
+    void openRecent(Number(id.slice('file.openRecent.'.length)));
+    return;
+  }
 
   // Carries the chosen value, so like the tab commands below it cannot be
   // matched by the plain-string switch. `parseStatusCommand` answers null for
@@ -1254,6 +1264,9 @@ document.addEventListener(COMMAND_EVENT, (event) => {
     }
     case 'file.open':
       void openFiles();
+      break;
+    case 'file.clearRecent':
+      void clearRecent();
       break;
     case 'file.save':
       void saveActive();

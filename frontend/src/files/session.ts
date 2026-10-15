@@ -7,8 +7,11 @@
 import { ReadFile, RememberTabs } from '../../wailsjs/go/app/App';
 import { store } from '../state/appcontext';
 import type { AppState } from '../state/document';
+import { showNotice } from '../ui/confirmdialog';
+import type { MenuItem } from '../ui/menubar';
 import { openDocumentInNewTab, switchToDocument } from './documentops';
 import { openPendingFiles } from './openwith';
+import { forgetRecent, recentFiles, rememberOpened } from './recent';
 
 /** Long enough that switching through tabs writes once, short enough to survive a quick quit. */
 export const TAB_SAVE_DELAY_MS = 300;
@@ -109,4 +112,52 @@ export async function startSession(
   }
   await openPending();
   return mountTabTracking();
+}
+
+/** A path's file name and folder, splitting on both separators as fileops.ts does. */
+function nameAndFolder(path: string): { name: string; folder: string } {
+  const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+  return { name: path.slice(cut + 1), folder: path.slice(0, Math.max(cut, 0)) };
+}
+
+/** File > Open Recent's entries, newest first, then Clear Recently Opened. */
+export function recentMenuItems(): MenuItem[] {
+  const list = recentFiles();
+  const items: MenuItem[] =
+    list.length === 0
+      ? [{ id: 'file.noRecent', label: 'No recent files', enabled: false }]
+      : list.map((path, index) => {
+          const { name, folder } = nameAndFolder(path);
+          return { id: `file.openRecent.${index}`, label: name, detail: folder, enabled: true };
+        });
+  items.push({
+    id: 'file.clearRecent',
+    label: 'Clear Recently Opened',
+    enabled: list.length > 0,
+    separatorBefore: true,
+  });
+  return items;
+}
+
+/**
+ * Opens the recent file at `index`. One that cannot be read -- moved, deleted
+ * or locked -- is reported and dropped from the list rather than left to fail
+ * again.
+ */
+export async function openRecent(index: number, read: typeof ReadFile = ReadFile): Promise<void> {
+  const path = recentFiles()[index];
+  if (path === undefined) return;
+  let contents;
+  try {
+    contents = await read(path);
+  } catch {
+    void forgetRecent(path);
+    await showNotice(
+      `Hashpad could not open ${nameAndFolder(path).name}. It may have been moved or deleted, ` +
+        'so it has been removed from Open Recent.',
+    );
+    return;
+  }
+  openDocumentInNewTab(contents);
+  void rememberOpened(path);
 }
