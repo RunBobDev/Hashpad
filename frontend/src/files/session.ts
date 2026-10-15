@@ -120,6 +120,18 @@ function nameAndFolder(path: string): { name: string; folder: string } {
   return { name: path.slice(cut + 1), folder: path.slice(0, Math.max(cut, 0)) };
 }
 
+/**
+ * A long folder keeps its start and its last two folders -- C:\…\Notes\2026 --
+ * because the end says the most; cut at the end instead, every entry read
+ * "C:\Users\…" on the real exe. The tooltip has the whole path.
+ */
+function shortFolder(folder: string): string {
+  const parts = folder.split(/[\\/]/);
+  if (folder.length <= 40 || parts.length <= 3) return folder;
+  const separator = folder.includes('\\') ? '\\' : '/';
+  return [parts[0], '…', ...parts.slice(-2)].join(separator);
+}
+
 /** File > Open Recent's entries, newest first, then Clear Recently Opened. */
 export function recentMenuItems(): MenuItem[] {
   const list = recentFiles();
@@ -128,7 +140,13 @@ export function recentMenuItems(): MenuItem[] {
       ? [{ id: 'file.noRecent', label: 'No recent files', enabled: false }]
       : list.map((path, index) => {
           const { name, folder } = nameAndFolder(path);
-          return { id: `file.openRecent.${index}`, label: name, detail: folder, enabled: true };
+          return {
+            id: `file.openRecent.${index}`,
+            label: name,
+            detail: shortFolder(folder),
+            tooltip: path,
+            enabled: true,
+          };
         });
   items.push({
     id: 'file.clearRecent',

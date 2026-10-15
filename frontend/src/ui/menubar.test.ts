@@ -585,7 +585,13 @@ describe('File > Open Recent', () => {
   const children = (id: string): MenuItem[] =>
     id === 'file.openRecent'
       ? [
-          { id: 'file.openRecent.0', label: 'notes.md', detail: 'C:\\docs', enabled: true },
+          {
+            id: 'file.openRecent.0',
+            label: 'notes.md',
+            detail: 'C:\\docs',
+            tooltip: 'C:\\docs\\notes.md',
+            enabled: true,
+          },
           { id: 'file.openRecent.1', label: 'todo.md', detail: 'C:\\work', enabled: true },
           {
             id: 'file.clearRecent',
@@ -627,7 +633,7 @@ describe('File > Open Recent', () => {
     expect(seen).toEqual([]);
     const sub = submenu()!;
     expect(item(sub, 'notes.md').querySelector('.menu-item__detail')?.textContent).toBe('C:\\docs');
-    expect(item(sub, 'notes.md').title).toBe('C:\\docs');
+    expect(item(sub, 'notes.md').title).toBe('C:\\docs\\notes.md');
     expect(item(popup, 'Open Recent').getAttribute('aria-expanded')).toBe('true');
   });
 

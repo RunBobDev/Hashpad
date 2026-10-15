@@ -82,8 +82,10 @@ export interface MenuItem {
   separatorBefore?: boolean;
   /** Opens a side list, built by `mountMenuBar`'s `submenuItems` as it opens (Open Recent). */
   submenu?: true;
-  /** Dimmed text after the label, and the item's tooltip: a recent file's folder. */
+  /** Dimmed text after the label: a recent file's folder. */
   detail?: string;
+  /** Shown on hover: a recent file's whole path. */
+  tooltip?: string;
 }
 
 /**
@@ -499,8 +501,8 @@ export function mountMenuBar(
         detail.className = 'menu-item__detail';
         detail.textContent = child.detail;
         button.append(detail);
-        button.title = child.detail;
       }
+      if (child.tooltip !== undefined) button.title = child.tooltip;
       button.addEventListener('click', () => activateItem(child, button));
       buttons.push(button);
       sub.append(button);
@@ -684,8 +686,8 @@ export function mountMenuBar(
         detail.className = 'menu-item__detail';
         detail.textContent = item.detail;
         button.append(detail);
-        button.title = item.detail;
       }
+      if (item.tooltip !== undefined) button.title = item.tooltip;
       if (item.submenu === true) {
         button.setAttribute('aria-haspopup', 'menu');
         button.setAttribute('aria-expanded', 'false');

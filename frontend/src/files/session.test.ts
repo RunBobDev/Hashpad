@@ -173,8 +173,20 @@ describe('Open Recent', () => {
 
   it('lists each file by name with its folder, then Clear', () => {
     expect(recentMenuItems()).toEqual([
-      { id: 'file.openRecent.0', label: 'notes.md', detail: 'C:\\docs', enabled: true },
-      { id: 'file.openRecent.1', label: 'gone.md', detail: 'C:', enabled: true },
+      {
+        id: 'file.openRecent.0',
+        label: 'notes.md',
+        detail: 'C:\\docs',
+        tooltip: 'C:\\docs\\notes.md',
+        enabled: true,
+      },
+      {
+        id: 'file.openRecent.1',
+        label: 'gone.md',
+        detail: 'C:',
+        tooltip: 'C:\\gone.md',
+        enabled: true,
+      },
       {
         id: 'file.clearRecent',
         label: 'Clear Recently Opened',
@@ -182,6 +194,21 @@ describe('Open Recent', () => {
         separatorBefore: true,
       },
     ]);
+  });
+
+  /**
+   * The end of a folder says the most -- cut at the end, every entry read
+   * "C:\Users\…" on the real exe. The tooltip keeps the whole path.
+   */
+  it('shortens a long folder to its start and its last two folders', () => {
+    setRecentFiles([
+      'C:\\Users\\Someone\\Documents\\Projects\\Notes\\2026\\plan.md',
+      '/home/someone/documents/projects/notes/2026/plan.md',
+    ]);
+    const [windows, posix] = recentMenuItems();
+    expect(windows!.detail).toBe('C:\\…\\Notes\\2026');
+    expect(windows!.tooltip).toBe('C:\\Users\\Someone\\Documents\\Projects\\Notes\\2026\\plan.md');
+    expect(posix!.detail).toBe('/…/notes/2026');
   });
 
   it('says so when there is nothing, with Clear disabled', () => {
