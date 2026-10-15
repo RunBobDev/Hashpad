@@ -73,6 +73,7 @@ export namespace app {
 	    autosaveDelayMs: number;
 	    assetFolder: string;
 	    defaultEncoding: string;
+	    reopenTabs: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new FilesSettings(source);
@@ -84,6 +85,7 @@ export namespace app {
 	        this.autosaveDelayMs = source["autosaveDelayMs"];
 	        this.assetFolder = source["assetFolder"];
 	        this.defaultEncoding = source["defaultEncoding"];
+	        this.reopenTabs = source["reopenTabs"];
 	    }
 	}
 	export class PreviewSettings {
@@ -120,6 +122,22 @@ export namespace app {
 	        this.pageNumbers = source["pageNumbers"];
 	        this.paper = source["paper"];
 	        this.orientation = source["orientation"];
+	    }
+	}
+	export class SessionState {
+	    recentFiles: string[];
+	    openTabs: string[];
+	    activeTab: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.recentFiles = source["recentFiles"];
+	        this.openTabs = source["openTabs"];
+	        this.activeTab = source["activeTab"];
 	    }
 	}
 	export class ToolbarSettings {
@@ -169,6 +187,7 @@ export namespace app {
 	    window: WindowSettings;
 	    toolbar: ToolbarSettings;
 	    print: PrintSettings;
+	    session: SessionState;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -184,6 +203,7 @@ export namespace app {
 	        this.window = this.convertValues(source["window"], WindowSettings);
 	        this.toolbar = this.convertValues(source["toolbar"], ToolbarSettings);
 	        this.print = this.convertValues(source["print"], PrintSettings);
+	        this.session = this.convertValues(source["session"], SessionState);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

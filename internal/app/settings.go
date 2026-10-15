@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -124,6 +125,9 @@ type FilesSettings struct {
 	AutosaveDelayMs int    `json:"autosaveDelayMs"`
 	AssetFolder     string `json:"assetFolder"`
 	DefaultEncoding string `json:"defaultEncoding"`
+	// ReopenTabs: on start, reopen the files that were open when Hashpad last
+	// closed (design §4.35). On by default -- owner's call.
+	ReopenTabs bool `json:"reopenTabs"`
 }
 
 type WindowSettings struct {
@@ -159,6 +163,20 @@ type PrintSettings struct {
 	Orientation string `json:"orientation"`
 }
 
+// SessionState is Hashpad's own memory of what was open (design §4.35): paths
+// only, never a document's contents. It is the last section of settings.json
+// and belongs to session.go alone -- SaveSettings and ResetSettings keep what
+// is on disk, so a settings change can never put back an older list (the
+// owner's "gitignore for settings").
+type SessionState struct {
+	// Newest first, at most maxRecentFiles, for File > Open Recent.
+	RecentFiles []string `json:"recentFiles"`
+	// The open files in tab order; unsaved documents are left out.
+	OpenTabs []string `json:"openTabs"`
+	// Index into OpenTabs of the active tab; -1 when an unsaved document was.
+	ActiveTab int `json:"activeTab"`
+}
+
 // Settings is no longer comparable with == — ToolbarSettings.Pinned is a
 // slice, and a struct containing one is not comparable. Tests must use
 // reflect.DeepEqual instead of == or !=.
@@ -171,6 +189,8 @@ type Settings struct {
 	Window     WindowSettings     `json:"window"`
 	Toolbar    ToolbarSettings    `json:"toolbar"`
 	Print      PrintSettings      `json:"print"`
+	// Last, so it is written last: Go encodes fields in declaration order.
+	Session SessionState `json:"session"`
 }
 
 func DefaultSettings() Settings {
@@ -205,6 +225,7 @@ func DefaultSettings() Settings {
 		Files: FilesSettings{
 			Autosave: false, AutosaveDelayMs: 2000,
 			AssetFolder: "assets", DefaultEncoding: "utf-8",
+			ReopenTabs: true,
 		},
 		Window: WindowSettings{
 			Width: 1000, Height: 700, Maximized: false,
@@ -221,6 +242,7 @@ func DefaultSettings() Settings {
 		Print: PrintSettings{
 			Title: true, Date: true, PageNumbers: true, Paper: "a4", Orientation: "portrait",
 		},
+		Session: SessionState{RecentFiles: []string{}, OpenTabs: []string{}, ActiveTab: -1},
 	}
 }
 
@@ -379,6 +401,11 @@ func unusedBackupPath(path string) (string, error) {
 	return "", fmt.Errorf("no unused backup name near %s after %d attempts", base, maxBackupAttempts)
 }
 
+// settingsMu serialises every write to settings.json. Each writer reads the
+// file, changes its own part and writes it back; without the lock a settings
+// change and a tab switch landing together would each undo the other.
+var settingsMu sync.Mutex
+
 func SaveSettingsTo(path string, s Settings) error {
 	s.Version = settingsVersion
 
@@ -393,7 +420,10 @@ func SaveSettingsTo(path string, s Settings) error {
 		return fmt.Errorf("encode settings: %w", err)
 	}
 
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+	// Through a temp file and a rename, like a document (files.go): the session
+	// section is written on every tab change now, and a power cut mid-write
+	// must not leave a broken file -- one that loads as all defaults.
+	if err := replaceFile(path, append(data, '\n'), nil); err != nil {
 		return fmt.Errorf("write settings %s: %w", path, err)
 	}
 	return nil
@@ -407,11 +437,17 @@ func (a *App) LoadSettings() (Settings, error) {
 	return LoadSettingsFrom(path)
 }
 
+// SaveSettings writes every setting except the session section, which stays
+// as it is on disk (see SessionState).
 func (a *App) SaveSettings(s Settings) error {
 	path, err := SettingsPath()
 	if err != nil {
 		return err
 	}
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
+	onDisk, _ := LoadSettingsFrom(path)
+	s.Session = onDisk.Session
 	return SaveSettingsTo(path, s)
 }
 
@@ -441,5 +477,10 @@ func (a *App) ResetSettings() (Settings, error) {
 	if err != nil {
 		return defaults, err
 	}
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
+	// Reset to default is for preferences; what was open is not one.
+	onDisk, _ := LoadSettingsFrom(path)
+	defaults.Session = onDisk.Session
 	return defaults, SaveSettingsTo(path, defaults)
 }

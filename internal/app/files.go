@@ -74,6 +74,16 @@ func (a *App) WriteFile(path, content string, enc Encoding, ending LineEnding) e
 // writeAtomic is WriteFile's write, for any bytes; the comment above WriteFile
 // is why it goes through a temp file and a rename.
 func (a *App) writeAtomic(path string, data []byte) error {
+	// Before the rename, so the watcher never sees our own save as someone
+	// else's (watch.go).
+	return replaceFile(path, data, func() { a.watch.wrote(path, data) })
+}
+
+// replaceFile writes data beside path and renames it over path, so path holds
+// either the old complete file or the new complete one (see WriteFile).
+// beforeRename, when given, runs once the data is on disk and before the
+// rename. Shared with SaveSettingsTo.
+func replaceFile(path string, data []byte, beforeRename func()) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -106,9 +116,9 @@ func (a *App) writeAtomic(path string, data []byte) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 
-	// Before the rename, so the watcher never sees our own save as someone
-	// else's (watch.go).
-	a.watch.wrote(path, data)
+	if beforeRename != nil {
+		beforeRename()
+	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
