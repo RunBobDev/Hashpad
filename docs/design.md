@@ -1977,3 +1977,48 @@ cannot be reached in a built Hashpad: go-webview2's own loader ignores
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, so the frame costs above were measured
 by the page itself (long-animation-frame entries and frame gaps) in a throwaway
 build.
+
+### 4.35 Reopening the last tabs, and Open Recent
+
+Checkpoint O, at the owner's request; SPEC has neither. Every start used to be
+one Untitled tab or the double-clicked file, and the only history was Reopen
+Closed Tab, lost when Hashpad closed.
+
+**What the owner decided.** Hashpad reopens the files that were open when it
+last closed, in order, with the same tab active. On by default; Settings →
+Files → "Reopen last tabs on start" turns it off. A file double-clicked while
+Hashpad is closed joins the reopened tabs as the active one when the switch is
+on, and opens alone when it is off. File → Open Recent ▸ is a submenu (owner's
+choice over a list in the File menu) with the last ten files, newest first,
+and Clear Recently Opened. A recent file that has gone is reported and dropped
+from the list; a missing file is skipped quietly when the tabs are reopened.
+
+**Paths only — the owner's condition.** Nothing here writes a document. The
+open tabs are written as a list of paths whenever they change, a short moment
+after the last change, so a crash or power cut still leaves the right list; a
+document itself is written only by Save or autosave, as before. Unsaved
+documents, the caret, the scroll position and each tab's view mode are not
+restored.
+
+**Stored in settings.json, with a rule (the owner's "gitignore for
+settings").** A separate file was offered and declined. The list lives in a
+`session` section, written last. It belongs to Hashpad's own tracking
+(`internal/app/session.go`): `SaveSettings` — every settings change — and
+`ResetSettings` keep the section that is on disk and ignore the frontend's
+copy, so a settings change can never put back an older list, and Reset to
+default leaves what was open alone.
+
+**One lock, and an atomic write.** `SaveSettings` used to write the whole
+struct with no lock. With tab changes writing too, a settings change and a tab
+switch could each undo the other, so every writer now holds one mutex and does
+read-modify-write under it (a test with forty concurrent writers fails without
+it, five runs in five). And settings.json is now written through a temp file
+and a rename, as documents are: written this often, a torn file — which loads
+as all defaults — became likelier.
+
+**The menu bar gained submenus.** An item can open a side list built as it
+opens; it opens on hover, a click, Right, Enter or Space, and Left or Escape go
+back to the parent item. A long folder beside an entry keeps its start and its
+last two folders (`C:\…\Notes\2026`) — cut at the end, every entry read
+`C:\Users\…` on the real exe — and hovering shows the whole path.
+

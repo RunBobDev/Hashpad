@@ -3206,3 +3206,44 @@ centre, right and default columns lines up correctly in the split preview,
 reading view and the print view. Not run on the exe: Export as HTML and Copy
 as Rich Text, which take the alignment from the same stylesheet (the HTML
 embeds it; the rich copy writes each cell's computed alignment onto the cell).
+
+## Checkpoint O — reopening the last tabs, and Open Recent
+
+Design §4.35.
+
+**Verified on the built exe** (2026-10-15, *measured*, driven by a script,
+settings.json read back after each step, the owner's settings snapshotted and
+restored):
+
+- *Tracking:* three files opened, the second made active — within a second
+  settings.json's `session` held them in tab order with `activeTab` 1, the
+  recent list newest first, and `session` was the last section of the file.
+- *Reopening:* closed normally, started with no file — the same three tabs,
+  the same one active, no Untitled tab. Force-killed one second after
+  switching tabs, started again — the same, with the newly active tab.
+- *The switch off:* started with no file — one Untitled tab; started with a
+  file — that file alone. Tracking kept going meanwhile.
+- *The switch on, a file launched that was not open last time:* the last tabs
+  came back and the launched file joined them, active.
+- *Open Recent by mouse and by keyboard* (File, Down to Open Recent, Right,
+  Down, Enter): the chosen file opened, or became active when already open,
+  and moved to the top. A renamed file showed the notice and left the list.
+  Clear Recently Opened left "No recent files", with Clear greyed out.
+- *Settings:* changing the theme, and Reset to default, left the `session`
+  section exactly as it was. The new switch sits at the top of Settings →
+  Files and its change was written at once.
+- *Paths only:* the three files' hashes before and after all of the above were
+  identical.
+
+### Only you can judge these
+
+- [ ] **The submenu's look**: the arrow beside Open Recent, the folder text
+      beside each file, the gap between the two menus.
+- [ ] **A real double-click from Explorer** while Hashpad is closed, with the
+      switch on: your last tabs, plus that file in front.
+
+### Worth knowing
+
+- **A file whose disk copy was deleted** while its tab is open still asks to
+  save on quit (§4.30). Answering Don't Save keeps it in the reopen list; the
+  next start skips it quietly.

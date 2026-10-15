@@ -61,6 +61,8 @@ on.
 
 **Tabs** — open, close, reopen a closed tab, reorder by dragging, middle-click
 to close. One tab per file: opening a file that is already open switches to it.
+Hashpad reopens the files you had open when it last closed (switchable in
+Settings), and File → Open Recent lists the last ten.
 
 **Files** — UTF-8, UTF-8 with BOM and UTF-16LE are detected on open and
 preserved on save. CRLF and LF are detected, preserved, and never silently
@@ -179,8 +181,8 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [Mermaid](https://mermaid.js.org/); the print view's pages are drawn by
 [pdf.js](https://mozilla.github.io/pdf.js/).
 
-**Current state:** 20.0 MB executable, 1,886 automated tests (1,739 frontend,
-147 Go), no known defects.
+**Current state:** 20.0 MB executable, 1,926 automated tests (1,770 frontend,
+156 Go), no known defects.
 
 ---
 
