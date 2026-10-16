@@ -825,7 +825,7 @@ dirty-close prompts, drag-and-drop, encoding round-trips, external file changes.
 
 ## 9. Platform-specific surface (SPEC §11.5)
 
-Six locations, each flagged in code with a `// PLATFORM:` comment:
+Seven locations, each flagged in code with a `// PLATFORM:` comment:
 
 1. `internal/platform/platform_windows.go` — registry theme read, `WM_SETTINGCHANGE` live
    detection, `explorer.exe /select,` for reveal-in-file-manager
@@ -835,9 +835,12 @@ Six locations, each flagged in code with a `// PLATFORM:` comment:
 3. `main.go` — `SingleInstanceLock` unique ID, plus the `WindowUnminimise` + `Show`
    follow-up the Wails documentation warns is required
 4. `wails.json` and `build/windows/` — NSIS configuration, icons, file associations
-5. `styles/variables.css` — the UI font stack (Segoe UI Variable → Segoe UI → system sans)
+5. `styles/variables.css` — the UI font stack (Segoe UI Variable → Segoe UI → system sans),
+   and `--window-border`, the width Windows 11's border covers at the window's edge (§4.36)
 6. `internal/app/print_windows.go` — the print view's engine calls (§4.34);
    `print_other.go` reports them unsupported, so File > Print falls back
+7. `internal/platform/fonts_windows.go` — the installed font families, from GDI's
+   `EnumFontFamiliesExW` (§4.37); Linux returns none yet, and Settings keeps text fields
 
 ---
 
@@ -2081,4 +2084,37 @@ now runs its (idempotent) close handler at once in every environment.
   right. `.workspace` and the print view are inset by `--window-border`, 1px,
   or 1.34px from 150% to 199% where 1px rounded down to one device pixel.
   Measured 5 and 5 afterwards at 150%.
+
+### 4.37 Font dropdowns
+
+Checkpoint P.2, at the owner's request: Settings → Editor → Font and Settings →
+Appearance → Preview font were text fields, and the owner does not know font
+names. Both are now dropdowns of the installed fonts.
+
+**What is listed.** Go asks Windows (GDI's `EnumFontFamiliesExW`, through the
+`golang.org/x/sys` already depended on). GDI's list is not the renderer's: it
+names every weight as a family, cuts names at 31 characters and includes raster
+fonts WebView2 cannot use — 164 names on the VM. The frontend
+(`settings/fonts.ts`) folds a weight into its family ("Segoe UI Light" is Segoe
+UI), drops names the setting cannot carry, and keeps only families a canvas
+actually draws: one the renderer cannot find falls back to the generic after it,
+so every width matches that generic's. Measured with letters only, because icon
+fonts have a space and a few symbols and passed as fonts with them in the
+sample. 22 monospaced and 75 other on the VM.
+
+**The two lists.** The editor's puts monospaced fonts first (equal `i` and `W`
+widths), then the rest under "Other fonts" — the owner's choice of the two
+offered, "for now". The preview's is one alphabetical list. A font that is not
+installed stays selected, at the top, as "Name (not installed)" (an empty
+setting shows "Default"), so opening Settings never changes anything by itself.
+A pick applies at once, as typing did.
+
+**Type-ahead, asked for by the owner, is the native control's.** With a dropdown
+focused, open or closed, typing jumps to the matching font; verified on the exe.
+
+**Loaded in idle time.** A font's first measure loads it on the page's thread:
+1.35 s for the VM's fonts cold, 25 ms warm. main.ts starts the list after start,
+touching one font per idle slice or as many as the slice allows, so Settings
+finds it ready and nothing stutters meanwhile. With no list — Linux until its
+checkpoint, or any failure — both settings stay text fields.
 

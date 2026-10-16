@@ -3293,3 +3293,26 @@ screenshots at 150% scaling):
 - **Shadows do not show on black**, so a menu or dialog is set apart only by
   its 1px border. Over a black wallpaper the window's own edge is the same.
 
+## Checkpoint P.2 — font dropdowns
+
+Design §4.37.
+
+**Verified on the built exe** (2026-10-16, driven by a script, settings.json
+read back, the owner's settings snapshotted and restored):
+
+- *The lists:* Settings opened a few seconds after start showed both fonts as
+  dropdowns. The editor's opened on "Monospaced" (Cascadia Code, Cascadia Mono,
+  Consolas, Courier New, Lucida Console, …), then "Other fonts"; no icon fonts.
+  The same logic in Chromium on the VM: 164 Windows names → 22 monospaced, 75
+  other.
+- *Type-ahead, open:* "lu" highlighted Lucida Console; Enter chose it.
+- *Type-ahead, closed:* "cas" chose Cascadia Code, written to settings.json.
+- *Applied:* source view switched from Cascadia Code (its ligatures visible) to
+  Lucida Console with the pick.
+
+### Only you can judge these
+
+- [ ] **The lists on your machine**: whether anything you would want is missing,
+      or anything there should not be (symbol fonts such as Wingdings are kept —
+      they draw letters, as symbols).
+
