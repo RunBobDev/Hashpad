@@ -4,6 +4,7 @@ export namespace app {
 	    theme: string;
 	    accentColor: string;
 	    uiFontSize: number;
+	    darkStyle: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppearanceSettings(source);
@@ -14,6 +15,7 @@ export namespace app {
 	        this.theme = source["theme"];
 	        this.accentColor = source["accentColor"];
 	        this.uiFontSize = source["uiFontSize"];
+	        this.darkStyle = source["darkStyle"];
 	    }
 	}
 	export class EditorSettings {

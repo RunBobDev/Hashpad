@@ -76,6 +76,9 @@ type AppearanceSettings struct {
 	Theme       string `json:"theme"`
 	AccentColor string `json:"accentColor"`
 	UIFontSize  int    `json:"uiFontSize"`
+	// "dark" or "oled": which palette dark uses, whenever the theme resolves
+	// to dark (design §4.36). Validated by the frontend, like Theme.
+	DarkStyle string `json:"darkStyle"`
 }
 
 type EditorSettings struct {
@@ -197,7 +200,7 @@ func DefaultSettings() Settings {
 	return Settings{
 		Version: settingsVersion,
 		Appearance: AppearanceSettings{
-			Theme: "system", AccentColor: "#0078d4", UIFontSize: 14,
+			Theme: "system", AccentColor: "#0078d4", UIFontSize: 14, DarkStyle: "dark",
 		},
 		Editor: EditorSettings{
 			FontFamily: "Cascadia Mono", FontSize: 14, LineHeight: 1.6,

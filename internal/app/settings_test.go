@@ -291,6 +291,24 @@ func TestDefaultContentWidthIsUnlimited(t *testing.T) {
 	}
 }
 
+// OLED black is opt-in (design §4.36): a fresh install, and a file written
+// before the setting existed, both get today's Dark.
+func TestDarkStyleDefaultsToDark(t *testing.T) {
+	if got := DefaultSettings().Appearance.DarkStyle; got != "dark" {
+		t.Errorf("default darkStyle = %q, want dark", got)
+	}
+
+	path := filepath.Join(t.TempDir(), "settings.json")
+	write(t, path, fmt.Sprintf(`{"version": %d, "appearance": {"theme": "light"}}`, settingsVersion))
+	got, err := LoadSettingsFrom(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Appearance.DarkStyle != "dark" || got.Appearance.Theme != "light" {
+		t.Errorf("appearance = %+v, want the file's theme and the default dark style", got.Appearance)
+	}
+}
+
 // write seeds a settings file. The existing tests inline os.WriteFile; the
 // migration tests below each need one, so it is worth a name.
 func write(t *testing.T, path, contents string) {
