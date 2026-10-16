@@ -42,6 +42,7 @@ import { mountTabBar, parseTabCommand } from './ui/tabbar';
 import { openSearchPanel } from '@codemirror/search';
 import { mountShortcuts } from './ui/shortcuts';
 import { closeSettings, openSettings } from './ui/settingsdialog';
+import { loadFontCatalog } from './settings/fonts';
 import { openAbout } from './ui/aboutdialog';
 import { mountWindowEdges } from './ui/windowedges';
 import { mountFileDrop } from './ui/filedrop';
@@ -533,6 +534,11 @@ async function bootstrap(): Promise<void> {
     // The last session's tabs come first (design §4.35), so a launch file ends
     // up active; with the switch off there are none to reopen.
     void startSession(reopenTabs ? savedTabs : [], savedActiveTab);
+
+    // Settings' font dropdowns (design §4.37). Loading every font takes a
+    // second or more cold, so it happens now, in idle slices, rather than when
+    // Settings opens. Never rejects.
+    void loadFontCatalog();
   }
 }
 

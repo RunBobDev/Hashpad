@@ -28,15 +28,23 @@ const DRAWN: Record<string, 'mono' | 'prop'> = {
   'Segoe UI Variable Text': 'prop',
 };
 
+/** Icon fonts: glyphs for the space and symbols, none for letters. */
+const ICONS = new Set(['Segoe MDL2 Assets']);
+
+/** Per character, as the renderer does: a glyph the family lacks comes from the generic after it. */
 const fakeMeasure: Measure = (font, text) => {
   const named = /^40px '([^']+)', ([\w-]+)$/.exec(font);
   const generic = named ? named[2]! : font.replace('40px ', '');
-  const family = named && named[1]! in DRAWN ? named[1]! : null;
-  const kind = family !== null ? DRAWN[family] : generic === 'monospace' ? 'mono' : 'prop';
+  const family = named ? named[1]! : null;
   let width = 0;
-  for (const char of text) width += kind === 'mono' ? 10 : char === 'i' ? 4 : char === 'W' ? 14 : 8;
-  // A drawn family is never exactly a generic's size.
-  return family === null ? width : width * (1 + family.length / 100);
+  for (const char of text) {
+    const own = family !== null && (family in DRAWN || (ICONS.has(family) && !/[a-z]/i.test(char)));
+    const kind = own ? (DRAWN[family!] ?? 'mono') : generic === 'monospace' ? 'mono' : 'prop';
+    const glyph = kind === 'mono' ? 10 : char === 'i' ? 4 : char === 'W' ? 14 : 8;
+    // A drawn family is never exactly a generic's size.
+    width += own ? glyph * (1 + family!.length / 100) : glyph;
+  }
+  return width;
 };
 
 describe('catalogFonts', () => {
@@ -89,6 +97,18 @@ describe('catalogFonts', () => {
     });
   });
 
+  /**
+   * Segoe MDL2 Assets and friends have a space and a few symbols but no
+   * letters; measured with a space in the sample they passed as monospaced
+   * fonts on the VM.
+   */
+  it('leaves out icon fonts, which have no letters', () => {
+    expect(catalogFonts(['Segoe MDL2 Assets', 'Arial'], fakeMeasure)).toEqual({
+      monospaced: [],
+      other: ['Arial'],
+    });
+  });
+
   /** A name `fontStack` would refuse would be offered and then silently not apply. */
   it('leaves out names the font setting cannot carry', () => {
     expect(catalogFonts(['Font & Co', 'Arial'], fakeMeasure).other).toEqual(['Arial']);
@@ -119,6 +139,35 @@ describe('loadFontCatalog', () => {
     await load(fakeMeasure);
 
     expect(calls()).toBe(1);
+  });
+
+  /**
+   * A font's first measure loads it on the page's thread -- 1.35 s for the
+   * VM's fonts, cold -- so they are loaded in idle slices: here, slices with
+   * no time left, so one font each.
+   */
+  it('loads each font in its own idle slice when the slices are short', async () => {
+    const slices: number[] = [];
+    vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
+      slices.push(slices.length);
+      setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 0 }), 0);
+      return slices.length;
+    });
+    const measured: string[] = [];
+    const spy: Measure = (font, text) => {
+      measured.push(font);
+      return fakeMeasure(font, text);
+    };
+    const { load } = await fresh(() =>
+      Promise.resolve(['Arial', 'Consolas', 'Segoe UI', 'Segoe UI Light']),
+    );
+
+    expect(await load(spy)).toEqual({ monospaced: ['Consolas'], other: ['Arial', 'Segoe UI'] });
+
+    // Three families, three slices; the weight is never loaded at all.
+    expect(slices).toHaveLength(3);
+    expect(measured.some((font) => font.includes('Segoe UI Light'))).toBe(false);
+    vi.unstubAllGlobals();
   });
 
   /** Linux until its checkpoint, or any failure: the dialog keeps text fields. */

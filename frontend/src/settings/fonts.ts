@@ -55,19 +55,30 @@ const STYLE_WORDS = new Set([
   'oblique',
 ]);
 
-/** Narrow and wide glyphs, so no drawn font can match a generic's width by chance. */
-const SAMPLE = 'mmmmmmmmmmlli WQ@#';
+/**
+ * Narrow and wide glyphs, so no drawn font can match a generic's width by
+ * chance -- and letters only: icon fonts (Segoe MDL2 Assets) have a space and
+ * a few symbols, and with those in the sample they passed as fonts.
+ */
+const SAMPLE = 'mmmmmmmmmmlliWQ';
 const GENERICS = ['monospace', 'serif'];
 
 export function catalogFonts(names: readonly string[], measure: Measure): FontCatalog {
-  const families = new Set(names);
   const monospaced: string[] = [];
   const other: string[] = [];
-  for (const name of [...families].sort(byName)) {
-    if (!isFontName(name) || isWeightOf(name, families) || !draws(name, measure)) continue;
+  for (const name of candidates(names)) {
+    if (!draws(name, measure)) continue;
     (isMonospaced(name, measure) ? monospaced : other).push(name);
   }
   return { monospaced, other };
+}
+
+/** Each family once, sorted, less the names the setting cannot carry and the weights. */
+function candidates(names: readonly string[]): string[] {
+  const families = new Set(names);
+  return [...families]
+    .sort(byName)
+    .filter((name) => isFontName(name) && !isWeightOf(name, families));
 }
 
 /** Two generics, because a drawn font can share one's widths (Consolas is monospace's) but not both. */
@@ -105,19 +116,21 @@ function byName(a: string, b: string): number {
 let catalog: Promise<FontCatalog> | null = null;
 
 /**
- * The catalog, asked of Go once per session. No list (Linux until its
- * checkpoint, or any failure) is `NO_FONTS`, and is not kept: the next dialog
- * asks again.
+ * The catalog, asked of Go once per session -- main.ts starts it when the app
+ * is idle after start, so Settings normally finds it ready. No list (Linux
+ * until its checkpoint, or any failure) is `NO_FONTS`, and is not kept: the
+ * next dialog asks again.
  */
 export function loadFontCatalog(measure?: Measure): Promise<FontCatalog> {
   // From a resolved promise, so a binding that throws outright (no Wails
   // runtime) lands in the catch below like any other failure.
   catalog ??= Promise.resolve()
     .then(() => InstalledFonts())
-    .then((names) => {
+    .then(async (names) => {
       if (names.length === 0) return NO_FONTS;
       const using = measure ?? canvasMeasure();
       if (using === null) throw new Error('no canvas to measure fonts with');
+      await warmUp(candidates(names), using);
       return catalogFonts(names, using);
     })
     .catch((error: unknown) => {
@@ -126,6 +139,34 @@ export function loadFontCatalog(measure?: Measure): Promise<FontCatalog> {
       return NO_FONTS;
     });
   return catalog;
+}
+
+/**
+ * A font's first measure loads it, synchronously, on the page's thread: 1.35 s
+ * for the VM's 97 families cold, 25 ms warm (measured). So each is touched once
+ * in idle time, as many per slice as the slice allows and at least one, and
+ * the catalog is then built warm.
+ */
+async function warmUp(names: readonly string[], measure: Measure): Promise<void> {
+  let next = 0;
+  while (next < names.length) {
+    const deadline = await idle();
+    do {
+      measure(`40px '${names[next]!}', serif`, SAMPLE);
+      next++;
+    } while (next < names.length && deadline.timeRemaining() > 0);
+  }
+}
+
+/** The next idle period; a timeout keeps it moving while the page is never idle. */
+function idle(): Promise<IdleDeadline> {
+  return new Promise((resolve) => {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(resolve, { timeout: 250 });
+    } else {
+      setTimeout(() => resolve({ didTimeout: true, timeRemaining: () => 0 }), 0);
+    }
+  });
 }
 
 function canvasMeasure(): Measure | null {

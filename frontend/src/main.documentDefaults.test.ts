@@ -70,6 +70,8 @@ vi.mock('../wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('../wailsjs/go/app/App', () => ({
+  // bootstrap preloads Settings' font list; none keeps the text fields.
+  InstalledFonts: vi.fn().mockResolvedValue([]),
   // files/diskwatch.ts tells Go the open paths at mount and on every change,
   // and chains .catch on the result, so this has to resolve.
   SetWatchedFiles: vi.fn(async () => {}),
