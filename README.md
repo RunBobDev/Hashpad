@@ -81,8 +81,8 @@ equations and diagrams included. Exports are always light. Images from the inter
 an exported page lets its reader's browser load them, and printing offers to
 hand the document to your browser to do the same.
 
-**Appearance** — light and dark themes that follow the Windows setting, an
-accent colour picker, and configurable fonts and sizes for the interface, the
+**Appearance** — light and dark themes that follow the Windows setting, dark
+in its own style or OLED black, an accent colour picker, and configurable fonts and sizes for the interface, the
 editor and the preview independently.
 
 **Saving** — the classic model. Closing a modified tab prompts Save / Don't Save
@@ -181,8 +181,8 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [Mermaid](https://mermaid.js.org/); the print view's pages are drawn by
 [pdf.js](https://mozilla.github.io/pdf.js/).
 
-**Current state:** 20.0 MB executable, 1,926 automated tests (1,770 frontend,
-156 Go), no known defects.
+**Current state:** 20.0 MB executable, 1,949 automated tests (1,792 frontend,
+157 Go), no known defects.
 
 ---
 

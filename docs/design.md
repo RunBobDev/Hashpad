@@ -2022,3 +2022,40 @@ back to the parent item. A long folder beside an entry keeps its start and its
 last two folders (`C:\…\Notes\2026`) — cut at the end, every entry read
 `C:\Users\…` on the real exe — and hovering shows the whole path.
 
+### 4.36 OLED black
+
+Checkpoint P, at the owner's request; SPEC §6.12 has light and dark only. The
+owner sees no problem with the existing contrast — this is a look, not a fix.
+
+**A dark style, not a fourth theme (owner's choice).** Settings → Appearance →
+"Dark style", under Theme: **Dark** (the default, unchanged) or **OLED black**.
+It applies whenever Hashpad resolves to dark — Theme: Dark, or Follow system on
+a dark Windows — which a fourth Theme entry could not have done for Follow
+system. Light is untouched. The owner named the options; "Grey" is not one of
+them. No View-menu entry: offered, not taken up.
+
+**What turns black.** Every resting surface: the editor, the preview, the menu
+bar, tab bar, toolbar, status bar and line-number gutter, and menus and dialogs
+too, which keep their 1px border as their edge (a shadow does not show on
+black). Hover `#1a1a1a` and pressed `#262626` stay grey, since a state that
+changes nothing on screen is not a state; code blocks `#141414` still read as
+blocks; a faint `#262626` line replaces the gutter's grey band. Every foreground
+is Dark's, and only gains contrast on black — `codetheme.test.ts` measures the
+code palette and the preview's dim text on the OLED surfaces as well.
+
+**How.** `appearance.darkStyle` (`"dark"` | `"oled"`, default `"dark"`, so an
+older file keeps its look). `applyDarkStyle` sets `<html data-dark-style>`, and
+one block in variables.css, keyed on that *and* `data-theme='dark'`, overrides
+eight surface tokens — no editor reconfigure, no re-render, the same as a theme
+switch. It is applied at start before the theme, so the window background
+handed to Wails (what Windows paints while resizing) is already black, and
+re-synced on every change. Exports keep `.theme-light`, which redefines every
+overridden token. A value that is neither name applies and shows as Dark.
+
+**Found on the way: Reset never reopened Settings.** Reset to default closes the
+dialog and builds a fresh one. A real `<dialog>`'s `close()` fires its `close`
+event a task later, so the rebuild found the old dialog still in the DOM and
+returned — Settings simply closed, on every reset since H.4. jsdom has no
+`close()` and took a synchronous fallback, so every test passed. `closeSettings`
+now runs its (idempotent) close handler at once in every environment.
+

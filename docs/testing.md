@@ -3247,3 +3247,35 @@ restored):
 - **A file whose disk copy was deleted** while its tab is open still asks to
   save on quit (§4.30). Answering Don't Save keeps it in the reopen list; the
   next start skips it quietly.
+
+## Checkpoint P — OLED black
+
+Design §4.36.
+
+**Verified on the built exe** (2026-10-16, *measured*, driven by a script,
+pixel colours sampled from screenshots, settings.json read back, the owner's
+settings snapshotted and restored byte-identical):
+
+- *Follow system on a dark Windows, Dark style Dark:* menu bar, tab bar,
+  toolbar and status bar `#1f1f1f`, editor `#1a1a1a` — as before.
+- *Switched to OLED black in Settings:* applied while the dialog was still
+  open; menu bar, tab bar, toolbar, editor and status bar all `#000000`, the
+  active line `#0d0d0d`. Written to settings.json as `"darkStyle": "oled"`.
+- *A menu and the Settings dialog over black:* both outlined by their border
+  and readable.
+- *Restarted:* black from the first frame. With line numbers on and split
+  view: gutter `#000000` with its `#262626` line, a code block `#141414`, the
+  table header `#1a1a1a`; math and the Mermaid diagram as in Dark.
+- *Reset to default:* back to Dark, `"darkStyle": "dark"` written — and
+  Settings reopened showing Dark (it did not before this checkpoint's fix).
+
+### Only you can judge these
+
+- [ ] **OLED black on your own screen**: whether hover and pressed greys, the
+      code-block tint and the gutter line are as faint as you want them.
+
+### Worth knowing
+
+- **Shadows do not show on black**, so a menu or dialog is set apart only by
+  its 1px border. Over a black wallpaper the window's own edge is the same.
+
