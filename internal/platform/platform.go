@@ -21,4 +21,9 @@ type Platform interface {
 
 	// ShowInFileManager reveals path in the OS file manager.
 	ShowInFileManager(path string) error
+
+	// InstalledFonts lists the installed font families, sorted, for the
+	// settings dialog's font dropdowns. An error means "no list": the dialog
+	// falls back to a text field.
+	InstalledFonts() ([]string, error)
 }

@@ -18,6 +18,10 @@ export function ForgetRecent(arg1) {
   return window['go']['app']['App']['ForgetRecent'](arg1);
 }
 
+export function InstalledFonts() {
+  return window['go']['app']['App']['InstalledFonts']();
+}
+
 export function LoadSettings() {
   return window['go']['app']['App']['LoadSettings']();
 }

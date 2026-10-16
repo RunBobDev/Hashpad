@@ -21,3 +21,8 @@ func (p *linuxPlatform) OnSystemThemeChange(fn func(isDark bool)) (func(), error
 func (p *linuxPlatform) ShowInFileManager(path string) error {
 	return ErrNotImplemented
 }
+
+// PLATFORM: fontconfig's list (fc-list) when Linux support lands.
+func (p *linuxPlatform) InstalledFonts() ([]string, error) {
+	return nil, ErrNotImplemented
+}

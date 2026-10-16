@@ -10,6 +10,8 @@ export function ConfirmQuit():Promise<void>;
 
 export function ForgetRecent(arg1:string):Promise<Array<string>>;
 
+export function InstalledFonts():Promise<Array<string>>;
+
 export function LoadSettings():Promise<app.Settings>;
 
 export function MakePrintPdf(arg1:string,arg2:string,arg3:string):Promise<string>;
