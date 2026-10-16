@@ -733,9 +733,13 @@ export function closeSettings(): void {
   if (dialog === null) return;
 
   // Guarded because jsdom implements <dialog> as a bare HTMLElement with no
-  // close(); dispatching the event directly is the same path there.
+  // close().
   if (typeof dialog.close === 'function') dialog.close();
-  else dialog.dispatchEvent(new Event('close'));
+  // Always, not only in jsdom: a real close() fires `close` a task later, and
+  // Reset's openSettings() straight after this found the old dialog still in
+  // the DOM and refused to build one. The handler is idempotent (`finish`), so
+  // the browser's own event arriving later does nothing.
+  dialog.dispatchEvent(new Event('close'));
 }
 
 export async function openSettings(): Promise<void> {

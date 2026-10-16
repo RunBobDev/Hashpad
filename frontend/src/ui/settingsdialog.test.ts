@@ -998,6 +998,24 @@ describe('closeSettings', () => {
     expect(document.querySelector('.settings-dialog')).toBeNull();
   });
 
+  /**
+   * jsdom has no `close()`, so the case above takes the synchronous fallback. A
+   * real `close()` fires its `close` event a task later, and Reset's
+   * `openSettings()` -- called straight after this -- refused to build a new
+   * dialog while the old one was still in the DOM. Settings stayed shut after
+   * every reset in the real app.
+   */
+  it('takes the dialog out at once where close() fires its event later, as browsers do', () => {
+    const dialog = mount();
+    dialog.close = () => {
+      setTimeout(() => dialog.dispatchEvent(new Event('close')), 0);
+    };
+
+    closeSettings();
+
+    expect(document.querySelector('.settings-dialog')).toBeNull();
+  });
+
   /** Nothing open is not an error; main.ts calls it unconditionally. */
   it('does nothing when no dialog is open', () => {
     expect(() => closeSettings()).not.toThrow();
