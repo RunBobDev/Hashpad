@@ -14,7 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WindowSetBackgroundColour } from '../../wailsjs/runtime/runtime';
-import { applyTheme } from './theme';
+import { applyDarkStyle, applyTheme } from './theme';
 
 vi.mock('../../wailsjs/runtime/runtime', () => ({ WindowSetBackgroundColour: vi.fn() }));
 vi.mock('../editor/theme', () => ({ setEditorDark: vi.fn() }));
@@ -105,5 +105,26 @@ describe('applyTheme keeping the window background in step', () => {
     applyTheme(true);
 
     expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+});
+
+describe('applyDarkStyle', () => {
+  it('marks the page so variables.css can swap in the black palette', () => {
+    stubBackground('');
+
+    applyDarkStyle('oled');
+    expect(document.documentElement.dataset.darkStyle).toBe('oled');
+
+    applyDarkStyle('dark');
+    expect(document.documentElement.dataset.darkStyle).toBe('dark');
+  });
+
+  /** --bg-app changes with the style, and the window must follow or resizing shows a grey strip. */
+  it('sends the new background to Wails', () => {
+    stubBackground('#000000');
+
+    applyDarkStyle('oled');
+
+    expect(WindowSetBackgroundColour).toHaveBeenCalledExactlyOnceWith(0, 0, 0, 255);
   });
 });

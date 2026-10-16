@@ -11,6 +11,13 @@ import { setEditorDark } from '../editor/theme';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+/** Which palette dark uses (design §4.36). Separate from ThemeMode so Follow system can be OLED black too. */
+export type DarkStyle = 'dark' | 'oled';
+
+export function isDarkStyle(value: unknown): value is DarkStyle {
+  return value === 'dark' || value === 'oled';
+}
+
 /**
  * `systemIsDark` is `null` when the OS preference could not be read (a
  * missing registry key, an unsupported platform -- see
@@ -36,6 +43,16 @@ export function applyTheme(isDark: boolean): void {
   document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
   store.setState((prev) => ({ ...prev, isDark }));
   setEditorDark(getEditorView(), isDark);
+  syncWindowBackground();
+}
+
+/**
+ * Marks `<html>` for variables.css's OLED block, which only bites while
+ * `data-theme` is dark -- so this needs no knowledge of the theme. The window
+ * background is re-synced because `--bg-app` may just have changed.
+ */
+export function applyDarkStyle(style: DarkStyle): void {
+  document.documentElement.dataset.darkStyle = style;
   syncWindowBackground();
 }
 

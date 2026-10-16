@@ -54,14 +54,23 @@ function contrast(a: string, b: string): number {
  * measured while the browser painted the later value. `valueOf` below takes
  * the last match for the same reason.
  */
-function themeBlock(theme: 'light' | 'dark'): string {
+function themeBlock(theme: Theme): string {
   const darkStart = CSS.indexOf("[data-theme='dark']");
   expect(darkStart, 'no dark block in variables.css').toBeGreaterThan(-1);
-  return theme === 'light' ? CSS.slice(0, darkStart) : CSS.slice(darkStart);
+  // OLED black (design §4.36) overrides some of dark's tokens in a block of its
+  // own after it, so OLED is dark *plus* that block, read last-one-wins, and
+  // dark must stop where it starts or it would be measured with OLED's values.
+  const oledStart = CSS.indexOf(":root[data-theme='dark'][data-dark-style='oled']");
+  expect(oledStart, 'no OLED block after the dark block').toBeGreaterThan(darkStart);
+  if (theme === 'light') return CSS.slice(0, darkStart);
+  return theme === 'dark' ? CSS.slice(darkStart, oledStart) : CSS.slice(darkStart);
 }
 
+type Theme = 'light' | 'dark' | 'oled';
+const THEMES = ['light', 'dark', 'oled'] as const;
+
 /** The value `--name` ends up with in `theme`, i.e. its last declaration. */
-function valueOf(name: string, theme: 'light' | 'dark'): string {
+function valueOf(name: string, theme: Theme): string {
   const matches = [
     ...themeBlock(theme).matchAll(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`, 'g')),
   ];
@@ -104,7 +113,7 @@ describe('the fenced-code palette', () => {
     expect(REFERENCED.length).toBeGreaterThanOrEqual(8);
   });
 
-  it.each(['light', 'dark'] as const)('defines every token the palette uses, in %s', (theme) => {
+  it.each(THEMES)('defines every token the palette uses, in %s', (theme) => {
     const missing = REFERENCED.filter(
       (token) => !new RegExp(`${token}:\\s*#[0-9a-fA-F]{6}`).test(themeBlock(theme)),
     );
@@ -128,7 +137,7 @@ describe('the fenced-code palette', () => {
    * `variables.css`'s own header says to check every surface a token is
    * composited over rather than picking one.
    */
-  it.each(['light', 'dark'] as const)('clears WCAG AA on every surface in %s', (theme) => {
+  it.each(THEMES)('clears WCAG AA on every surface in %s', (theme) => {
     const failures: string[] = [];
     for (const surface of ['bg-editor', 'syn-code-bg'] as const) {
       const background = valueOf(surface, theme);
@@ -320,7 +329,7 @@ describe("the preview's muted foregrounds", () => {
   );
 
   it.each(
-    (['light', 'dark'] as const).flatMap((theme) =>
+    THEMES.flatMap((theme) =>
       SURFACES.map((surface) => ({ theme, ...surface })),
     ),
   )('$selector clears AA in $theme', ({ theme, fg, bg }) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isValidAccent, resolveIsDark } from './theme';
+import { isDarkStyle, isValidAccent, resolveIsDark } from './theme';
 import { ACCENT_PRESETS } from './accents';
 
 describe('resolveIsDark', () => {
@@ -36,6 +36,17 @@ describe('isValidAccent', () => {
       expect(isValidAccent(color)).toBe(false);
     },
   );
+});
+
+// A hand-edited settings.json can say anything; only the two names apply.
+describe('isDarkStyle', () => {
+  it.each(['dark', 'oled'])('accepts %s', (style) => {
+    expect(isDarkStyle(style)).toBe(true);
+  });
+
+  it.each(['grey', 'OLED', 'light', '', undefined, null, 1])('rejects %s', (style) => {
+    expect(isDarkStyle(style)).toBe(false);
+  });
 });
 
 describe('ACCENT_PRESETS', () => {

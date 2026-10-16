@@ -310,3 +310,32 @@
   --syn-code-inserted: #7ee787;
   --syn-code-deleted: #ffa198;
 }
+
+/* OLED black (design §4.36): the dark palette with every resting surface pure
+   black. Keyed on both attributes, so it applies whichever way the theme
+   resolved to dark (Dark, or Follow system on a dark Windows) and never in
+   light. Its specificity beats the dark block's, so order is not what decides
+   it -- but it stays last, because codetheme.test.ts reads "OLED" as the dark
+   block plus everything after it.
+
+   Only surfaces change. Every foreground is Dark's and gains contrast on black;
+   codetheme.test.ts measures them here too. Menus and dialogs are black like
+   everything else and keep their 1px --border as their edge, since a shadow
+   does not show on black. Hover and pressed stay grey: a state that changes
+   nothing on screen is not a state. `.theme-light` redefines every token below,
+   so exports stay light. */
+:root[data-theme='dark'][data-dark-style='oled'] {
+  --bg-app: #000000;
+  --bg-editor: #000000;
+  --bg-elevated: #000000;
+  --bg-hover: #1a1a1a;
+  --bg-active: #262626;
+
+  /* Dark's gutter is a grey band with no line; on black the band is gone, so a
+     faint line is what keeps the numbers from floating in the text. */
+  --gutter-bg: #000000;
+  --gutter-border: #262626;
+
+  /* Fences and inline code still read as blocks. */
+  --syn-code-bg: #141414;
+}
