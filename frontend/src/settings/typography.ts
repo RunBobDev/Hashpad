@@ -80,12 +80,19 @@ export function fontStack(requested: string, fallback: string): string {
   const names = requested
     .split(',')
     .map((name) => name.replace(/['"]/g, '').trim())
-    // Letters, digits, spaces and hyphens: enough for every real family name,
-    // including `Cascadia Mono`, `PT Sans`, `SF Mono` and `Fira Code`.
-    .filter((name) => name !== '' && /^[\w -]+$/.test(name))
+    .filter(isFontName)
     .map((name) => `'${name}'`);
 
   return names.length === 0 ? fallback : `${names.join(', ')}, ${fallback}`;
+}
+
+/**
+ * Letters, digits, spaces and hyphens: enough for every real family name,
+ * including `Cascadia Mono`, `PT Sans`, `SF Mono` and `Fira Code`. The font
+ * dropdowns offer only names that pass, so a pick always applies.
+ */
+export function isFontName(name: string): boolean {
+  return name !== '' && /^[\w -]+$/.test(name);
 }
 
 /**
