@@ -166,6 +166,12 @@
   --fg-on-danger: #ffffff;
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 18%);
 
+  /* The native light scrollbar is a #fcfcfc track on white -- three steps,
+     next to invisible (owner) -- and a #8b8b8b thumb. These are the dark
+     scrollbar's own steps from its background (+0x12 track, +0x85 thumb on
+     #1a1a1a), taken down from white instead. */
+  scrollbar-color: #7a7a7a #ededed;
+
   /* Dims the app behind a modal dialog. Same reasoning as --bg-danger: a
      scrim reads the same regardless of which theme is active, so it is not
      derived per-theme. */
@@ -272,6 +278,10 @@
   --fg-on-danger: #ffffff;
   /* Deeper than light mode: a shadow at 18% is invisible against dark chrome. */
   --shadow-popup: 0 8px 16px rgb(0 0 0 / 44%);
+
+  /* The native dark scrollbar, which the owner finds right: undoes the light
+     block's, which applies to :root in every theme. */
+  scrollbar-color: auto;
   --bg-backdrop: rgb(0 0 0 / 35%);
 
   /* Lifts rather than darkens: a black wash is invisible on a near-black editor. */

@@ -3279,6 +3279,9 @@ screenshots at 150% scaling):
   kept (5 | 13 | 5 px). Dark still `#2c2c2c` and `#9f9f9f`.
 - *The right edge:* 5 px of track either side of the thumb, then Windows' 2 px
   border, in both styles — 5 | 13 | 3 before.
+- *Light's scrollbar* (reported next): native was a `#fcfcfc` track on white;
+  now `#ededed` track and `#7a7a7a` thumb, Dark's steps taken down from white.
+  Dark and OLED black measured unchanged afterwards.
 
 ### Only you can judge these
 
