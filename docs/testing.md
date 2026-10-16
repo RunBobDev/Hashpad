@@ -3302,9 +3302,13 @@ read back, the owner's settings snapshotted and restored):
 
 - *The lists:* Settings opened a few seconds after start showed both fonts as
   dropdowns. The editor's opened on "Monospaced" (Cascadia Code, Cascadia Mono,
-  Consolas, Courier New, Lucida Console, …), then "Other fonts"; no icon fonts.
-  The same logic in Chromium on the VM: 164 Windows names → 22 monospaced, 75
+  Consolas, Courier New, Lucida Console, …), then "Other fonts"; no icon,
+  symbol or raster fonts. 164 names from Windows, 86 listed: 12 monospaced, 74
   other.
+- *Memory* (the release measurement, one empty document, whole process tree,
+  private): 0.6.0 153 MB; the first, canvas-measured version 191 MB; the list
+  asked of Windows instead 155 MB. Re-checked on the exe afterwards: same
+  lists, minus the pixel-font Courier, Marlett and a logo font.
 - *Type-ahead, open:* "lu" highlighted Lucida Console; Enter chose it.
 - *Type-ahead, closed:* "cas" chose Cascadia Code, written to settings.json.
 - *Applied:* source view switched from Cascadia Code (its ligatures visible) to

@@ -2092,18 +2092,18 @@ Appearance → Preview font were text fields, and the owner does not know font
 names. Both are now dropdowns of the installed fonts.
 
 **What is listed.** Go asks Windows (GDI's `EnumFontFamiliesExW`, through the
-`golang.org/x/sys` already depended on). GDI's list is not the renderer's: it
-names every weight as a family, cuts names at 31 characters and includes raster
-fonts WebView2 cannot use — 164 names on the VM. The frontend
-(`settings/fonts.ts`) folds a weight into its family ("Segoe UI Light" is Segoe
-UI), drops names the setting cannot carry, and keeps only families a canvas
-actually draws: one the renderer cannot find falls back to the generic after it,
-so every width matches that generic's. Measured with letters only, because icon
-fonts have a space and a few symbols and passed as fonts with them in the
-sample. 22 monospaced and 75 other on the VM.
+`golang.org/x/sys` already depended on) and keeps what text can use, all of it
+answered by GDI (`platform/fonts_windows.go`): outline fonts only, since raster
+and vector ones are flagged and WebView2 draws neither; fonts listed under a text
+character set, since Wingdings, Webdings, Symbol and Marlett are listed only
+under the symbol one; names shorter than the 31 characters GDI cuts them at; and
+fonts with glyphs for "a" and "W", because icon fonts (Segoe MDL2 Assets, Segoe
+Fluent Icons) look like text fonts in every other flag. Fixed pitch is GDI's
+flag too. The frontend (`settings/fonts.ts`) folds each weight into its family
+("Segoe UI Light" is Segoe UI) and drops names the setting cannot carry. On the
+VM: 164 names from GDI, 134 usable, 86 listed — 12 monospaced, 74 other.
 
-**The two lists.** The editor's puts monospaced fonts first (equal `i` and `W`
-widths), then the rest under "Other fonts" — the owner's choice of the two
+**The two lists.** The editor's puts monospaced fonts first, then the rest under "Other fonts" — the owner's choice of the two
 offered, "for now". The preview's is one alphabetical list. A font that is not
 installed stays selected, at the top, as "Name (not installed)" (an empty
 setting shows "Default"), so opening Settings never changes anything by itself.
@@ -2112,9 +2112,12 @@ A pick applies at once, as typing did.
 **Type-ahead, asked for by the owner, is the native control's.** With a dropdown
 focused, open or closed, typing jumps to the matching font; verified on the exe.
 
-**Loaded in idle time.** A font's first measure loads it on the page's thread:
-1.35 s for the VM's fonts cold, 25 ms warm. main.ts starts the list after start,
-touching one font per idle slice or as many as the slice allows, so Settings
-finds it ready and nothing stutters meanwhile. With no list — Linux until its
-checkpoint, or any failure — both settings stay text fields.
-
+**Nothing is measured in the page — the first version did, and it was a
+regression.** It kept the fonts a canvas could draw, which meant loading every
+installed font into the renderer: 1.35 s cold, spread over idle slices after
+start, and about 35 MB of private memory for the rest of the session. The
+release measurement for 0.7.0 caught it before the release: one empty document,
+whole process tree, 153 MB for 0.6.0, 191 MB with the canvas, 157 MB without
+the list at all. Asked of GDI instead: 155 MB, and about 0.3 s in Go, which
+main.ts still starts after start so Settings finds the list ready. With no list
+— Linux until its checkpoint, or any failure — both settings stay text fields.
