@@ -230,3 +230,22 @@ export namespace app {
 
 }
 
+export namespace platform {
+	
+	export class Font {
+	    name: string;
+	    monospaced: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Font(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.monospaced = source["monospaced"];
+	    }
+	}
+
+}
+

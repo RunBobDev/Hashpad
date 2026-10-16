@@ -23,6 +23,6 @@ func (p *linuxPlatform) ShowInFileManager(path string) error {
 }
 
 // PLATFORM: fontconfig's list (fc-list) when Linux support lands.
-func (p *linuxPlatform) InstalledFonts() ([]string, error) {
+func (p *linuxPlatform) InstalledFonts() ([]Font, error) {
 	return nil, ErrNotImplemented
 }

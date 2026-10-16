@@ -22,8 +22,15 @@ type Platform interface {
 	// ShowInFileManager reveals path in the OS file manager.
 	ShowInFileManager(path string) error
 
-	// InstalledFonts lists the installed font families, sorted, for the
-	// settings dialog's font dropdowns. An error means "no list": the dialog
-	// falls back to a text field.
-	InstalledFonts() ([]string, error)
+	// InstalledFonts lists the installed font families text can use, sorted,
+	// for the settings dialog's font dropdowns. An error means "no list": the
+	// dialog falls back to text fields.
+	InstalledFonts() ([]Font, error)
+}
+
+// Font is an installed font family, as the settings dropdowns list it.
+type Font struct {
+	Name string `json:"name"`
+	// Every glyph the same width: the editor's dropdown lists these first.
+	Monospaced bool `json:"monospaced"`
 }

@@ -535,9 +535,9 @@ async function bootstrap(): Promise<void> {
     // up active; with the switch off there are none to reopen.
     void startSession(reopenTabs ? savedTabs : [], savedActiveTab);
 
-    // Settings' font dropdowns (design §4.37). Loading every font takes a
-    // second or more cold, so it happens now, in idle slices, rather than when
-    // Settings opens. Never rejects.
+    // Settings' font dropdowns (design §4.37). Go takes about 0.3 s to list
+    // them, all of it in Go, so it starts now rather than when Settings opens.
+    // Never rejects.
     void loadFontCatalog();
   }
 }
