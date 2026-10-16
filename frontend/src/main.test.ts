@@ -86,6 +86,8 @@ vi.mock('../wailsjs/go/app/App', () => ({
   // Bound rather than the runtime's WindowShow so Go can tell a normal start
   // from a frontend that never got this far -- see App.showWindowEventually.
   ShowWindow: vi.fn(),
+  // Settings asks for the font list as it opens; none keeps the text fields.
+  InstalledFonts: vi.fn().mockResolvedValue([]),
   // Resolved, not left as a bare vi.fn(): main.ts's bootstrap awaits this and
   // reads .appearance and .toolbar straight off the result, so leaving it
   // `undefined` (vi.fn()'s default) would push every test in this file

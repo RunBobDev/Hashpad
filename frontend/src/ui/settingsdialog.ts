@@ -28,6 +28,7 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import type { app } from '../../wailsjs/go/models';
 import { applyAccent, applyDarkStyle, isDarkStyle, isValidAccent } from '../theme/theme';
 import { applyTypography } from '../settings/typography';
+import { allFonts, loadFontCatalog, NO_FONTS, type FontCatalog } from '../settings/fonts';
 import {
   setAutosaveDelaySetting,
   setAutosaveSetting,
@@ -227,6 +228,53 @@ function select(options: readonly (readonly [string, string])[], value: string):
   return element;
 }
 
+/**
+ * A font setting's control (design §4.37): a dropdown of the installed fonts,
+ * or -- with no list (Linux until its checkpoint, or Go failed) -- the text
+ * field it replaced. A select fires `input` just as the field does, so one
+ * listener serves both. Typing while it has focus jumps to the matching font;
+ * the native control does that, open or closed, across both groups.
+ */
+function fontControl(
+  current: string,
+  placeholder: string,
+  fonts: FontCatalog,
+  monospacedFirst: boolean,
+): HTMLInputElement | HTMLSelectElement {
+  const every = allFonts(fonts);
+  if (every.length === 0) return textField(current, placeholder);
+
+  const element = document.createElement('select');
+  element.className = 'settings-dialog__control';
+  // Kept and selected, so opening Settings never changes the font by itself.
+  if (!every.includes(current)) {
+    element.append(fontOption(current, current === '' ? 'Default' : `${current} (not installed)`));
+  }
+  if (monospacedFirst) {
+    for (const [label, names] of [
+      ['Monospaced', fonts.monospaced],
+      ['Other fonts', fonts.other],
+    ] as const) {
+      if (names.length === 0) continue;
+      const group = document.createElement('optgroup');
+      group.label = label;
+      group.append(...names.map((name) => fontOption(name, name)));
+      element.append(group);
+    }
+  } else {
+    element.append(...every.map((name) => fontOption(name, name)));
+  }
+  element.value = current;
+  return element;
+}
+
+function fontOption(value: string, label: string): HTMLOptionElement {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+
 function numberField(
   limit: { min: number; max: number },
   step: number,
@@ -317,7 +365,11 @@ function group(legendText: string, rows: HTMLElement[]): HTMLElement {
  * would leave that local behind. The other two controls have no such owner, so
  * they apply and persist here.
  */
-function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
+function appearanceGroup(
+  settings: app.Settings,
+  saves: Coalescer,
+  fonts: FontCatalog,
+): HTMLElement {
   const theme = select(
     [
       ['system', 'Follow system'],
@@ -365,7 +417,7 @@ function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement 
   // The preview's typography lives here rather than in a Preview group of its
   // own: SPEC §6.13 names four groups and Preview is not one of them, and these
   // two are fonts and sizes exactly like the three above.
-  const previewFont = textField(settings.preview.fontFamily, 'Segoe UI');
+  const previewFont = fontControl(settings.preview.fontFamily, 'Segoe UI', fonts, false);
   previewFont.addEventListener('input', () => {
     liveTypography(settings, saves, 'preview.fontFamily', (target) => {
       target.preview.fontFamily = previewFont.value;
@@ -415,10 +467,10 @@ function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement 
  * the file and the running app disagree, and a checkbox showing the file would
  * be reporting something the user is not looking at.
  */
-function editorGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
+function editorGroup(settings: app.Settings, saves: Coalescer, fonts: FontCatalog): HTMLElement {
   const state = store.getState();
 
-  const fontFamily = textField(settings.editor.fontFamily, 'Cascadia Mono');
+  const fontFamily = fontControl(settings.editor.fontFamily, 'Cascadia Mono', fonts, true);
   fontFamily.addEventListener('input', () => {
     liveTypography(settings, saves, 'editor.fontFamily', (target) => {
       target.editor.fontFamily = fontFamily.value;
@@ -627,7 +679,10 @@ function advancedGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
  * teardown happening exactly once -- are all reachable with plain event
  * dispatch, which jsdom does implement.
  */
-export function buildSettingsDialog(settings: app.Settings): HTMLDialogElement {
+export function buildSettingsDialog(
+  settings: app.Settings,
+  fonts: FontCatalog = NO_FONTS,
+): HTMLDialogElement {
   const dialog = document.createElement('dialog');
   dialog.className = 'settings-dialog';
   dialog.setAttribute('aria-labelledby', 'settings-dialog-title');
@@ -642,8 +697,8 @@ export function buildSettingsDialog(settings: app.Settings): HTMLDialogElement {
 
   const saves = coalesce(300);
   body.append(
-    appearanceGroup(settings, saves),
-    editorGroup(settings, saves),
+    appearanceGroup(settings, saves, fonts),
+    editorGroup(settings, saves, fonts),
     filesGroup(settings, saves),
     advancedGroup(settings, saves),
   );
@@ -745,6 +800,9 @@ export function closeSettings(): void {
 export async function openSettings(): Promise<void> {
   if (document.querySelector('.settings-dialog') !== null) return;
 
+  // Alongside the settings rather than after: Go enumerates the fonts while
+  // the settings are read. Never rejects -- no list means text fields.
+  const fonts = loadFontCatalog();
   let settings: app.Settings;
   try {
     settings = await LoadSettings();
@@ -755,7 +813,7 @@ export async function openSettings(): Promise<void> {
     return;
   }
 
-  const dialog = buildSettingsDialog(settings);
+  const dialog = buildSettingsDialog(settings, await fonts);
   document.body.append(dialog);
   dialog.showModal?.();
 }

@@ -20,6 +20,7 @@ import { COMMAND_EVENT } from './menubar';
 import { buildSettingsDialog, closeSettings } from './settingsdialog';
 import { store } from '../state/appcontext';
 import type { app } from '../../wailsjs/go/models';
+import type { FontCatalog } from '../settings/fonts';
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   LoadSettings: vi.fn(),
@@ -1081,5 +1082,104 @@ describe('the Files group’s autosave controls', () => {
     await vi.waitFor(() => {
       expect(vi.mocked(SaveSettings).mock.lastCall?.[0].files.autosaveDelayMs).toBe(200);
     });
+  });
+});
+
+/**
+ * Design §4.37: the two font settings are dropdowns of the installed fonts.
+ * The catalog is handed in, as `openSettings` does after asking Go; the cases
+ * above build without one and so cover the text-field fallback.
+ */
+describe('the font dropdowns', () => {
+  const FONTS: FontCatalog = {
+    monospaced: ['Cascadia Mono', 'Consolas'],
+    other: ['Arial', 'Segoe UI'],
+  };
+
+  function mountWith(settings: app.Settings = settingsFixture()): HTMLDialogElement {
+    const dialog = buildSettingsDialog(settings, FONTS);
+    document.body.append(dialog);
+    return dialog;
+  }
+
+  function withFonts(editorFont: string, previewFont: string): app.Settings {
+    const settings = settingsFixture();
+    settings.editor.fontFamily = editorFont;
+    settings.preview.fontFamily = previewFont;
+    return settings;
+  }
+
+  const labels = (select: HTMLSelectElement): (string | null)[] =>
+    [...select.options].map((option) => option.textContent);
+
+  it('offers the editor monospaced fonts first, then the rest', () => {
+    const font = byLabel<HTMLSelectElement>(group(mountWith(), 'Editor'), 'Font');
+
+    expect(
+      [...font.querySelectorAll('optgroup')].map((g) => [
+        g.label,
+        [...g.children].map((option) => option.textContent),
+      ]),
+    ).toEqual([
+      ['Monospaced', ['Cascadia Mono', 'Consolas']],
+      ['Other fonts', ['Arial', 'Segoe UI']],
+    ]);
+    expect(font.value).toBe('Cascadia Mono');
+  });
+
+  it('offers the preview every font in one alphabetical list', () => {
+    const font = byLabel<HTMLSelectElement>(group(mountWith(), 'Appearance'), 'Preview font');
+
+    expect(font.querySelector('optgroup')).toBeNull();
+    expect(labels(font)).toEqual(['Arial', 'Cascadia Mono', 'Consolas', 'Segoe UI']);
+    expect(font.value).toBe('Segoe UI');
+  });
+
+  /** Nothing changes until the user picks: a missing font stays the setting. */
+  it('keeps a font that is not installed selected, at the top', () => {
+    const font = byLabel<HTMLSelectElement>(
+      group(mountWith(withFonts('Fira Code', 'Segoe UI')), 'Editor'),
+      'Font',
+    );
+
+    expect(font.options[0]!.textContent).toBe('Fira Code (not installed)');
+    expect(font.value).toBe('Fira Code');
+  });
+
+  it('shows an empty font setting as Default', () => {
+    const font = byLabel<HTMLSelectElement>(
+      group(mountWith(withFonts('Cascadia Mono', '')), 'Appearance'),
+      'Preview font',
+    );
+
+    expect(font.options[0]!.textContent).toBe('Default');
+    expect(font.value).toBe('');
+  });
+
+  it('applies a picked font at once, and persists it', async () => {
+    const font = byLabel<HTMLSelectElement>(group(mountWith(), 'Editor'), 'Font');
+
+    font.value = 'Consolas';
+    font.dispatchEvent(new Event('input'));
+
+    expect(document.documentElement.style.getPropertyValue('--font-editor')).toMatch(/^'Consolas'/);
+    expect((await savedSettings()).editor.fontFamily).toBe('Consolas');
+  });
+
+  it('applies a picked preview font too', async () => {
+    const font = byLabel<HTMLSelectElement>(group(mountWith(), 'Appearance'), 'Preview font');
+
+    font.value = 'Arial';
+    font.dispatchEvent(new Event('input'));
+
+    expect(document.documentElement.style.getPropertyValue('--font-preview')).toMatch(/^'Arial'/);
+    expect((await savedSettings()).preview.fontFamily).toBe('Arial');
+  });
+
+  it('stays a text field when there is no font list', () => {
+    const dialog = mount();
+
+    expect(byLabel(group(dialog, 'Editor'), 'Font').tagName).toBe('INPUT');
+    expect(byLabel(group(dialog, 'Appearance'), 'Preview font').tagName).toBe('INPUT');
   });
 });

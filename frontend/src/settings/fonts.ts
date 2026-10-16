@@ -93,6 +93,11 @@ function isWeightOf(name: string, families: ReadonlySet<string>): boolean {
   return false;
 }
 
+/** Both lists as one, alphabetical: the preview's dropdown. */
+export function allFonts(catalog: FontCatalog): string[] {
+  return [...catalog.monospaced, ...catalog.other].sort(byName);
+}
+
 function byName(a: string, b: string): number {
   return a.localeCompare(b, 'en', { sensitivity: 'base' });
 }
@@ -105,8 +110,12 @@ let catalog: Promise<FontCatalog> | null = null;
  * asks again.
  */
 export function loadFontCatalog(measure?: Measure): Promise<FontCatalog> {
-  catalog ??= InstalledFonts()
+  // From a resolved promise, so a binding that throws outright (no Wails
+  // runtime) lands in the catch below like any other failure.
+  catalog ??= Promise.resolve()
+    .then(() => InstalledFonts())
     .then((names) => {
+      if (names.length === 0) return NO_FONTS;
       const using = measure ?? canvasMeasure();
       if (using === null) throw new Error('no canvas to measure fonts with');
       return catalogFonts(names, using);
