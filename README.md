@@ -213,7 +213,7 @@ process, not the prompting:
   followed, not a description written afterwards.
 
 - **Work went in phases, and every phase was manually checked** before the next
-  one started. Twelve of them. Several defects that no test could have caught — a
+  one started. Sixteen of them. Several defects that no test could have caught — a
   preview pane that forgot it was open, clipped icons, a caret landing in the
   wrong place — were found exactly that way, by running the thing and looking at
   it.
@@ -234,7 +234,7 @@ process, not the prompting:
   quietly restated as a different target.
 
 - **Every departure from the specification is recorded with its reasoning.**
-  Thirty-three of them, in [`docs/design.md`](docs/design.md) §4, including the
+  Thirty-seven of them, in [`docs/design.md`](docs/design.md) §4, including the
   ones where the specification turned out to be wrong and the ones where an idea
   was investigated and rejected.
 
