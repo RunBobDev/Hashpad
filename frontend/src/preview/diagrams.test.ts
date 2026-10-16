@@ -359,3 +359,85 @@ describe('drawing for export', () => {
     expect(events).toEqual(['init:dark', 'render:A', 'init:default', 'render:B']);
   });
 });
+
+/**
+ * OLED black (design §4.36). Mermaid's dark pie draws its outlines in pure
+ * black and two of its twelve slice colours are near-black (`#0b0000`,
+ * `#161722`), all measured in the harness -- on `#000` they vanish, and the pie
+ * reads as incomplete. variables.css's OLED block carries replacements; Dark,
+ * light and exports have none of those tokens and keep Mermaid's own colours.
+ */
+describe('OLED black', () => {
+  const OLED_TOKENS = {
+    '--diagram-pie-stroke': '#cccccc',
+    '--diagram-pie-1': '#136060',
+    '--diagram-pie-9': '#5a5a1a',
+  };
+
+  function stubConfigs(): { configs: Record<string, unknown>[]; calls: string[] } {
+    const configs: Record<string, unknown>[] = [];
+    const calls: string[] = [];
+    vi.doMock('mermaid', () => ({
+      default: {
+        initialize: (config: Record<string, unknown>) => configs.push(config),
+        render: (_id: string, source: string) => {
+          calls.push(source);
+          return Promise.resolve({ svg: '<svg/>' });
+        },
+      },
+    }));
+    return { configs, calls };
+  }
+
+  function setTokens(on: boolean): void {
+    for (const [token, value] of Object.entries(OLED_TOKENS)) {
+      if (on) document.documentElement.style.setProperty(token, value);
+      else document.documentElement.style.removeProperty(token);
+    }
+  }
+
+  afterEach(() => setTokens(false));
+
+  it("hands Mermaid's dark theme the pie colours variables.css gives OLED black", async () => {
+    const { configs } = stubConfigs();
+    setTokens(true);
+    const module = await freshModule();
+
+    await settle(module, paneWith('pie\n  "A" : 1'), true);
+
+    expect(configs.at(-1)).toMatchObject({
+      theme: 'dark',
+      themeVariables: {
+        pieStrokeColor: '#cccccc',
+        pieOuterStrokeColor: '#cccccc',
+        pie1: '#136060',
+        pie9: '#5a5a1a',
+      },
+    });
+  });
+
+  /** An export draws light from inside an OLED window; it must not pick these up. */
+  it('keeps them out of the light theme', async () => {
+    const { configs } = stubConfigs();
+    setTokens(true);
+    const module = await freshModule();
+
+    await settle(module, paneWith('pie\n  "A" : 1'), false);
+
+    expect(configs.at(-1)).toMatchObject({ theme: 'default', themeVariables: {} });
+  });
+
+  it('draws again when the dark style changes, and keeps both drawings', async () => {
+    const { calls } = stubConfigs();
+    const module = await freshModule();
+
+    await settle(module, paneWith('pie\n  "A" : 1'), true);
+    setTokens(true);
+    await settle(module, paneWith('pie\n  "A" : 1'), true);
+    expect(calls.length).toBe(2);
+
+    setTokens(false);
+    await settle(module, paneWith('pie\n  "A" : 1'), true);
+    expect(calls.length).toBe(2);
+  });
+});

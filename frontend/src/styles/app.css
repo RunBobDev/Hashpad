@@ -45,6 +45,11 @@ body {
   /* Both rows need this or a long document stretches the flex item instead of
      scrolling inside it, and the status bar walks off the bottom. */
   min-height: 0;
+  /* Windows 11 draws its window border *over* a frameless window's edge, and
+     at the right edge those pixels were the scrollbar's: measured 5px of track
+     left of the thumb and 3px right of it (150% scaling), where a scrollbar
+     away from the edge has 5 and 5. Reported by the owner. */
+  padding-right: var(--window-border);
 }
 
 /*
@@ -1317,7 +1322,8 @@ body {
   max-width: none;
   max-height: none;
   margin: 0;
-  padding: 0;
+  /* The pages' scrollbar is at the window's edge too: see `.workspace`. */
+  padding: 0 var(--window-border) 0 0;
   border: 0;
   display: flex;
   background: var(--bg-app);

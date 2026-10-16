@@ -46,8 +46,42 @@ let loading: Promise<void> | null = null;
  */
 type MermaidTheme = 'default' | 'dark';
 
-/** The theme Mermaid was last initialised with; `null` until it has been. */
-let initialisedFor: MermaidTheme | null = null;
+/**
+ * OLED black's corrections to Mermaid's dark theme (design §4.36). Its pie
+ * draws outlines in pure black and two of its slice colours are near-black, all
+ * of which vanish on `#000`. The tokens exist only in variables.css's OLED
+ * block, so Dark keeps Mermaid's own colours.
+ */
+const OLED_PIE = [
+  ['pieStrokeColor', '--diagram-pie-stroke'],
+  ['pieOuterStrokeColor', '--diagram-pie-stroke'],
+  ['pie1', '--diagram-pie-1'],
+  ['pie9', '--diagram-pie-9'],
+] as const;
+
+/** What Mermaid's theme is given on top of its own; empty except in OLED black. */
+function themeVariables(theme: MermaidTheme): Record<string, string> {
+  const variables: Record<string, string> = {};
+  // Light, which exports always draw in, even from an OLED window.
+  if (theme !== 'dark') return variables;
+  const css = getComputedStyle(document.documentElement);
+  for (const [name, token] of OLED_PIE) {
+    const value = css.getPropertyValue(token).trim();
+    if (value !== '') variables[name] = value;
+  }
+  return variables;
+}
+
+/**
+ * One string per distinct look, for the cache key and `initialisedFor`. JSON
+ * is self-delimiting, so the key's `:` before the source stays unambiguous.
+ */
+function lookOf(theme: MermaidTheme, variables: Record<string, string>): string {
+  return Object.keys(variables).length === 0 ? theme : `${theme}${JSON.stringify(variables)}`;
+}
+
+/** The look (theme and variables) Mermaid was last initialised with; `null` until it has been. */
+let initialisedFor: string | null = null;
 const listeners = new Set<() => void>();
 
 /**
@@ -141,19 +175,28 @@ function sweep(id: string): void {
  */
 let queue: Promise<unknown> = Promise.resolve();
 
-function draw(source: string, theme: MermaidTheme): Promise<string> {
-  const turn = queue.then(() => drawNow(source, theme));
+function draw(
+  source: string,
+  theme: MermaidTheme,
+  variables: Record<string, string>,
+): Promise<string> {
+  const turn = queue.then(() => drawNow(source, theme, variables));
   queue = turn.catch(() => undefined);
   return turn;
 }
 
-async function drawNow(source: string, theme: MermaidTheme): Promise<string> {
+async function drawNow(
+  source: string,
+  theme: MermaidTheme,
+  variables: Record<string, string>,
+): Promise<string> {
   const module = mermaid;
   if (module === null) throw new Error('mermaid not loaded');
 
-  // Re-initialised only when the theme actually changes. `initialize` is not
+  // Re-initialised only when the look actually changes. `initialize` is not
   // free and the pane calls this on every render.
-  if (initialisedFor !== theme) {
+  const look = lookOf(theme, variables);
+  if (initialisedFor !== look) {
     module.initialize({
       startOnLoad: false,
       // **The security half of drawing past the sanitiser** (design §4.29).
@@ -176,8 +219,11 @@ async function drawNow(source: string, theme: MermaidTheme): Promise<string> {
       htmlLabels: false,
       flowchart: { htmlLabels: false },
       theme,
+      // Always passed, empty or not: each `initialize` rebuilds the theme from
+      // these, so OLED's colours cannot outlive a switch back to Dark.
+      themeVariables: variables,
     });
-    initialisedFor = theme;
+    initialisedFor = look;
   }
 
   const id = `hashpad-mermaid-${String(nextId++)}`;
@@ -231,6 +277,8 @@ export async function renderDiagramsIn(root: ParentNode, dark: boolean): Promise
   if (nodes.length === 0) return;
 
   const theme: MermaidTheme = dark ? 'dark' : 'default';
+  const variables = themeVariables(theme);
+  const look = lookOf(theme, variables);
 
   // **Cache hits first, and synchronously.** This is what makes a document with
   // diagrams typeable: everything already drawn is back on screen in the same
@@ -238,7 +286,7 @@ export async function renderDiagramsIn(root: ParentNode, dark: boolean): Promise
   const misses: { node: HTMLElement; source: string; key: string }[] = [];
   for (const node of nodes) {
     const source = node.textContent ?? '';
-    const key = `${theme}:${source}`;
+    const key = `${look}:${source}`;
     const hit = cache.get(key);
     node.classList.add(DONE);
     if (hit === undefined) {
@@ -270,7 +318,7 @@ export async function renderDiagramsIn(root: ParentNode, dark: boolean): Promise
 
   for (const { node, source, key } of misses) {
     try {
-      const svg = await draw(source, theme);
+      const svg = await draw(source, theme, variables);
       remember(key, svg);
       // **The element may be gone.** Two keystrokes during that await and
       // `pane.ts` has replaced the pane's HTML; this node is detached, and the

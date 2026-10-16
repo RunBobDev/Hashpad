@@ -325,6 +325,11 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     },
   );
 
+  // The same for OLED black, which changes Mermaid's pie colours (diagrams.ts).
+  // The dark style is an attribute on <html> (theme.ts), not store state.
+  const darkStyleObserver = new MutationObserver(() => render());
+  darkStyleObserver.observe(document.documentElement, { attributeFilter: ['data-dark-style'] });
+
   /**
    * Where each `[data-source-line]` element sits, in the pane's own scroll
    * coordinates -- measured once per render, on the first scroll that needs it.
@@ -1130,6 +1135,7 @@ export function mountPreview(split: HTMLElement, view: EditorView): PreviewHandl
     unsubscribeMath();
     unsubscribeDiagrams();
     unsubscribeTheme();
+    darkStyleObserver.disconnect();
   }
 
   return { show, hide, destroy };

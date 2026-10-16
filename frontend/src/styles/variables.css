@@ -50,6 +50,12 @@
      available, and a 6px square is not a target anyone can hit. */
   --resize-corner: 14px;
 
+  /* PLATFORM: how much of the window's edge Windows 11's border covers. It is
+     drawn *over* a frameless window, one device pixel at 100% and two at 150%
+     (measured), and at the right edge it covered the scrollbar's last pixels.
+     `.workspace` and the print view are inset by this much. */
+  --window-border: 1px;
+
   /* PLATFORM: the one piece of per-OS styling in shared CSS. Segoe UI Variable
      on Win11, Segoe UI on Win10, system sans on Linux (SPEC §6.1). */
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
@@ -101,6 +107,15 @@
      derives a readable --accent from this rather than reusing it directly: a
      mid-tone blue that clears AA on white does not clear it on near-black. */
   --accent-base: #0078d4;
+}
+
+/* Two device pixels of border from 150% to 199%, where 1px is 1.5-1.99 device
+   pixels and was measured to round down to one -- the scrollbar measured 5px
+   of track left of its thumb and 4px right. 1.34px is just over two at 150%. */
+@media (min-resolution: 1.5dppx) and (max-resolution: 1.99dppx) {
+  :root {
+    --window-border: 1.34px;
+  }
 }
 
 /* `.theme-light` is the export container (export/build.ts). Exports are light
@@ -338,4 +353,18 @@
 
   /* Fences and inline code still read as blocks. */
   --syn-code-bg: #141414;
+
+  /* Mermaid's dark pie, corrected (diagrams.ts reads these; Dark has none, so
+     it keeps Mermaid's own). Mermaid outlines a pie in #000 and colours slices
+     1 and 9 #0b0000 and #161722, which vanish here -- the owner saw a pie with
+     no outline and a slice missing. The outline takes the #ccc Mermaid's dark
+     theme uses for its text; the two slices take hues the other ten lack. */
+  --diagram-pie-stroke: #cccccc;
+  --diagram-pie-1: #136060;
+  --diagram-pie-9: #5a5a1a;
+
+  /* The native dark scrollbar is a #2c2c2c track and #9f9f9f thumb whatever
+     is behind it -- right on Dark's #1a1a1a, too light on black (owner). Same
+     steps down from the background as on Dark: +0x12 and +0x85. */
+  scrollbar-color: #858585 #121212;
 }

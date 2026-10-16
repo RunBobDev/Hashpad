@@ -1851,3 +1851,40 @@ describe('destroy', () => {
     expect(store.getState().previewSplitRatio).toBeCloseTo(0.5);
   });
 });
+
+/**
+ * OLED black changes Mermaid's pie colours (diagrams.ts), and Mermaid bakes its
+ * colours into the SVG -- so, like a theme flip, a dark-style change is a
+ * re-render. The style lives on `<html>` rather than in the store.
+ */
+describe('the dark style', () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.darkStyle;
+  });
+
+  it('re-renders the pane when it changes', async () => {
+    const { split, handle } = mount('# One\n');
+    handle.show();
+    const pane = paneOf(split);
+    pane.append(document.createElement('hr'));
+
+    document.documentElement.dataset.darkStyle = 'oled';
+    await Promise.resolve();
+
+    expect(pane.querySelector('hr')).toBeNull();
+    expect(pane.querySelector('h1')?.textContent).toBe('One');
+    handle.destroy();
+  });
+
+  it('stops watching once destroyed', () => {
+    const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
+    const { handle } = mount('# One\n');
+    handle.show();
+    disconnect.mockClear();
+
+    handle.destroy();
+
+    expect(disconnect).toHaveBeenCalled();
+    disconnect.mockRestore();
+  });
+});
