@@ -202,6 +202,9 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
   if (active) getEditorView().setState(active.editorState);
 }
 
+/** What bootstrap left on <html>, read before any case can change it (the reset case does). */
+let startupDarkStyle: string | undefined;
+
 beforeAll(async () => {
   document.body.innerHTML = '<div id="app"></div>';
   // Dynamic, not static: main.ts reads `#app` from the DOM the instant it is
@@ -214,6 +217,7 @@ beforeAll(async () => {
   // ShowWindow() is the last thing bootstrap's finally block does, so
   // waiting for it is waiting for bootstrap to have fully finished.
   await vi.waitFor(() => expect(ShowWindow).toHaveBeenCalled());
+  startupDarkStyle = document.documentElement.dataset.darkStyle;
 });
 
 beforeEach(() => {
@@ -532,7 +536,7 @@ describe('tab.moveLeft / tab.moveRight commands', () => {
 
 describe('theme.system / theme.light / theme.dark commands', () => {
   it('applies the saved dark style at startup', () => {
-    expect(document.documentElement.dataset.darkStyle).toBe('oled');
+    expect(startupDarkStyle).toBe('oled');
   });
 
   it('theme.light applies the light theme immediately, with no await needed', () => {
