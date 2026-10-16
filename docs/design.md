@@ -2059,3 +2059,26 @@ returned — Settings simply closed, on every reset since H.4. jsdom has no
 `close()` and took a synchronous fallback, so every test passed. `closeSettings`
 now runs its (idempotent) close handler at once in every environment.
 
+**Touch-ups after the owner's first look.**
+
+- *Pie charts.* Mermaid's dark theme outlines a pie in `#000` and colours
+  slices 1 and 9 `#0b0000` and `#161722` (measured in the harness); on black
+  the outline vanished and the first slice — usually the largest — read as a
+  hole. OLED black now hands Mermaid four theme variables read from tokens in
+  its own block (`--diagram-pie-stroke` `#cccccc`, Mermaid's dark text colour;
+  `--diagram-pie-1` teal, `--diagram-pie-9` olive, hues the other ten lack).
+  Dark has none of those tokens and keeps Mermaid's own pie; exports draw light
+  and never read them. Mermaid bakes colours into its SVG, so the diagram cache
+  is keyed on the variables too, and the preview re-renders when
+  `data-dark-style` changes, as it does on a theme flip.
+- *Scrollbar colour.* The native dark scrollbar is a `#2c2c2c` track and
+  `#9f9f9f` thumb whatever is behind it — right on Dark's `#1a1a1a`, too light
+  on black. OLED black sets `scrollbar-color` to the same steps up from its
+  background: `#121212` and `#858585`. The native shape is kept.
+- *The scrollbar's right edge (Dark too).* Windows 11 draws its border *over* a
+  frameless window's outer device pixels — one at 100%, two at 150% — and at the
+  right edge they were the scrollbar's: 5px of track left of the thumb, 3px
+  right. `.workspace` and the print view are inset by `--window-border`, 1px,
+  or 1.34px from 150% to 199% where 1px rounded down to one device pixel.
+  Measured 5 and 5 afterwards at 150%.
+

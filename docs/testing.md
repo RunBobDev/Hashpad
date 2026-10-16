@@ -3269,6 +3269,17 @@ settings snapshotted and restored byte-identical):
 - *Reset to default:* back to Dark, `"darkStyle": "dark"` written — and
   Settings reopened showing Dark (it did not before this checkpoint's fix).
 
+**Touch-ups, verified the same day on the built exe** (pixel runs read from
+screenshots at 150% scaling):
+
+- *A nine-slice pie:* in OLED black, outline and slice edges `#cccccc`, the
+  first slice teal and the ninth olive, every slice visible; switched to Dark,
+  Mermaid's own black outline and near-black first slice, unchanged.
+- *Scrollbars:* OLED black track `#121212`, thumb `#858585`, the native shape
+  kept (5 | 13 | 5 px). Dark still `#2c2c2c` and `#9f9f9f`.
+- *The right edge:* 5 px of track either side of the thumb, then Windows' 2 px
+  border, in both styles — 5 | 13 | 3 before.
+
 ### Only you can judge these
 
 - [ ] **OLED black on your own screen**: whether hover and pressed greys, the
