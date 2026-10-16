@@ -23,7 +23,7 @@ import '../src/styles/app.css';
 function settings(): app.Settings {
   return {
     version: 2,
-    appearance: { theme: 'system', accentColor: '#0078d4', uiFontSize: 14 },
+    appearance: { theme: 'system', accentColor: '#0078d4', uiFontSize: 14, darkStyle: 'dark' },
     editor: {
       fontFamily: 'Cascadia Mono',
       fontSize: 14,

@@ -100,7 +100,9 @@ vi.mock('../wailsjs/go/app/App', () => ({
   // which is what pins DEFAULT_PINNED to this exact list.
   LoadSettings: vi.fn().mockResolvedValue({
     session: { recentFiles: [], openTabs: [], activeTab: -1 },
-    appearance: { theme: 'system', accentColor: '#0078d4' },
+    // OLED rather than the default, so the startup test below cannot pass by
+    // bootstrap doing nothing.
+    appearance: { theme: 'system', accentColor: '#0078d4', darkStyle: 'oled' },
     // bootstrap validates `window.previewSplitRatio` and seeds the store with it.
     window: {
       previewSplitRatio: 0.5,
@@ -529,6 +531,10 @@ describe('tab.moveLeft / tab.moveRight commands', () => {
 });
 
 describe('theme.system / theme.light / theme.dark commands', () => {
+  it('applies the saved dark style at startup', () => {
+    expect(document.documentElement.dataset.darkStyle).toBe('oled');
+  });
+
   it('theme.light applies the light theme immediately, with no await needed', () => {
     // Start from a known non-light state so the assertion below can't pass
     // by accident (e.g. the dataset attribute never having been set).
@@ -954,7 +960,7 @@ describe('settings.reset', () => {
   function defaults(): unknown {
     return {
       version: 2,
-      appearance: { theme: 'system', accentColor: '#0078d4', uiFontSize: 14 },
+      appearance: { theme: 'system', accentColor: '#0078d4', uiFontSize: 14, darkStyle: 'dark' },
       editor: {
         fontFamily: 'Cascadia Mono',
         fontSize: 14,
@@ -1062,6 +1068,15 @@ describe('settings.reset', () => {
     await vi.waitFor(() => {
       expect(document.documentElement.style.getPropertyValue('--size-ui')).toBe('14px');
     });
+  });
+
+  it('puts the dark style back to Dark', async () => {
+    vi.mocked(ResetSettings).mockResolvedValue(defaults() as never);
+    document.documentElement.dataset.darkStyle = 'oled';
+
+    emit('settings.reset');
+
+    await vi.waitFor(() => expect(document.documentElement.dataset.darkStyle).toBe('dark'));
   });
 
   /**

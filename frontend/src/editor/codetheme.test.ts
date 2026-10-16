@@ -328,17 +328,16 @@ describe("the preview's muted foregrounds", () => {
     },
   );
 
-  it.each(
-    THEMES.flatMap((theme) =>
-      SURFACES.map((surface) => ({ theme, ...surface })),
-    ),
-  )('$selector clears AA in $theme', ({ theme, fg, bg }) => {
-    const foreground = valueOf(fg, theme);
-    const background = valueOf(bg, theme);
-    const ratio = contrast(foreground, background);
-    expect(
-      ratio,
-      `--${fg} ${foreground} on --${bg} ${background} = ${ratio.toFixed(2)}:1`,
-    ).toBeGreaterThanOrEqual(4.5);
-  });
+  it.each(THEMES.flatMap((theme) => SURFACES.map((surface) => ({ theme, ...surface }))))(
+    '$selector clears AA in $theme',
+    ({ theme, fg, bg }) => {
+      const foreground = valueOf(fg, theme);
+      const background = valueOf(bg, theme);
+      const ratio = contrast(foreground, background);
+      expect(
+        ratio,
+        `--${fg} ${foreground} on --${bg} ${background} = ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });

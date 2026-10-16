@@ -26,7 +26,7 @@
  */
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import type { app } from '../../wailsjs/go/models';
-import { applyAccent, isValidAccent } from '../theme/theme';
+import { applyAccent, applyDarkStyle, isDarkStyle, isValidAccent } from '../theme/theme';
 import { applyTypography } from '../settings/typography';
 import {
   setAutosaveDelaySetting,
@@ -328,6 +328,22 @@ function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement 
   );
   theme.addEventListener('change', () => emitCommand(`theme.${theme.value}`));
 
+  // Applied and saved here: unlike the theme, nothing in main.ts owns it.
+  const darkStyle = select(
+    [
+      ['dark', 'Dark'],
+      ['oled', 'OLED black'],
+    ],
+    isDarkStyle(settings.appearance.darkStyle) ? settings.appearance.darkStyle : 'dark',
+  );
+  darkStyle.addEventListener('change', () => {
+    const style = isDarkStyle(darkStyle.value) ? darkStyle.value : 'dark';
+    applyDarkStyle(style);
+    saves.schedule('appearance.darkStyle', (next) => {
+      next.appearance.darkStyle = style;
+    });
+  });
+
   const accent = document.createElement('input');
   accent.type = 'color';
   accent.className = 'settings-dialog__control settings-dialog__control--color';
@@ -365,6 +381,7 @@ function appearanceGroup(settings: app.Settings, saves: Coalescer): HTMLElement 
 
   return group('Appearance', [
     row('Theme', theme),
+    row('Dark style', darkStyle, 'Used whenever Hashpad is dark'),
     row('Accent colour', accent),
     row('Interface font size', uiFontSize, `${LIMITS.uiFontSize.min}–${LIMITS.uiFontSize.max} px`),
     row('Preview font', previewFont),

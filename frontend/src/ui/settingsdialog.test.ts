@@ -226,6 +226,26 @@ describe('the controls carry the loaded settings', () => {
     expect(control<HTMLSelectElement>(dialog, 'select').value).toBe('dark');
   });
 
+  it('selects the dark style the file names', () => {
+    const dialog = mount(settingsFixture({ darkStyle: 'oled' }));
+
+    expect(byLabel<HTMLSelectElement>(dialog, 'Dark style').value).toBe('oled');
+  });
+
+  /** "Grey" was never a name for it (owner), and a hand-edited file can say anything. */
+  it('offers Dark and OLED black, and shows Dark for a value it does not know', () => {
+    const select = byLabel<HTMLSelectElement>(
+      mount(settingsFixture({ darkStyle: 'grey' })),
+      'Dark style',
+    );
+
+    expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['dark', 'Dark'],
+      ['oled', 'OLED black'],
+    ]);
+    expect(select.value).toBe('dark');
+  });
+
   it('shows the accent colour and the UI font size', () => {
     const dialog = mount();
 
@@ -324,6 +344,24 @@ describe('changing a setting', () => {
     expect(SaveSettings).not.toHaveBeenCalled();
 
     expect((await savedSettings()).appearance.accentColor).toBe('#11ff22');
+  });
+
+  /**
+   * Applied and saved here, unlike the theme: no module local in main.ts owns
+   * the dark style, so there is no second writer to keep in step.
+   */
+  it('applies the dark style at once, and persists it after', async () => {
+    const dialog = mount();
+    const { commands, stop } = captureCommands();
+    const select = byLabel<HTMLSelectElement>(dialog, 'Dark style');
+
+    select.value = 'oled';
+    select.dispatchEvent(new Event('change'));
+
+    expect(document.documentElement.dataset.darkStyle).toBe('oled');
+    expect((await savedSettings()).appearance.darkStyle).toBe('oled');
+    stop();
+    expect(commands).toEqual([]);
   });
 
   it('applies and persists the UI font size', async () => {

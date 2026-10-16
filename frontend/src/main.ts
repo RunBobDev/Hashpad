@@ -99,9 +99,12 @@ import {
 import type { PreviewHandle } from './preview/pane';
 import {
   applyAccent,
+  applyDarkStyle,
   applyTheme,
+  isDarkStyle,
   isValidAccent,
   resolveIsDark,
+  type DarkStyle,
   type ThemeMode,
 } from './theme/theme';
 
@@ -334,6 +337,10 @@ async function bootstrap(): Promise<void> {
     if (isValidAccent(settings.appearance.accentColor)) {
       applyAccent(settings.appearance.accentColor);
     }
+    // Before the theme, so the window background applyTheme hands Wails is
+    // already the right one. Anything but the two names is Dark (design §4.36).
+    const { darkStyle } = settings.appearance;
+    applyDarkStyle(isDarkStyle(darkStyle) ? darkStyle : 'dark');
     applyTheme(resolveIsDark(themeMode, systemIsDark));
 
     // Fonts, sizes and the content width, straight onto :root (SPEC §6.13).
@@ -989,6 +996,7 @@ async function resetSettings(): Promise<void> {
   // No validation on the way in, unlike bootstrap's read of the same fields.
   // This is Go's `DefaultSettings()`, not a hand-editable file -- there is no
   // trust boundary here, and `applyTypography` clamps its own inputs regardless.
+  applyDarkStyle(defaults.appearance.darkStyle as DarkStyle);
   void setThemeMode('system');
   applyAccent(defaults.appearance.accentColor);
   applyTypography(defaults);
