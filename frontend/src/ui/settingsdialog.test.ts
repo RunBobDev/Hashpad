@@ -582,8 +582,6 @@ describe('the Editor group', () => {
 
     const scope = editor(mount());
 
-    expect(byLabel<HTMLInputElement>(scope, 'Word wrap').checked).toBe(false);
-    expect(byLabel<HTMLInputElement>(scope, 'Line numbers').checked).toBe(true);
     expect(byLabel<HTMLInputElement>(scope, 'Tab width').value).toBe('8');
     expect(byLabel<HTMLInputElement>(scope, 'Insert spaces instead of tabs').checked).toBe(false);
     expect(byLabel<HTMLSelectElement>(scope, 'New documents open in').value).toBe('split');
@@ -644,41 +642,38 @@ describe('the Editor group', () => {
     expect(SaveSettings).not.toHaveBeenCalled();
   });
 
+  /** The View menu is their one place (owner). */
+  it('leaves word wrap and line numbers to the View menu', () => {
+    const labels = [...editor(mount()).querySelectorAll('.settings-dialog__label')].map(
+      (label) => label.textContent,
+    );
+
+    expect(labels).not.toContain('Word wrap');
+    expect(labels).not.toContain('Line numbers');
+  });
+
   /**
-   * Word wrap and the three behaviours go through `settings/live.ts`, which is
-   * what the View menu calls too. Asserted through the **store**, because that
-   * write is the part proving the dialog reached the shared setter rather than
-   * a private copy of it -- a copy would still reach `SaveSettings`.
+   * The behaviours go through `settings/live.ts`, which is what the View menu
+   * calls too. Asserted through the **store**, because that write is the part
+   * proving the dialog reached the shared setter rather than a private copy of
+   * it -- a copy would still reach `SaveSettings`.
    */
-  it('routes word wrap through the shared setter', async () => {
-    store.setState((prev) => ({ ...prev, wordWrap: true }));
-    const wrap = byLabel<HTMLInputElement>(editor(mount()), 'Word wrap');
+  it.each([['Insert spaces instead of tabs', 'insertSpaces', false]] as const)(
+    'routes %s through the shared behaviour setter',
+    async (label, key, next) => {
+      store.setState((prev) => ({
+        ...prev,
+        editorBehaviour: { showLineNumbers: false, tabSize: 2, insertSpaces: true },
+      }));
+      const box = byLabel<HTMLInputElement>(editor(mount()), label);
 
-    wrap.checked = false;
-    wrap.dispatchEvent(new Event('change'));
+      box.checked = next;
+      box.dispatchEvent(new Event('change'));
 
-    expect(store.getState().wordWrap).toBe(false);
-    await vi.waitFor(() => {
-      expect(vi.mocked(SaveSettings).mock.lastCall?.[0].editor.wordWrap).toBe(false);
-    });
-  });
-
-  it.each([
-    ['Line numbers', 'showLineNumbers', true],
-    ['Insert spaces instead of tabs', 'insertSpaces', false],
-  ] as const)('routes %s through the shared behaviour setter', async (label, key, next) => {
-    store.setState((prev) => ({
-      ...prev,
-      editorBehaviour: { showLineNumbers: false, tabSize: 2, insertSpaces: true },
-    }));
-    const box = byLabel<HTMLInputElement>(editor(mount()), label);
-
-    box.checked = next;
-    box.dispatchEvent(new Event('change'));
-
-    expect(store.getState().editorBehaviour[key]).toBe(next);
-    await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
-  });
+      expect(store.getState().editorBehaviour[key]).toBe(next);
+      await vi.waitFor(() => expect(SaveSettings).toHaveBeenCalled());
+    },
+  );
 
   /**
    * A partial change must leave its siblings alone. `setBehaviourSetting` merges

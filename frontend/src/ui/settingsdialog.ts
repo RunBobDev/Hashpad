@@ -18,7 +18,7 @@
  *
  * **Nothing here holds a settings object between changes.** Each save is its own
  * `LoadSettings` → mutate → `SaveSettings`, the read-modify-write every other
- * setter in the app uses (main.ts's `setWordWrapSetting` and friends). The
+ * setter in the app uses (`settings/live.ts`'s setters). The
  * alternative -- keep the copy loaded at open time and save that -- looks
  * cheaper and is wrong: the theme control below routes through the command bus,
  * which does its own save, so a held copy would be stale the moment the user
@@ -37,7 +37,6 @@ import {
   setDefaultViewModeSetting,
   setOpenedViewModeSetting,
   setSyncScrollSetting,
-  setWordWrapSetting,
 } from '../settings/live';
 import { store } from '../state/appcontext';
 import { isEncoding, type ViewModeSetting } from '../state/document';
@@ -491,14 +490,8 @@ function editorGroup(settings: app.Settings, saves: Coalescer, fonts: FontCatalo
     });
   });
 
-  const wordWrap = checkbox(state.wordWrap);
-  wordWrap.addEventListener('change', () => void setWordWrapSetting(wordWrap.checked));
-
-  const lineNumbers = checkbox(state.editorBehaviour.showLineNumbers);
-  lineNumbers.addEventListener('change', () => {
-    void setBehaviourSetting({ showLineNumbers: lineNumbers.checked });
-  });
-
+  // No word wrap or line numbers here: both are one click away in the View
+  // menu, and the owner saw no point in a second place for them.
   // Not debounced, unlike the typography fields. Each keystroke here
   // reconfigures a CodeMirror compartment rather than setting a CSS property,
   // and `setBehaviourSetting` is the same call the View menu makes -- one place
@@ -566,8 +559,6 @@ function editorGroup(settings: app.Settings, saves: Coalescer, fonts: FontCatalo
     row('Font', fontFamily),
     row('Font size', fontSize, `${LIMITS.editorFontSize.min}–${LIMITS.editorFontSize.max} px`),
     row('Line height', lineHeight, `${LIMITS.lineHeight.min}–${LIMITS.lineHeight.max}`),
-    row('Word wrap', wordWrap),
-    row('Line numbers', lineNumbers),
     row('Tab width', tabSize, `${LIMITS.tabSize.min}–${LIMITS.tabSize.max} spaces`),
     row('Insert spaces instead of tabs', insertSpaces),
     row('New documents open in', viewMode),
