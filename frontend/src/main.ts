@@ -131,10 +131,9 @@ mountMenuBar(
         return id === `theme.${themeMode}`;
       // Per *document*, not per window -- switch tabs and this legitimately
       // changes, which is exactly why it is read at open time.
-      case 'view.editor': {
-        const mode = activeDocument(store.getState())?.viewMode;
-        return mode !== undefined && !showsPreview(mode);
-      }
+      // The plain editor only: live preview has its own tick below (owner).
+      case 'view.editor':
+        return activeDocument(store.getState())?.viewMode === 'source';
       case 'view.preview':
         return activeDocument(store.getState())?.viewMode === 'split';
       // Not `showsPreview`: these two ticks are asking which *arrangement* is on,
@@ -930,13 +929,8 @@ async function togglePreview(): Promise<void> {
 }
 
 /**
- * View > Editor: the editor alone, in whichever editor mode -- source or live --
- * the document was last in. Asked for by the owner, because from reading view
- * the only way back was Preview, which goes to split first.
- *
- * Also what both toggles above do on the way out, so "back to the editor" has
- * one implementation. A choice rather than a toggle: already in the editor, it
- * does nothing, and records nothing.
+ * Leaving split or reading view: back to the editor mode -- source or live --
+ * the document was last in. What both toggles above do on the way out.
  */
 function showEditor(): void {
   const active = activeDocument(store.getState());
@@ -944,6 +938,19 @@ function showEditor(): void {
 
   store.setState((prev) => setViewMode(prev, active.id, active.previousViewMode));
   void recordViewModeUsed(active.previousViewMode);
+}
+
+/**
+ * View > Editor: the plain editor from any mode, live preview included (owner --
+ * from live it used to do nothing). A choice rather than a toggle: already
+ * there, it does nothing and records nothing.
+ */
+function showPlainEditor(): void {
+  const active = activeDocument(store.getState());
+  if (active === null || active.viewMode === 'source') return;
+
+  store.setState((prev) => setViewMode(prev, active.id, 'source', 'source'));
+  void recordViewModeUsed('source');
 }
 
 /**
@@ -1345,7 +1352,7 @@ document.addEventListener(COMMAND_EVENT, (event) => {
       break;
     }
     case 'view.editor':
-      showEditor();
+      showPlainEditor();
       break;
     case 'view.preview':
       void togglePreview();

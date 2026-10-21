@@ -371,8 +371,8 @@ describe('view.editor', () => {
     expect(activeDocument(store.getState())!.viewMode).toBe('source');
   });
 
-  // The editor mode the document was last in, not always source.
-  it('comes back to live preview when that is where the document was', async () => {
+  // Editor is the plain editor, whatever editor mode came before (owner).
+  it('goes to the plain editor even from split over live preview', async () => {
     const active = activeDocument(store.getState())!;
     setViewModeOf(active.id, 'source');
     emit('view.livePreview');
@@ -382,7 +382,19 @@ describe('view.editor', () => {
     emit('view.editor');
     await waitForPane(false);
 
-    expect(activeDocument(store.getState())!.viewMode).toBe('live');
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+  });
+
+  // It used to do nothing here: live preview has no pane, so it counted as "the
+  // editor" already (owner's report).
+  it('leaves live preview for the plain editor', () => {
+    const active = activeDocument(store.getState())!;
+    setViewModeOf(active.id, 'live');
+
+    emit('view.editor');
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('source');
+    expect(store.getState().recentViewModes[0]).toBe('source');
   });
 
   // A choice, not a toggle: choosing the editor while in it leaves it there.
@@ -397,7 +409,7 @@ describe('view.editor', () => {
     expect(store.getState().recentViewModes).toEqual([]);
   });
 
-  it('is ticked exactly when no preview is showing', async () => {
+  it('is ticked only in the plain editor', async () => {
     const active = activeDocument(store.getState())!;
     setViewModeOf(active.id, 'source');
     expect(editorTicked()).toBe('true');
@@ -409,7 +421,7 @@ describe('view.editor', () => {
     emit('view.editor');
     await waitForPane(false);
     setViewModeOf(active.id, 'live');
-    expect(editorTicked()).toBe('true');
+    expect(editorTicked()).toBe('false');
   });
 });
 
