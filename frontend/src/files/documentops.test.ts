@@ -135,6 +135,39 @@ describe('makeUntitledDocument', () => {
   });
 
   /**
+   * "Last used" is the document on screen, not the last mode switched to
+   * (owner): A in split, B switched to live last, back on A, File > New -- it
+   * opened in live, B's mode, which read as the old default coming back.
+   */
+  it('opens like the document on screen when the setting is Last used', () => {
+    const a = { ...cleanDoc('a', 'A'), viewMode: 'split' as const };
+    const b = { ...cleanDoc('b', 'B'), viewMode: 'live' as const };
+    store.setState((prev) => ({
+      ...prev,
+      documents: [a, b],
+      activeDocumentId: 'a',
+      defaultViewMode: 'last',
+      recentViewModes: ['live', 'split'],
+    }));
+
+    expect(makeUntitledDocument().viewMode).toBe('split');
+  });
+
+  /** A new document still never opens in reading view; it falls back past it. */
+  it('falls back past a document on screen in reading view', () => {
+    const a = { ...cleanDoc('a', 'A'), viewMode: 'preview' as const };
+    store.setState((prev) => ({
+      ...prev,
+      documents: [a],
+      activeDocumentId: 'a',
+      defaultViewMode: 'last',
+      recentViewModes: ['live'],
+    }));
+
+    expect(makeUntitledDocument().viewMode).toBe('live');
+  });
+
+  /**
    * SPEC §6.13's `files.defaultEncoding`. Untitled documents are the only ones
    * it reaches -- there is no file to have detected an encoding from yet, so
    * this is simply what Save As will write.
@@ -546,6 +579,51 @@ describe('openDocumentInNewTab', () => {
     });
 
     expect(activeDocument(store.getState())!.mixedLineEndings).toBe(true);
+  });
+
+  // The same rule as a new document: one meaning of "Last used" in both dropdowns.
+  it('opens like the document on screen when the setting is Last used', () => {
+    const a = { ...cleanDoc('a', 'A'), viewMode: 'split' as const };
+    store.setState((prev) => ({
+      ...prev,
+      documents: [a],
+      activeDocumentId: 'a',
+      openedViewMode: 'last',
+      recentViewModes: ['live'],
+    }));
+
+    openDocumentInNewTab({
+      path: 'C:/notes/next.md',
+      content: 'next',
+      encoding: 'utf-8',
+      lineEnding: 'lf',
+    });
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('split');
+  });
+
+  /**
+   * The blank tab a launch starts with is not "on screen" in that sense: a
+   * double-clicked file would otherwise take its mode instead of the last used.
+   */
+  it('looks past the blank start-up tab', () => {
+    const blank = { ...cleanDoc('blank', ''), viewMode: 'source' as const };
+    store.setState((prev) => ({
+      ...prev,
+      documents: [blank],
+      activeDocumentId: 'blank',
+      openedViewMode: 'last',
+      recentViewModes: ['preview'],
+    }));
+
+    openDocumentInNewTab({
+      path: 'C:/notes/launched.md',
+      content: 'launched',
+      encoding: 'utf-8',
+      lineEnding: 'lf',
+    });
+
+    expect(activeDocument(store.getState())!.viewMode).toBe('preview');
   });
 
   it('treats an absent mixed flag as not mixed', () => {

@@ -25,14 +25,17 @@ import {
   createUntitledDocument,
   isDirty,
   previousViewModeFor,
+  pushRecentViewMode,
   type Document,
   resolveViewMode,
 } from '../state/document';
 import {
+  activeDocument,
   activateDocument,
   addDocument,
   closeDocument,
   dropScratchDocuments,
+  isScratch,
   takeReopenPath,
 } from '../state/documents';
 import { getEditorView, store } from '../state/appcontext';
@@ -84,6 +87,20 @@ export function documentDirOf(filePath: string | null): string {
   return dir === '' || /^[A-Za-z]:$/.test(dir) ? filePath.slice(0, cut + 1) : dir;
 }
 
+/**
+ * What "Last used" resolves against: the document on screen first, then the
+ * history (owner -- switching tabs is using a mode too). The history alone gave
+ * the last mode *switched to*, often another tab's. A blank start-up tab is
+ * passed over, or a double-clicked file would take its mode.
+ */
+function lastUsedModes(): Document['viewMode'][] {
+  const state = store.getState();
+  const active = activeDocument(state);
+  return active === null || isScratch(active)
+    ? state.recentViewModes
+    : pushRecentViewMode(state.recentViewModes, active.viewMode);
+}
+
 /** Mints an untitled document with a real `EditorState`, ready to become a new tab. */
 export function makeUntitledDocument(): Document {
   return createUntitledDocument(
@@ -97,7 +114,7 @@ export function makeUntitledDocument(): Document {
     }),
     // Read from the store rather than defaulted, the same as the three above:
     // File > New in a window where the preview is open should keep it open.
-    resolveViewMode(store.getState().defaultViewMode, store.getState().recentViewModes, false),
+    resolveViewMode(store.getState().defaultViewMode, lastUsedModes(), false),
     // SPEC §6.13's `files.defaultEncoding`. Only untitled documents get it --
     // `openDocumentInNewTab` below takes the encoding Go detected, because
     // overriding a detected encoding with a default would transcode the file
@@ -302,7 +319,7 @@ export function openDocumentInNewTab(contents: FileContentsLike): void {
   const state = store.getState();
   const viewMode = resolveViewMode(
     state.openedViewMode,
-    state.recentViewModes,
+    lastUsedModes(),
     isMarkdownPath(contents.path),
   );
 

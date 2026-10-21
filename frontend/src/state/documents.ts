@@ -86,7 +86,7 @@ export function closeDocument(state: AppState, id: string, makeUntitled: () => D
  * `savedDoc`, so it is scratch by both measures, which is the right answer:
  * there is nothing in it to lose.
  */
-function isScratch(doc: Document): boolean {
+export function isScratch(doc: Document): boolean {
   return doc.filePath === null && doc.editorState.doc.length === 0 && !isDirty(doc);
 }
 
