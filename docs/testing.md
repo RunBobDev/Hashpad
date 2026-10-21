@@ -3317,6 +3317,30 @@ read back, the owner's settings snapshotted and restored):
 ### Only you can judge these
 
 - [ ] **The lists on your machine**: whether anything you would want is missing,
-      or anything there should not be (symbol fonts such as Wingdings are kept —
-      they draw letters, as symbols).
+      or anything there should not be (symbol, icon and pixel fonts are left
+      out).
+
+## After 0.7.0 — front matter, View > Editor, "Last used"
+
+Design §4.32 and §4.38.
+
+**Verified on the built exe** (2026-10-21, driven by a script, the owner's
+settings snapshotted and restored):
+
+- *Front matter in live preview:* opened with the cursor on line 1, plain text
+  with both `---` lines and nothing styled as a heading; a click in the body
+  turned it into the reading view's card (title, author); a click on the card
+  turned it back into text with the cursor on line 1. Source view no longer
+  draws it as a heading either.
+- *View > Editor:* in live preview only Live Preview was ticked; choosing
+  Editor switched to source.
+- *"Last used":* tab 1 switched to split last, then back on a tab in source,
+  Ctrl+N opened an Untitled tab in source.
+- *Settings:* Line height is followed directly by Tab width; no Word wrap or
+  Line numbers rows.
+
+### Only you can judge these
+
+- [ ] **The front-matter card in live preview** next to reading view's, in your
+      own documents.
 

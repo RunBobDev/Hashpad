@@ -182,7 +182,7 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [Mermaid](https://mermaid.js.org/); the print view's pages are drawn by
 [pdf.js](https://mozilla.github.io/pdf.js/).
 
-**Current state:** 20.0 MB executable, 1,971 automated tests (1,811 frontend,
+**Current state:** 20.0 MB executable, 1,988 automated tests (1,828 frontend,
 160 Go), no known defects.
 
 ---

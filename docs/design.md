@@ -1799,6 +1799,13 @@ showing does nothing.
 It is also what Preview and Reading View do when toggled off, so "back to the
 editor" has one implementation.
 
+**Changed after 0.7.0, at the owner's request:** Editor means the plain editor.
+It was ticked in live preview too, since live preview has no pane, and choosing
+it there did nothing for the same reason. It is now ticked only in source mode,
+and choosing it switches any mode — live preview included — to source. Turning
+Preview or Reading View off still returns to the editor mode the document was
+last in.
+
 ### 4.33 Export: what SPEC §7.3 leaves unsaid
 
 §7.3 asks for HTML, PDF through the print dialog, plain text, and rich text on
@@ -2121,3 +2128,36 @@ whole process tree, 153 MB for 0.6.0, 191 MB with the canvas, 157 MB without
 the list at all. Asked of GDI instead: 155 MB, and about 0.3 s in Go, which
 main.ts still starts after start so Settings finds the list ready. With no list
 — Linux until its checkpoint, or any failure — both settings stay text fields.
+
+### 4.38 Front matter in the editor, and what "Last used" means
+
+Two owner reports after 0.7.0.
+
+**Front matter.** The editor's markdown parser had no idea of it: the opening
+`---` was a horizontal rule, and the lines up to the closing `---` a Setext
+heading underlined by it. Live preview drew `title:`/`author:` as a heading,
+showed the top `---` and hid the bottom one as the heading's underline; source
+mode drew them as a heading too. The editor now parses a `FrontMatter` block
+(`editor/frontmatter.ts`) by the reading view's rule, which became one shared
+function, `frontMatterClose`, used by the reading view, the editor and the
+outline — the outline had its own copy, under which an unclosed `---` on line 1
+hid every heading. Live preview draws the reading view's card while the cursor
+is elsewhere and the text while it is on any of its lines, the reveal rule
+every mark follows; a click on the card puts the cursor in it. A file opens
+with the cursor on line 1, so front matter starts out as text.
+
+A block parser can see one line ahead, and the rule needs the closing fence
+before it claims the opening one. The parser reads the document through
+`BlockContext.input`, which `@lezer/markdown` has but does not type; the
+front-matter tests fail if a release drops it.
+
+**"Last used".** It resolved against the last view mode *switched to*, and
+switching tabs did not count: with A in split and B switched to live last,
+File > New from A opened in live, which read as the old default coming back. It
+now starts from the document on screen and falls back through the history, past
+reading view for a new document; opened files follow the same rule, so the two
+dropdowns mean one thing. The blank start-up tab is passed over, so a
+double-clicked file does not take its mode.
+
+**Settings.** Word wrap and Line numbers left the settings dialog; both stay in
+the View menu, which was already their main home.
