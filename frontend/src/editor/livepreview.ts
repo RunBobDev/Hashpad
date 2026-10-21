@@ -25,7 +25,13 @@
  * than a convenience. See `revealedAt`.
  */
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
-import { Facet, RangeSetBuilder, type EditorState, type Extension } from '@codemirror/state';
+import {
+  Facet,
+  RangeSetBuilder,
+  StateField,
+  type EditorState,
+  type Extension,
+} from '@codemirror/state';
 import { tags } from '@lezer/highlight';
 import {
   Decoration,
@@ -39,6 +45,7 @@ import {
 import type { SyntaxNode } from '@lezer/common';
 import { INLINE_MARK_NODES } from './marks';
 import { ASSET_ROUTE } from '../preview/rules/images';
+import { frontMatterRows } from '../preview/rules/frontmatter';
 
 /**
  * An empty `replace` spec: the range is removed from the rendered line with
@@ -919,6 +926,12 @@ const liveTypography: Extension = [
     '.cm-line.cm-live-setext-hidden': {
       display: 'none',
     },
+    // The reading view's front-matter card, less its 24px bottom margin: a
+    // block widget is measured without margins, so every line below would land
+    // that far off. Inset by the editor's padding, as each line is.
+    '.cm-frontmatter': {
+      margin: '0 var(--pad-editor)',
+    },
     // **`pre`, not inherited.** With word wrap on, `.cm-line` is `pre-wrap`,
     // which drops a run of spaces that lands at a wrap point -- and column
     // padding lands at the end of a cell, which is exactly where a long table
@@ -1004,11 +1017,78 @@ export const hideInlineMarks = ViewPlugin.fromClass(
 );
 
 /**
+ * Front matter as the reading view's card while the cursor is elsewhere, and
+ * as text while it is on any of its lines (owner) -- the reveal rule every
+ * mark here follows. The card is built from the same rows as the reading
+ * view's (`frontMatterRows`) and wears its class, so it looks the same.
+ */
+class FrontMatterWidget extends WidgetType {
+  constructor(readonly content: string) {
+    super();
+  }
+
+  eq(other: FrontMatterWidget): boolean {
+    return other.content === this.content;
+  }
+
+  toDOM(): HTMLElement {
+    const card = document.createElement('dl');
+    card.className = 'preview-frontmatter cm-frontmatter';
+    for (const row of frontMatterRows(this.content)) {
+      if ('raw' in row) {
+        const raw = document.createElement('div');
+        raw.className = 'preview-frontmatter__raw';
+        raw.textContent = row.raw;
+        card.append(raw);
+      } else {
+        const key = document.createElement('dt');
+        key.textContent = row.key;
+        const value = document.createElement('dd');
+        value.textContent = row.value;
+        card.append(key, value);
+      }
+    }
+    return card;
+  }
+
+  // A click goes to the editor, which puts the cursor in and shows the text.
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+function frontMatterCard(state: EditorState): DecorationSet {
+  const node = syntaxTree(state).topNode.firstChild;
+  if (node?.name !== 'FrontMatter' || revealedAt(state, node.from, node.to)) {
+    return Decoration.none;
+  }
+  // The lines between the two fences.
+  const content = state.doc.sliceString(node.from, node.to).split('\n').slice(1, -1).join('\n');
+  return Decoration.set(
+    Decoration.replace({ widget: new FrontMatterWidget(content), block: true }).range(
+      node.from,
+      node.to,
+    ),
+  );
+}
+
+/** A field, not part of `hideInlineMarks`: CodeMirror takes block widgets only from state. */
+const frontMatter = StateField.define<DecorationSet>({
+  create: frontMatterCard,
+  update: (card, tr) =>
+    tr.docChanged || tr.selection || syntaxTree(tr.state) !== syntaxTree(tr.startState)
+      ? frontMatterCard(tr.state)
+      : card,
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+/**
  * What the compartment holds when live preview is on: the markers hide
- * themselves, and the editor takes the reading view's typography.
+ * themselves, front matter becomes a card, and the editor takes the reading
+ * view's typography.
  *
- * One exported extension rather than two wired separately, so there is no
- * arrangement in which a document is in live mode with only half of it
+ * One exported extension rather than several wired separately, so there is
+ * no arrangement in which a document is in live mode with only part of it
  * applied.
  */
-export const livePreview: Extension = [hideInlineMarks, liveTypography];
+export const livePreview: Extension = [hideInlineMarks, frontMatter, liveTypography];

@@ -38,17 +38,10 @@ export function frontMatterPlugin(md: MarkdownIt): void {
       if (state.parentType !== 'root') return false;
       if (state.sCount[startLine]! - state.blkIndent >= 4) return false;
 
-      const open = state.getLines(startLine, startLine + 1, 0, false).trim();
-      if (open !== FENCE) return false;
-
-      let closeLine = -1;
-      for (let line = startLine + 1; line < endLine; line++) {
-        if (state.getLines(line, line + 1, 0, false).trim() === FENCE) {
-          closeLine = line;
-          break;
-        }
-      }
-      if (closeLine === -1) return false;
+      const closeLine = frontMatterClose((line) =>
+        line < endLine ? state.getLines(line, line + 1, 0, false) : undefined,
+      );
+      if (closeLine === null) return false;
       if (silent) return true;
 
       const token = state.push('hashpad_front_matter', '', 0);
@@ -70,20 +63,45 @@ export function frontMatterPlugin(md: MarkdownIt): void {
     const attrs = token.attrGet('data-source-line');
     const lineAttr = attrs !== null ? ` data-source-line="${attrs}"` : '';
 
-    const rows = token.content
-      .split(/\r?\n/)
-      .filter((line) => line.trim() !== '')
-      .map((line) => {
-        const colon = line.indexOf(':');
-        if (colon === -1) {
-          return `<div class="preview-frontmatter__raw">${md.utils.escapeHtml(line.trim())}</div>`;
-        }
-        const key = md.utils.escapeHtml(line.slice(0, colon).trim());
-        const value = md.utils.escapeHtml(line.slice(colon + 1).trim());
-        return `<dt>${key}</dt><dd>${value}</dd>`;
-      })
+    const rows = frontMatterRows(token.content)
+      .map((row) =>
+        'raw' in row
+          ? `<div class="preview-frontmatter__raw">${md.utils.escapeHtml(row.raw)}</div>`
+          : `<dt>${md.utils.escapeHtml(row.key)}</dt><dd>${md.utils.escapeHtml(row.value)}</dd>`,
+      )
       .join('');
 
     return `<dl class="preview-frontmatter"${lineAttr}>${rows}</dl>`;
   };
+}
+
+/**
+ * The index of the line that closes front matter, or null when there is none:
+ * `---` alone on the first line, at most three spaces in, closed by the next
+ * line that is `---` once trimmed. The one rule for the reading view, the
+ * editor (editor/frontmatter.ts) and the outline -- the editor once had none
+ * and read the block as a rule and a heading. `line(i)` is undefined past the end.
+ */
+export function frontMatterClose(line: (index: number) => string | undefined): number | null {
+  if (!/^ {0,3}---\s*$/.test(line(0) ?? '')) return null;
+  for (let index = 1; ; index++) {
+    const text = line(index);
+    if (text === undefined) return null;
+    if (text.trim() === FENCE) return index;
+  }
+}
+
+/** Front matter's lines as the card shows them: a key and value, or the raw line. */
+export function frontMatterRows(
+  content: string,
+): ({ key: string; value: string } | { raw: string })[] {
+  return content
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const colon = line.indexOf(':');
+      return colon === -1
+        ? { raw: line.trim() }
+        : { key: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim() };
+    });
 }

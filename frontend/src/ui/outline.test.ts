@@ -91,6 +91,11 @@ describe('outlineHeadings', () => {
     ]);
   });
 
+  /** Unclosed, it is no front matter in the preview either: the headings count. */
+  it('does not let an unclosed --- on line 1 hide every heading', () => {
+    expect(shape(['---', '', '# Real'])).toEqual(['1:3:Real']);
+  });
+
   /** Only at the very top. Anywhere else `---` is a rule or a setext underline. */
   it('does not treat a later --- as front matter', () => {
     expect(shape(['# Real', '', '---', '', '## Also real'])).toEqual(['1:1:Real', '2:5:Also real']);

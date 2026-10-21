@@ -17,6 +17,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { tags } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
 import { codeHighlightStyle } from './codetheme';
+import { FrontMatterExtension } from './frontmatter';
 import { HighlightMarkExtension, highlightMarkTag, highlightTag } from './highlightmark';
 import { MARKDOWN_CODE_LANGUAGES } from './languages';
 
@@ -281,7 +282,7 @@ export function markdownSupport(): Extension[] {
     markdown({
       base: markdownLanguage,
       codeLanguages: MARKDOWN_CODE_LANGUAGES,
-      extensions: [HighlightMarkExtension],
+      extensions: [HighlightMarkExtension, FrontMatterExtension],
     }),
     syntaxHighlighting(markdownHighlightStyle),
     syntaxHighlighting(codeHighlightStyle),

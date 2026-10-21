@@ -19,6 +19,7 @@ import { EditorView } from '@codemirror/view';
 import type { Text } from '@codemirror/state';
 import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import { headingLevelAt } from '../editor/marks';
+import { frontMatterClose } from '../preview/rules/frontmatter';
 import { readTopSourceLine, setTopSourceLineListener, store } from '../state/appcontext';
 import { clampOutlineWidth } from '../state/document';
 import { activeDocument } from '../state/documents';
@@ -75,23 +76,20 @@ function headingText(body: string, level: number): string {
 export function outlineHeadings(doc: Text): Heading[] {
   const headings: Heading[] = [];
   let fence: string | null = null;
-  let inFrontMatter = false;
   /** The previous line's text when it was ordinary paragraph text, else null. */
   let paragraphAbove: { line: number; text: string } | null = null;
   let lineNumber = 0;
+  // The reading view's rule, so an unclosed `---` hides nothing here either.
+  const frontMatterLines =
+    (frontMatterClose((index) => (index < doc.lines ? doc.line(index + 1).text : undefined)) ??
+      -1) + 1;
 
   for (const raw of doc.iterLines()) {
     lineNumber++;
     const line = raw;
 
     // Front matter first: inside it, nothing else applies.
-    if (lineNumber === 1 && line.trim() === '---') {
-      inFrontMatter = true;
-      paragraphAbove = null;
-      continue;
-    }
-    if (inFrontMatter) {
-      if (line.trim() === '---') inFrontMatter = false;
+    if (lineNumber <= frontMatterLines) {
       paragraphAbove = null;
       continue;
     }
