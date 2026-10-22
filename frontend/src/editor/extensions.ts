@@ -12,6 +12,8 @@ import {
   defaultKeymap,
   historyKeymap,
   indentLess,
+  redo,
+  undo,
   indentMore,
 } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
@@ -29,24 +31,51 @@ import { suppressEditorFileDrop } from '../ui/filedrop';
 import { pasteImage } from '../files/imageops';
 import { emitCommand } from '../ui/menubar';
 import { store } from '../state/appcontext';
+import { commandFor, isDefaultShortcut, shortcutFromEvent } from '../settings/shortcuts';
 import { DEFAULT_BEHAVIOUR, statusOf, type EditorBehaviour } from '../state/document';
 
 /**
- * Builds a CodeMirror command that dispatches the given `hashpad:command` id
- * on `document` instead of calling a file-operation function directly. The
- * menu bar (ui/menubar.ts) dispatches the exact same event for the exact same
- * ids, so File > Save and Ctrl+S run through one implementation
- * (files/fileops.ts's `saveActive`, wired up in main.ts) rather than two —
- * the pattern the toolbar will reuse in a later checkpoint. Returning `true`
- * marks the key as handled, which stops CodeMirror from also trying its own
- * bindings for the same chord and prevents the browser's default action
- * (e.g. Ctrl+S's save-page-as).
+ * The commands a shortcut runs on the editor itself. Everything else goes
+ * through the `hashpad:command` bus, which is also where the menus and the
+ * toolbar send it -- one implementation, two triggers.
  */
-function dispatchCommand(id: string): () => boolean {
-  return () => {
-    emitCommand(id);
-    return true;
-  };
+const EDITOR_COMMANDS: Readonly<Record<string, Command>> = {
+  'edit.find': openSearchPanel,
+  'edit.replace': openReplacePanel,
+  'edit.findNext': findNext,
+  'edit.findPrevious': findPrevious,
+  'edit.undo': undo,
+  'edit.redo': redo,
+  ...Object.fromEntries(
+    Object.entries(COMMANDS).map(([id, command]) => [`format.${id}`, toEditorCommand(command)]),
+  ),
+};
+
+/**
+ * `ui/zoom.ts` runs these from `window`, so zoom works in inputs and dialogs
+ * too. Claimed here without running, so the key does nothing else as well.
+ */
+const ZOOM_COMMANDS = new Set(['view.zoomIn', 'view.zoomOut', 'view.zoomReset']);
+
+/**
+ * Runs the command a key press is the shortcut for.
+ *
+ * A bound key is always claimed, even when its command declines: a format
+ * command inside a code block does nothing, rather than falling through to
+ * `defaultKeymap` (Ctrl+I is `selectParentSyntax`) or to Chromium's own bold
+ * on the contenteditable. A default key the user freed is claimed for the same
+ * reason -- and so Ctrl+P never reaches WebView2's print-the-window.
+ */
+function runShortcut(view: EditorView, event: KeyboardEvent): boolean {
+  const key = shortcutFromEvent(event);
+  if (key === null) return false;
+  const id = commandFor(store.getState().shortcuts, key);
+  if (id === null) return isDefaultShortcut(key);
+  if (ZOOM_COMMANDS.has(id)) return true;
+  const command = EDITOR_COMMANDS[id];
+  if (command !== undefined) command(view);
+  else emitCommand(id);
+  return true;
 }
 
 /**
@@ -263,29 +292,16 @@ export function buildExtensions(
     // is no image, and does so synchronously, because an await would land long
     // after the event could still be prevented.
     EditorView.domEventHandlers({ paste: (event, view) => pasteImage(view, event) }),
-    // High precedence so these file-command shortcuts always win, regardless
-    // of what defaultKeymap does or gains in a future CodeMirror version.
+    // High precedence so the user's shortcuts always win over whatever
+    // `defaultKeymap` does or gains in a future CodeMirror version -- and so
+    // Ctrl+Tab is claimed before WebView2 can take it as its own tab switch.
     Prec.high(
       keymap.of([
-        { key: 'Mod-o', run: dispatchCommand('file.open') },
-        { key: 'Mod-s', run: dispatchCommand('file.save') },
-        { key: 'Mod-Shift-s', run: dispatchCommand('file.saveAs') },
-        // Consumed like the rest, which matters here: WebView2's own Ctrl+P
-        // prints the whole window, chrome included.
-        { key: 'Mod-p', run: dispatchCommand('file.print') },
-        { key: 'Mod-Shift-c', run: dispatchCommand('edit.copyRich') },
-        { key: 'Mod-n', run: dispatchCommand('file.new') },
-        { key: 'Mod-w', run: dispatchCommand('tab.close') },
-        { key: 'Mod-Shift-t', run: dispatchCommand('tab.reopen') },
-        { key: 'Mod-Shift-p', run: dispatchCommand('view.preview') },
-        { key: 'Mod-Shift-o', run: dispatchCommand('view.outline') },
-        // SPEC §6.14's Ctrl+, . Through the bus like the rest, so File >
-        // Settings and the chord are one implementation.
-        { key: 'Mod-,', run: dispatchCommand('settings.open') },
-        // SPEC §6.14. Through the bus rather than called directly, because
-        // the menu triggers the same thing and one implementation should
-        // serve both -- the arrangement every other view toggle here uses.
-        { key: 'F11', run: dispatchCommand('view.fullscreen') },
+        // Every shortcut in the table (settings/shortcuts.ts), looked up on
+        // each press rather than compiled into this state, so a change in the
+        // shortcuts window reaches every open tab at once. First in the
+        // keymap so `ui/shortcuts.ts`'s `runScopeHandlers` reaches it too.
+        { any: runShortcut },
         /**
          * Tab indents (SPEC §6.13's `tabSize`/`insertSpaces`, which mean
          * nothing without it). CodeMirror leaves Tab unbound by default and
@@ -302,104 +318,15 @@ export function buildExtensions(
          * this codebase would record that they exist.
          */
         { key: 'Tab', run: indentOnTab, shift: indentLess },
-        // Find (SPEC §6.7, §6.14). These are `@codemirror/search`'s own
-        // commands rather than `hashpad:command` ids: they act on the editor's
-        // search state and nothing outside the editor has an opinion about
-        // them, so routing them through the bus would add a hop that only
-        // main.ts would ever unwrap. The Edit menu goes the other way and
-        // dispatches `edit.find`, which main.ts turns back into this command --
-        // one implementation, two triggers, the same as every format command.
-        { key: 'Mod-f', run: openSearchPanel },
-        { key: 'Mod-h', run: openReplacePanel },
-        { key: 'Mod-g', run: findNext, shift: findPrevious },
-        // F3 is the Windows convention and Notepad's own binding; SPEC §6.14
-        // says match it wherever one exists.
-        { key: 'F3', run: findNext, shift: findPrevious },
-        // Ctrl-Tab/Ctrl-Shift-Tab, spelled with the literal Ctrl- modifier
-        // rather than Mod-, because SPEC §6.2 fixes this as a Windows-style
-        // chord on every platform, not "whatever this OS calls its primary
-        // modifier". WebView2 (Chromium) can treat Ctrl+Tab as its own
-        // browser-tab-switching chord before a page ever sees the keydown,
-        // so only Prec.high plus dispatchCommand's unconditional `true`
-        // return reliably claims it first. There is no separate plain-Tab
-        // indent binding here to worry about clobbering: buildExtensions
-        // never adds @codemirror/commands' `indentWithTab`, and
-        // `defaultKeymap` itself has no Tab entry -- confirmed in
-        // extensions.test.ts, which dispatches a plain Tab keydown and
-        // checks it is left unhandled both before and after this block.
-        { key: 'Ctrl-Tab', run: dispatchCommand('tab.next') },
-        { key: 'Ctrl-Shift-Tab', run: dispatchCommand('tab.previous') },
-        // The keyboard path for reordering. Drag-and-drop is inherently
-        // mouse-only, so without these the strip has a capability no keyboard
-        // user can reach, against the project's full-keyboard-navigability
-        // constraint. Matches what Firefox and Chrome bind for moving a tab.
-        { key: 'Mod-Shift-ArrowLeft', run: dispatchCommand('tab.moveLeft') },
-        { key: 'Mod-Shift-ArrowRight', run: dispatchCommand('tab.moveRight') },
-        // One binding per position (Mod-Alt-1..9) rather than a single
-        // handler reading event.code: CodeMirror's own keymap dispatch
-        // already does modifier matching and Mac/Windows normalisation per
-        // binding, so this loop gets that for free instead of re-deriving
-        // it. Ctrl+Alt rather than plain Ctrl -- see documents.ts's
-        // documentAtPosition and the task brief -- because Ctrl+1..6 is
-        // reserved for heading levels in a later checkpoint; that collision
-        // was resolved deliberately and is not to be undone here.
-        ...Array.from({ length: 9 }, (_, i) => ({
-          key: `Mod-Alt-${i + 1}`,
-          run: dispatchCommand(`tab.goto${i + 1}`),
-        })),
-        // The sixteen formatting commands (commands.ts), each bound through
-        // `toEditorCommand` -- the same adapter the toolbar will wrap its
-        // buttons in (SPEC §6.5's "one implementation, two triggers"). Unlike
-        // every `dispatchCommand` binding above, these can decline (a command
-        // returns `false` when it does not apply, e.g. inside a fenced code
-        // block) and are spelled out individually rather than generated,
-        // since each maps to a different, spec-fixed chord.
-        { key: 'Mod-b', run: toEditorCommand(COMMANDS.bold) },
-        { key: 'Mod-i', run: toEditorCommand(COMMANDS.italic) },
-        { key: 'Mod-Shift-x', run: toEditorCommand(COMMANDS.strikethrough) },
-        { key: 'Mod-Shift-h', run: toEditorCommand(COMMANDS.highlight) },
-        { key: 'Mod-`', run: toEditorCommand(COMMANDS.inlineCode) },
-        { key: 'Mod-Shift-k', run: toEditorCommand(COMMANDS.codeBlock) },
-        { key: 'Mod-Shift-8', run: toEditorCommand(COMMANDS.bulletList) },
-        { key: 'Mod-Shift-7', run: toEditorCommand(COMMANDS.numberedList) },
-        { key: 'Mod-Shift-9', run: toEditorCommand(COMMANDS.taskList) },
-        { key: 'Mod-Shift-.', run: toEditorCommand(COMMANDS.blockquote) },
-        { key: 'Mod-k', run: toEditorCommand(COMMANDS.link) },
-        { key: 'Mod-Shift-i', run: toEditorCommand(COMMANDS.image) },
-        // Ctrl+Alt+T, not SPEC §6.5's Ctrl+Shift+T: that chord is already Reopen
-        // Closed Tab (SPEC §6.2/§6.14), shipped since Checkpoint C. The spec collides
-        // with itself here; the owner chose to keep reopen-tab and move Table into
-        // the Ctrl+Alt namespace this project already uses for tab positions.
-        { key: 'Mod-Alt-t', run: toEditorCommand(COMMANDS.table) },
-        { key: 'Mod-Shift--', run: toEditorCommand(COMMANDS.horizontalRule) },
-        { key: 'Mod-Shift-f', run: toEditorCommand(COMMANDS.footnote) },
-        ...([1, 2, 3, 4, 5, 6] as const).map((level) => ({
-          key: `Mod-${level}`,
-          run: toEditorCommand(COMMANDS[`heading${level}`]),
-        })),
-        // Last in this array on purpose. CodeMirror merges same-key bindings
-        // into one ordered run list, so these are tried only after the real
-        // commands above have declined -- and they must live in *this* array
-        // rather than a lower-precedence one, because what they exist to beat
-        // is `defaultKeymap`, which sits between the two.
-        //
-        // A declining command returns false so the chord can fall through,
-        // but for these two what it falls through to is wrong:
-        // - `Mod-i` is `selectParentSyntax` in `defaultKeymap`, so Ctrl+I
-        //   inside a fenced block (where italic declines) expanded the
-        //   selection to the enclosing node instead of doing nothing.
-        // - `Mod-b` is bound by nothing on Windows (`emacsStyleKeymap`'s
-        //   Ctrl-b is mac-only), so no binding calls preventDefault and the
-        //   keydown reaches the DOM. `contentDOM` is a real contenteditable,
-        //   so Chromium's own bold command can act on it.
-        //
-        // Claiming the chord in both cases makes "the command declined" mean
-        // nothing happens, which is what the user expects inside code.
-        { key: 'Mod-b', run: () => true },
-        { key: 'Mod-i', run: () => true },
       ]),
     ),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    // Undo and redo are in the table, so `historyKeymap` keeps only its
+    // selection-history keys. On Linux its Ctrl+Shift+Z would otherwise be a
+    // second redo that the shortcuts window does not list.
+    keymap.of([
+      ...defaultKeymap,
+      ...historyKeymap.filter((binding) => binding.run !== undo && binding.run !== redo),
+    ]),
     // Markdown language + token highlighting (highlight.ts), and the
     // blockquote line decoration it can't express on its own (blockquote.ts)
     // -- see those modules for why markers stay visible and why the

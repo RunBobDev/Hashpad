@@ -46,6 +46,7 @@ function seed(documents: Document[], activeId: string): void {
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
 }
 

@@ -52,6 +52,7 @@ import { flushTabTracking, openRecent, recentMenuItems, startSession } from './f
 import { mountDiskWatch } from './files/diskwatch';
 import { isFullscreen, syncFullscreen, toggleFullscreen } from './ui/fullscreen';
 import { applyTypography } from './settings/typography';
+import type { Shortcuts } from './settings/shortcuts';
 import {
   setAutosaveSetting,
   setBehaviourSetting,
@@ -314,6 +315,8 @@ async function bootstrap(): Promise<void> {
   let reopenTabs = true;
   let savedTabs: string[] = [];
   let savedActiveTab = -1;
+  // Every default, as on a fresh install.
+  let shortcuts: Shortcuts = {};
 
   try {
     const settings = await LoadSettings();
@@ -416,6 +419,9 @@ async function bootstrap(): Promise<void> {
     savedTabs = settings.session.openTabs ?? [];
     savedActiveTab = settings.session.activeTab;
     setRecentFiles(settings.session.recentFiles);
+    // Go's map[string]string guarantees the values are strings (a file that
+    // does not decode is replaced with defaults); `null` is a hand-edited file.
+    shortcuts = settings.shortcuts ?? {};
   } catch (err) {
     console.error('hashpad: failed to load settings; starting with the default theme', err);
     applyTheme(false);
@@ -434,6 +440,7 @@ async function bootstrap(): Promise<void> {
       autosave,
       autosaveDelayMs,
       outlineWidth,
+      shortcuts,
     }));
     // No View-menu toggle for this (Task 8 brief, ambiguity #3): that belongs
     // with Checkpoint H's settings dialog. (The checkmark support that comment
@@ -1031,6 +1038,8 @@ async function resetSettings(): Promise<void> {
     previewSplitRatio: defaults.window.previewSplitRatio,
     outlineWidth: defaults.window.outlineWidth,
     pinnedToolbarCommands: defaults.toolbar.pinned,
+    // Go's default is no changes, i.e. every shortcut back to its default.
+    shortcuts: {},
   }));
   // The store alone is half-wired for these two: the open editor is already
   // constructed, and only a reconfigure reaches it.

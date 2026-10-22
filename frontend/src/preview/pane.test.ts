@@ -138,6 +138,7 @@ function seedStore(documents: Document[], activeId: string, ratio = 0.5, syncScr
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
 }
 

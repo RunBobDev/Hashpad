@@ -65,6 +65,8 @@ export const store: Store<AppState> = createStore<AppState>({
   // Placeholder, like `previewSplitRatio` above: bootstrap replaces it with the
   // validated `window.outlineWidth` from settings.
   outlineWidth: DEFAULT_OUTLINE_WIDTH,
+  // Every shortcut at its default until bootstrap reads the user's changes.
+  shortcuts: {},
 });
 
 let editorView: EditorView | undefined;

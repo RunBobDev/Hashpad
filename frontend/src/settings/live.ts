@@ -24,6 +24,7 @@ import { LoadSettings, SaveSettings } from '../../wailsjs/go/app/App';
 import type { app } from '../../wailsjs/go/models';
 import { setEditorBehaviour, setWordWrap } from '../editor/extensions';
 import { getEditorView, store } from '../state/appcontext';
+import type { Shortcuts } from './shortcuts';
 import {
   clampAutosaveDelay,
   pushRecentViewMode,
@@ -233,5 +234,18 @@ export async function setOpenedViewModeSetting(mode: ViewModeSetting): Promise<v
 
   await persistSettings('open-with-view-mode', (settings) => {
     settings.editor.openedViewMode = mode;
+  });
+}
+
+/**
+ * The shortcuts window's changes (design §4.39): the whole map of overrides,
+ * replaced. The keymap reads the store on every press, so nothing else needs
+ * telling.
+ */
+export async function setShortcutsSetting(shortcuts: Shortcuts): Promise<void> {
+  store.setState((prev) => ({ ...prev, shortcuts }));
+
+  await persistSettings('shortcuts', (settings) => {
+    settings.shortcuts = { ...shortcuts };
   });
 }

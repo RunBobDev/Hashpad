@@ -1,4 +1,5 @@
 import type { EditorState, StateEffect, Text } from '@codemirror/state';
+import type { Shortcuts } from '../settings/shortcuts';
 
 /** Mirrors Go's `app.Encoding` (internal/app/textfile.go). */
 export type Encoding = 'utf-8' | 'utf-8-bom' | 'utf-16le';
@@ -503,6 +504,12 @@ export interface AppState {
    * the window resized.
    */
   outlineWidth: number;
+  /**
+   * The keyboard shortcuts the user changed (`settings/shortcuts.ts`), seeded
+   * by main.ts's bootstrap from `settings.json`. Read on every key press rather
+   * than compiled into each editor state, so a change reaches every tab at once.
+   */
+  shortcuts: Shortcuts;
 }
 
 /**

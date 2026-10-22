@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { store } from '../state/appcontext';
 import { mountZoom, zoomIn, zoomLevel, zoomOut, zoomReset } from './zoom';
 
 function cssZoom(): string {
@@ -72,6 +73,19 @@ describe('mountZoom', () => {
     const event = press(key);
     expect(zoomLevel()).toBeGreaterThan(1);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  /** The keys come from the shortcut table, so a changed one moves zoom with it. */
+  it('follows a zoom shortcut the user changed', () => {
+    store.setState((prev) => ({ ...prev, shortcuts: { 'view.zoomIn': 'Ctrl+Alt+I' } }));
+    try {
+      press('=');
+      expect(zoomLevel()).toBe(1);
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', ctrlKey: true, altKey: true }));
+      expect(zoomLevel()).toBeGreaterThan(1);
+    } finally {
+      store.setState((prev) => ({ ...prev, shortcuts: {} }));
+    }
   });
 
   it('zooms out on Ctrl+Minus and resets on Ctrl+0', () => {

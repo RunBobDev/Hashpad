@@ -62,6 +62,7 @@ function seed(documents: Document[], activeId: string | null): void {
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
   const active = documents.find((d) => d.id === activeId);
   if (active) view.setState(active.editorState);

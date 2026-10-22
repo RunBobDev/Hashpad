@@ -43,6 +43,7 @@ function resetStore(): void {
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
 }
 
@@ -848,6 +849,98 @@ describe('formatting command keymap', () => {
 
     view.destroy();
     view2.destroy();
+  });
+});
+
+/**
+ * The keymap reads the shortcut table on every press (design §4.39), so a
+ * change made in the shortcuts window applies to a view built before it.
+ */
+describe('shortcuts the user changed', () => {
+  afterEach(resetStore);
+
+  function override(shortcuts: Record<string, string>): void {
+    store.setState((prev) => ({ ...prev, shortcuts }));
+  }
+
+  it('runs a moved shortcut, and claims the old key without running anything', () => {
+    const view = mountView('');
+    override({ 'file.save': 'Ctrl+Alt+S' });
+    const { seen, stop } = captureCommands();
+
+    expect(pressKey(view, { key: 's', keyCode: 83, ctrlKey: true })).toBe(false);
+    expect(seen).toEqual([]);
+    pressKey(view, { key: 's', keyCode: 83, ctrlKey: true, altKey: true });
+    expect(seen).toEqual(['file.save']);
+
+    stop();
+    view.destroy();
+  });
+
+  /** Cleared, Ctrl+B must not fall through to Chromium's own bold. */
+  it('keeps a cleared default key, doing nothing with it', () => {
+    const view = mountView('hello');
+    view.dispatch({ selection: EditorSelection.range(0, 5) });
+    override({ 'format.bold': '' });
+
+    expect(pressKey(view, { key: 'b', keyCode: 66, ctrlKey: true })).toBe(false);
+    expect(view.state.doc.toString()).toBe('hello');
+    view.destroy();
+  });
+
+  it('gives a command with no default the key it was given', () => {
+    const view = mountView('');
+    override({ 'file.exit': 'Ctrl+Q' });
+    const { seen, stop } = captureCommands();
+
+    pressKey(view, { key: 'q', keyCode: 81, ctrlKey: true });
+
+    expect(seen).toEqual(['file.exit']);
+    stop();
+    view.destroy();
+  });
+
+  /** Ctrl+G was Find Next's second key; nobody's default now, so not ours to take. */
+  it('leaves a key that is no shortcut to the browser', () => {
+    const view = mountView('');
+    expect(pressKey(view, { key: 'g', keyCode: 71, ctrlKey: true })).toBe(true);
+    view.destroy();
+  });
+
+  /** `historyKeymap`'s own Ctrl+Z would otherwise bring a moved undo back. */
+  it('undoes on the key undo was moved to, and only there', () => {
+    const view = mountView('');
+    override({ 'edit.undo': 'Ctrl+Alt+Z' });
+    view.dispatch({ changes: { from: 0, insert: 'typed' } });
+
+    pressKey(view, { key: 'z', keyCode: 90, ctrlKey: true });
+    expect(view.state.doc.toString()).toBe('typed');
+    pressKey(view, { key: 'z', keyCode: 90, ctrlKey: true, altKey: true });
+    expect(view.state.doc.toString()).toBe('');
+    view.destroy();
+  });
+
+  it('runs Find Next on F3, without the bus', () => {
+    const view = mountView('a a');
+    const { seen, stop } = captureCommands();
+
+    expect(pressKey(view, { key: 'F3', keyCode: 114 })).toBe(false);
+
+    expect(seen).toEqual([]);
+    stop();
+    view.destroy();
+  });
+
+  /** ui/zoom.ts runs zoom from `window`; the editor must not run it a second time. */
+  it('claims a zoom key without dispatching it', () => {
+    const view = mountView('');
+    const { seen, stop } = captureCommands();
+
+    expect(pressKey(view, { key: '=', keyCode: 187, ctrlKey: true })).toBe(false);
+
+    expect(seen).toEqual([]);
+    stop();
+    view.destroy();
   });
 });
 

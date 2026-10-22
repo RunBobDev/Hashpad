@@ -133,6 +133,7 @@ function stateOf(documents: Document[], activeDocumentId: string | null): AppSta
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   };
 }
 

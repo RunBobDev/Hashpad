@@ -5,9 +5,9 @@
  * no jsdom, and no mounted `EditorView` to test, so the tests stay fast enough
  * to actually run on every change.
  *
- * `null` means "this command does not apply here" and is what makes the
- * keymap fall through to whatever else is bound, rather than swallowing the
- * key with a no-op transaction.
+ * `null` means "this command does not apply here": nothing is dispatched,
+ * rather than a no-op transaction that would still mark the document changed.
+ * The key itself is claimed either way (`editor/extensions.ts`'s `runShortcut`).
  */
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state';
 import type { Command } from '@codemirror/view';

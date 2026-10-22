@@ -365,6 +365,7 @@ describe('save-as records the new path on the document it saved', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
   }
 
@@ -452,6 +453,7 @@ describe('saving over a change on disk', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
   }
 

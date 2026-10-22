@@ -68,6 +68,7 @@ function seed(documents: Document[], overrides: Record<string, unknown> = {}): v
     autosaveDelayMs: 200,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
     ...overrides,
   }));
 }

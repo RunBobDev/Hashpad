@@ -14,6 +14,9 @@
  * not an editor command -- it has to work with the caret in the editor, the
  * focus in the preview, or nothing focused at all.
  */
+import { commandFor, shortcutFromEvent } from '../settings/shortcuts';
+import { store } from '../state/appcontext';
+
 const MIN = 0.5;
 const MAX = 3;
 /** A 10% step, which is roughly what browsers use and what fingers expect. */
@@ -51,9 +54,10 @@ export function zoomLevel(): number {
 /**
  * Wires the two input paths and returns a teardown.
  *
- * `Ctrl+=` as well as `Ctrl++`: the plus on the main row needs Shift, and every
- * browser treats the unshifted `=` as zoom-in for that reason. `Ctrl+NumpadAdd`
- * arrives as `+` already.
+ * The keys are whatever the shortcut table says (`settings/shortcuts.ts`),
+ * which reads `=`, Shift+= and the numpad's `+` all as Plus: the plus on the
+ * main row needs Shift, and every browser treats the unshifted `=` as zoom-in
+ * for that reason. The editor's keymap claims these keys without running them.
  *
  * **The wheel listener is passive, and that is load-bearing.** It used to
  * `preventDefault` to stop WebView2 running its own page zoom on top of ours --
@@ -74,10 +78,11 @@ export function zoomLevel(): number {
  */
 export function mountZoom(target: Window = window): () => void {
   const onKey = (event: KeyboardEvent): void => {
-    if (!event.ctrlKey || event.altKey) return;
-    if (event.key === '+' || event.key === '=') zoomIn();
-    else if (event.key === '-') zoomOut();
-    else if (event.key === '0') zoomReset();
+    const key = shortcutFromEvent(event);
+    const id = key === null ? null : commandFor(store.getState().shortcuts, key);
+    if (id === 'view.zoomIn') zoomIn();
+    else if (id === 'view.zoomOut') zoomOut();
+    else if (id === 'view.zoomReset') zoomReset();
     else return;
     event.preventDefault();
   };

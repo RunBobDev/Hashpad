@@ -31,12 +31,13 @@ import { runScopeHandlers, type EditorView } from '@codemirror/view';
  * well as the divider. Escape would reach the editor from inside an open
  * dialog.
  *
- * Every app-level shortcut is Ctrl-chorded, so restricting to modifiers loses
- * nothing and removes that entire class. Shift alone does not count -- it is
- * how capitals are typed, not a chord.
+ * A shortcut needs Ctrl or Alt, or is an F key (`settings/shortcuts.ts`'s
+ * `refusal`), so forwarding only those loses nothing and removes that entire
+ * class. F keys type nothing, and do something here only as a shortcut. Shift alone does
+ * not count -- it is how capitals are typed, not a chord.
  */
 function isChord(event: KeyboardEvent): boolean {
-  return event.ctrlKey || event.metaKey || event.altKey;
+  return event.ctrlKey || event.metaKey || event.altKey || /^F\d+$/.test(event.key);
 }
 
 /**

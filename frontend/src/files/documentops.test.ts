@@ -92,6 +92,7 @@ beforeEach(() => {
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
   vi.clearAllMocks();
 });
@@ -272,6 +273,7 @@ describe('switchToDocument', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -302,6 +304,7 @@ describe('switchToDocument', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -332,6 +335,7 @@ describe('switchToDocument', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -365,6 +369,7 @@ describe('switchToDocument', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -401,6 +406,7 @@ describe('switchToDocument', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     view.dispatch({ changes: { from: 5, insert: '!' } });
@@ -658,6 +664,7 @@ describe('openDocumentInNewTab', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -704,6 +711,7 @@ describe('openDocumentInNewTab', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -744,6 +752,7 @@ describe('opening a document over the startup tab', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(documents.find((d) => d.id === activeId)!.editorState);
   }
@@ -802,6 +811,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(b.editorState);
 
@@ -833,6 +843,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -863,6 +874,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('cancel');
@@ -896,6 +908,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('dontsave');
@@ -928,6 +941,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -965,6 +979,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -1006,6 +1021,7 @@ describe('closeDocumentWithPrompt', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(active.editorState);
     vi.mocked(confirmSave).mockResolvedValue('save');
@@ -1044,6 +1060,7 @@ describe('reopenLastClosed', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
 
@@ -1074,6 +1091,7 @@ describe('reopenLastClosed', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockResolvedValue({
@@ -1114,6 +1132,7 @@ describe('reopenLastClosed', () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }));
     view.setState(a.editorState);
     vi.mocked(ReadFile).mockRejectedValue(new Error('not found'));

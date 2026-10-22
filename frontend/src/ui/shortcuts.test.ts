@@ -168,6 +168,13 @@ describe('mountShortcuts', () => {
    * passed whether Shift was treated as a chord or not -- caught by mutation,
    * not by reading.
    */
+  /** A shortcut can be an F key on its own, so those are forwarded too. */
+  it('forwards an F key, which types nothing', () => {
+    press('F11');
+
+    expect(commands).toEqual(['view.fullscreen']);
+  });
+
   it('does not treat Shift alone as a chord', () => {
     const before = view.state.doc.toString();
 

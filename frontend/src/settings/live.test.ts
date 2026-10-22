@@ -66,6 +66,7 @@ vi.mock('../state/appcontext', async () => {
       autosaveDelayMs: 2000,
       status: EMPTY_STATUS,
       outlineWidth: DEFAULT_OUTLINE_WIDTH,
+      shortcuts: {},
     }),
     getEditorView: vi.fn(),
   };
@@ -134,6 +135,7 @@ beforeEach(() => {
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
 });
 

@@ -199,6 +199,7 @@ function setupDocs(docs: Document[], activeId: string, closedPaths: string[] = [
     autosaveDelayMs: 2000,
     status: EMPTY_STATUS,
     outlineWidth: DEFAULT_OUTLINE_WIDTH,
+    shortcuts: {},
   }));
   const active = docs.find((d) => d.id === activeId);
   if (active) getEditorView().setState(active.editorState);
@@ -1015,6 +1016,7 @@ describe('settings.reset', () => {
       autosaveDelayMs: 9000,
       previewSplitRatio: 0.2,
       outlineWidth: 400,
+      shortcuts: { 'file.save': 'Ctrl+Alt+S' },
     }));
   }
 
@@ -1044,6 +1046,7 @@ describe('settings.reset', () => {
     expect(state.autosaveDelayMs).toBe(2000);
     expect(state.previewSplitRatio).toBeCloseTo(0.5);
     expect(state.outlineWidth).toBeCloseTo(240);
+    expect(state.shortcuts).toEqual({});
   });
 
   /**
