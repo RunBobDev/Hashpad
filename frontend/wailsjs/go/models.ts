@@ -189,6 +189,7 @@ export namespace app {
 	    window: WindowSettings;
 	    toolbar: ToolbarSettings;
 	    print: PrintSettings;
+	    shortcuts: Record<string, string>;
 	    session: SessionState;
 	
 	    static createFrom(source: any = {}) {
@@ -205,6 +206,7 @@ export namespace app {
 	        this.window = this.convertValues(source["window"], WindowSettings);
 	        this.toolbar = this.convertValues(source["toolbar"], ToolbarSettings);
 	        this.print = this.convertValues(source["print"], PrintSettings);
+	        this.shortcuts = source["shortcuts"];
 	        this.session = this.convertValues(source["session"], SessionState);
 	    }
 	

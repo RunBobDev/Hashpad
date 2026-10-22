@@ -192,6 +192,9 @@ type Settings struct {
 	Window     WindowSettings     `json:"window"`
 	Toolbar    ToolbarSettings    `json:"toolbar"`
 	Print      PrintSettings      `json:"print"`
+	// Only the keyboard shortcuts the user changed, by command id; "" means
+	// cleared. The defaults live in the frontend's table (settings/shortcuts.ts).
+	Shortcuts map[string]string `json:"shortcuts"`
 	// Last, so it is written last: Go encodes fields in declaration order.
 	Session SessionState `json:"session"`
 }
@@ -245,7 +248,8 @@ func DefaultSettings() Settings {
 		Print: PrintSettings{
 			Title: true, Date: true, PageNumbers: true, Paper: "a4", Orientation: "portrait",
 		},
-		Session: SessionState{RecentFiles: []string{}, OpenTabs: []string{}, ActiveTab: -1},
+		Shortcuts: map[string]string{},
+		Session:   SessionState{RecentFiles: []string{}, OpenTabs: []string{}, ActiveTab: -1},
 	}
 }
 

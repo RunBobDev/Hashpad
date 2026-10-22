@@ -142,6 +142,9 @@ func TestSaveThenLoadRoundTripsNonDefaultValues(t *testing.T) {
 	// passing on a nil/empty technicality.
 	want.Toolbar.Visible = false
 	want.Toolbar.Pinned = []string{}
+	// A moved shortcut and a cleared one: "" must survive as "no shortcut",
+	// not vanish and bring the default back.
+	want.Shortcuts = map[string]string{"file.save": "Ctrl+Alt+S", "format.bold": ""}
 
 	if err := SaveSettingsTo(path, want); err != nil {
 		t.Fatalf("save: %v", err)
@@ -226,6 +229,11 @@ func TestLoadSettingsFromPartialFileFillsDefaults(t *testing.T) {
 	}
 	if got.Appearance.AccentColor != DefaultSettings().Appearance.AccentColor {
 		t.Errorf("accentColor = %q, want default", got.Appearance.AccentColor)
+	}
+	// A file from before the section existed: no overrides, and a map rather
+	// than null, so the frontend reads every default.
+	if got.Shortcuts == nil || len(got.Shortcuts) != 0 {
+		t.Errorf("shortcuts = %#v, want an empty map", got.Shortcuts)
 	}
 }
 
@@ -446,6 +454,7 @@ func TestResetSettingsOverwritesTheFileWithDefaults(t *testing.T) {
 	edited.Appearance.Theme = "dark"
 	edited.Editor.TabSize = 8
 	edited.Files.DefaultEncoding = "utf-16le"
+	edited.Shortcuts = map[string]string{"file.save": "Ctrl+Alt+S"}
 	if err := SaveSettingsTo(path, edited); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
