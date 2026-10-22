@@ -31,8 +31,8 @@ property of the build, not a setting that can be toggled on by accident.
 ## Features
 
 **Editing** — CodeMirror 6 with markdown syntax highlighting, sixteen formatting
-commands with keyboard shortcuts, find and replace, a document outline, word
-wrap, and zoom.
+commands, keyboard shortcuts you can change for every command, find and
+replace, a document outline, word wrap, and zoom.
 
 **Preview** — a live pane rendered by markdown-it and sanitised by DOMPurify,
 with scroll synchronisation, GitHub-flavoured styling that follows the active
@@ -182,7 +182,7 @@ Built with [Wails v2](https://wails.io/), [CodeMirror 6](https://codemirror.net/
 [Mermaid](https://mermaid.js.org/); the print view's pages are drawn by
 [pdf.js](https://mozilla.github.io/pdf.js/).
 
-**Current state:** 20.0 MB executable, 1,988 automated tests (1,828 frontend,
+**Current state:** 20.0 MB executable, 2,039 automated tests (1,879 frontend,
 160 Go), no known defects.
 
 ---

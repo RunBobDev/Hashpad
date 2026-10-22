@@ -3344,3 +3344,28 @@ settings snapshotted and restored):
 - [ ] **The front-matter card in live preview** next to reading view's, in your
       own documents.
 
+## Checkpoint Q — keyboard shortcuts
+
+Design §4.39.
+
+**Verified on the built exe** (2026-10-22, driven by a script on the VM's
+Croatian layout, the owner's settings snapshotted and restored):
+
+- *The window:* Settings → Keyboard → Change… opened it over Settings; rows
+  grouped by menu, "None" and a dimmed × for commands without a shortcut.
+- *Recording:* clicking Save's keys showed "Press keys…"; Ctrl+Alt+S was
+  recorded and ↺ appeared. Escape while recording cancelled and left the window
+  open.
+- *Conflict:* Ctrl+B on Save showed "Ctrl+B is used by Bold." with Replace
+  focused; Cancel left both alone.
+- *Running:* after an edit, Ctrl+S left the file and the unsaved dot as they
+  were; Ctrl+Alt+S saved. A freed Ctrl+G did nothing — no WebView2 find bar.
+- *Menu:* File showed Save as Ctrl+Alt+S.
+
+### Only you can judge these
+
+- [ ] **The window's layout and wording**, and whether a command you use is
+      missing from the list.
+- [ ] **A few shortcuts of your own**, on your keyboard: Ctrl+Alt ones in
+      particular, since AltGr typing is kept and a Ctrl+Alt key that types a
+      character on your layout cannot be a shortcut.

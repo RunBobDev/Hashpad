@@ -701,8 +701,8 @@ it, so it costs nothing.
 ### 6.2 Frontend — shipped in the binary
 
 CodeMirror 6: `@codemirror/state`, `/view`, `/commands`, `/language`, `/search`,
-`/lang-markdown`, `/language-data`, plus the `@lezer/*` and `style-mod` packages they pull
-in transitively.
+`/lang-markdown`, `/language-data`, plus the `@lezer/*`, `style-mod` and `w3c-keyname`
+packages they pull in transitively (`w3c-keyname` is also imported directly, §4.39).
 
 Markdown: `markdown-it`, `markdown-it-mark`, `markdown-it-footnote`, `dompurify`.
 
@@ -2161,3 +2161,51 @@ double-clicked file does not take its mode.
 
 **Settings.** Word wrap and Line numbers left the settings dialog; both stay in
 the View menu, which was already their main home.
+
+### 4.39 Customizable keyboard shortcuts
+
+Checkpoint Q, at the owner's request ("option to change macros for every
+button", meaning keyboard shortcuts). Settings → Keyboard → Change… opens a
+window listing every menu item and toolbar button — Heading as its six levels,
+plus Replace, Find Next and Find Previous, which no menu shows — grouped like
+the menus, with a search box. Open Recent is left out (it opens a list), and so
+is the heading list's "Normal text" (a choice in a list, not a command).
+
+**One notation, one function.** A shortcut is stored as the string the menus
+show (`Ctrl+Shift+S`), and `shortcutFromEvent` (`settings/shortcuts.ts`) makes
+that string from a key press. The window records with it and the editor runs
+with it, so the two cannot disagree. Keys are named by position through
+CodeMirror's own table (`w3c-keyname`, now declared rather than only pulled in):
+Ctrl+Shift+8 is Ctrl+Shift+8 whether the layout puts `*` or `(` on it, and Š on
+a Croatian keyboard shows as `[`. `=`, Shift+= and the numpad's `+` are all
+Plus. Ctrl+Alt that types a character is AltGr typing, not a shortcut — the line
+CodeMirror already drew, kept so Croatian AltGr+1 still types `~`.
+
+**Only changes are stored**: `settings.json`'s `shortcuts` maps a command id to
+its keys, `""` for none. An entry back at its default is dropped, so a default
+changed in a later version reaches everyone who never touched it. Reset to
+default empties it with the rest.
+
+**The editor reads the table on every press.** The ~45 bindings became one
+CodeMirror `any` binding at high precedence, so a change reaches every tab
+without rebuilding any editor state. A bound key is always claimed, even when
+its command declines (Ctrl+I in a code block does nothing rather than
+`selectParentSyntax`), and so is a default key the user freed — cleared Bold
+leaves Ctrl+B doing nothing instead of Chromium's own bold, and a freed Ctrl+P
+never reaches WebView2's print-the-window. Undo and redo moved into the table;
+zoom keeps its window listener so it still works in inputs and dialogs, and
+reads the table too. F keys are now forwarded from outside the editor, since a
+shortcut can be one.
+
+**Rules the owner chose.** One shortcut per command: Find Next is F3 and Find
+Previous Shift+F3, which freed Ctrl+G and Ctrl+Shift+G. A shortcut needs Ctrl
+or Alt, or is an F key; Ctrl+A, C, X, V and Alt+F4 are refused with the reason.
+A key another command has is offered with Replace (that command is left
+without one) or Cancel; ↺ on a changed row goes through the same check, and
+Reset all asks first. The arrows, Enter, Backspace, Delete, Tab indenting and
+Esc stay fixed.
+
+**Display.** Menus and toolbar tooltips look the keys up instead of carrying
+text. The heading button shows Ctrl+1…6 only while all six are defaults, and the
+horizontal rule's tooltip now reads Ctrl+Shift+Minus, like the menu's
+Ctrl+Minus.
