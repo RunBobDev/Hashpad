@@ -24,6 +24,7 @@
  * who's listening.
  */
 import { store } from '../state/appcontext';
+import { shortcutFor } from '../settings/shortcuts';
 import { emitCommand } from './menubar';
 import { ICONS } from './icons';
 import {
@@ -54,8 +55,6 @@ interface ToolbarCommand {
    */
   id: CommandId | HeadingButtonId;
   label: string;
-  /** Displayed form of the shortcut bound in editor/extensions.ts's keymap. */
-  shortcut: string;
   /** SPEC §6.1's three visual clusters, in display order: 1 = inline marks
    * and structure, 2 = the three list types, 3 = block-level inserts. */
   group: number;
@@ -70,28 +69,28 @@ interface ToolbarCommand {
  */
 export const TOOLBAR_COMMANDS = [
   // Group 1: inline marks, plus the two "insert code" commands and heading.
-  { id: 'bold', label: 'Bold', shortcut: 'Ctrl+B', group: 1 },
-  { id: 'italic', label: 'Italic', shortcut: 'Ctrl+I', group: 1 },
-  { id: 'strikethrough', label: 'Strikethrough', shortcut: 'Ctrl+Shift+X', group: 1 },
-  { id: 'highlight', label: 'Highlight', shortcut: 'Ctrl+Shift+H', group: 1 },
-  { id: 'inlineCode', label: 'Inline code', shortcut: 'Ctrl+`', group: 1 },
-  { id: 'codeBlock', label: 'Code block', shortcut: 'Ctrl+Shift+K', group: 1 },
-  { id: 'heading', label: 'Heading', shortcut: 'Ctrl+1…6', group: 1 },
+  { id: 'bold', label: 'Bold', group: 1 },
+  { id: 'italic', label: 'Italic', group: 1 },
+  { id: 'strikethrough', label: 'Strikethrough', group: 1 },
+  { id: 'highlight', label: 'Highlight', group: 1 },
+  { id: 'inlineCode', label: 'Inline code', group: 1 },
+  { id: 'codeBlock', label: 'Code block', group: 1 },
+  { id: 'heading', label: 'Heading', group: 1 },
 
   // Group 2: the three list types.
-  { id: 'bulletList', label: 'Bullet list', shortcut: 'Ctrl+Shift+8', group: 2 },
-  { id: 'numberedList', label: 'Numbered list', shortcut: 'Ctrl+Shift+7', group: 2 },
-  { id: 'taskList', label: 'Task list', shortcut: 'Ctrl+Shift+9', group: 2 },
+  { id: 'bulletList', label: 'Bullet list', group: 2 },
+  { id: 'numberedList', label: 'Numbered list', group: 2 },
+  { id: 'taskList', label: 'Task list', group: 2 },
 
   // Group 3: blockquote and the block-level inserts.
-  { id: 'blockquote', label: 'Blockquote', shortcut: 'Ctrl+Shift+.', group: 3 },
-  { id: 'link', label: 'Link', shortcut: 'Ctrl+K', group: 3 },
-  { id: 'image', label: 'Image', shortcut: 'Ctrl+Shift+I', group: 3 },
+  { id: 'blockquote', label: 'Blockquote', group: 3 },
+  { id: 'link', label: 'Link', group: 3 },
+  { id: 'image', label: 'Image', group: 3 },
   // Ctrl+Alt+T, not SPEC §6.5's Ctrl+Shift+T -- see editor/extensions.ts's
   // keymap comment: that chord is already Reopen Closed Tab.
-  { id: 'table', label: 'Table', shortcut: 'Ctrl+Alt+T', group: 3 },
-  { id: 'horizontalRule', label: 'Horizontal rule', shortcut: 'Ctrl+Shift+-', group: 3 },
-  { id: 'footnote', label: 'Footnote', shortcut: 'Ctrl+Shift+F', group: 3 },
+  { id: 'table', label: 'Table', group: 3 },
+  { id: 'horizontalRule', label: 'Horizontal rule', group: 3 },
+  { id: 'footnote', label: 'Footnote', group: 3 },
   // `as const satisfies` rather than a plain `readonly ToolbarCommand[]`
   // annotation: the annotation widens each `id` back to the full union and
   // makes the members mutable, while this keeps the literal ids -- which is
@@ -213,7 +212,8 @@ function activeHeadingId(active: string): string | null {
 function headingPopupItems(): PopupItem[] {
   const items: PopupItem[] = [];
   for (let level = 1; level <= 6; level++) {
-    items.push({ id: `heading${level}`, label: `Heading ${level}`, shortcut: `Ctrl+${level}` });
+    const keys = shortcutFor(store.getState().shortcuts, `format.heading${level}`);
+    items.push({ id: `heading${level}`, label: `Heading ${level}`, shortcut: keys });
   }
   items.push({ id: 'normal', label: 'Normal text' });
   return items;
@@ -267,6 +267,20 @@ function buildSeparator(): HTMLElement {
  * actually renders -- which is what lets `ICONS` be indexed without a
  * fallback, since it is keyed by exactly that set.
  */
+/**
+ * The keys a toolbar command has now (settings/shortcuts.ts), or `''`. The
+ * heading button stands for six commands, so it shows "Ctrl+1…6" only while
+ * all six are their defaults.
+ */
+function shortcutOf(id: ToolbarCommand['id']): string {
+  const shortcuts = store.getState().shortcuts;
+  if (id !== 'heading') return shortcutFor(shortcuts, `format.${id}`);
+  const levels = [1, 2, 3, 4, 5, 6].map((level) =>
+    shortcutFor(shortcuts, `format.heading${level}`),
+  );
+  return levels.every((keys, i) => keys === `Ctrl+${i + 1}`) ? 'Ctrl+1…6' : '';
+}
+
 function buildButton(
   command: (typeof TOOLBAR_COMMANDS)[number],
   active: string,
@@ -276,7 +290,8 @@ function buildButton(
   button.className = 'toolbar__button';
   button.dataset.command = command.id;
 
-  const accessibleName = `${command.label} (${command.shortcut})`;
+  const keys = shortcutOf(command.id);
+  const accessibleName = keys === '' ? command.label : `${command.label} (${keys})`;
   button.setAttribute('aria-label', accessibleName);
   button.title = accessibleName;
 
@@ -323,7 +338,7 @@ function overflowPopupItems(pinnedIds: ReadonlySet<string>): PopupItem[] {
   return TOOLBAR_COMMANDS.map((command) => ({
     id: command.id,
     label: command.label,
-    shortcut: command.shortcut,
+    shortcut: shortcutOf(command.id),
     marker: { on: pinnedIds.has(command.id), label: PINNED },
   }));
 }
@@ -680,5 +695,10 @@ export function mountToolbar(
   store.subscribe(
     (state) => state.activeFormats,
     (active) => rerender(active),
+  );
+  // The tooltips carry the shortcuts, which the shortcuts window can change.
+  store.subscribe(
+    (state) => state.shortcuts,
+    () => rerender(store.getState().activeFormats),
   );
 }

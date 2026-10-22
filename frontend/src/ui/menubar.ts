@@ -15,6 +15,8 @@
  *    own items, and Left/Right hands off to the neighbouring top-level menu.
  */
 import { Quit, WindowMinimise, WindowToggleMaximise } from '../../wailsjs/runtime/runtime';
+import { shortcutFor } from '../settings/shortcuts';
+import { store } from '../state/appcontext';
 
 export const COMMAND_EVENT = 'hashpad:command';
 
@@ -52,8 +54,6 @@ export function emitCommand(id: string): void {
 export interface MenuItem {
   id: string;
   label: string;
-  /** Displayed beside the label; every shortcut is discoverable here (SPEC §6.14). */
-  shortcut?: string;
   /** Commands whose checkpoint has not landed yet render greyed rather than lying. */
   enabled: boolean;
   /**
@@ -164,18 +164,18 @@ interface Menu {
  * active. `MenuItem` has no field for that, and adding one is out of scope
  * for the checkpoint that first gives these commands somewhere to live.
  */
-const MENUS: Menu[] = [
+export const MENUS: Menu[] = [
   {
     label: 'File',
     items: [
-      { id: 'file.new', label: 'New', shortcut: 'Ctrl+N', enabled: true },
-      { id: 'file.open', label: 'Open…', shortcut: 'Ctrl+O', enabled: true },
+      { id: 'file.new', label: 'New', enabled: true },
+      { id: 'file.open', label: 'Open…', enabled: true },
       // Design §4.35. Its entries come from `submenuItems` each time it opens.
       { id: 'file.openRecent', label: 'Open Recent', enabled: true, submenu: true },
-      { id: 'tab.close', label: 'Close Tab', shortcut: 'Ctrl+W', enabled: true },
-      { id: 'tab.reopen', label: 'Reopen Closed Tab', shortcut: 'Ctrl+Shift+T', enabled: true },
-      { id: 'file.save', label: 'Save', shortcut: 'Ctrl+S', enabled: true },
-      { id: 'file.saveAs', label: 'Save As…', shortcut: 'Ctrl+Shift+S', enabled: true },
+      { id: 'tab.close', label: 'Close Tab', enabled: true },
+      { id: 'tab.reopen', label: 'Reopen Closed Tab', enabled: true },
+      { id: 'file.save', label: 'Save', enabled: true },
+      { id: 'file.saveAs', label: 'Save As…', enabled: true },
       // File rather than View, where the app's other checkable toggles live:
       // this one is about *saving*, not about what is on screen, and it belongs
       // beside the two commands it changes the behaviour of. VS Code, the
@@ -192,7 +192,7 @@ const MENUS: Menu[] = [
       { id: 'file.exportText', label: 'Export as Plain Text…', enabled: true },
       // Not "Export as PDF": what opens is the system print dialog, and a name
       // that says so avoids the surprise. Its "Save as PDF" printer is the PDF.
-      { id: 'file.print', label: 'Print or Save as PDF…', shortcut: 'Ctrl+P', enabled: true },
+      { id: 'file.print', label: 'Print or Save as PDF…', enabled: true },
       // File rather than Edit: SPEC §6.1 gives this app File/Edit/View/Help and
       // no Tools menu, and the closest thing to a convention for a Windows
       // editor of this shape is VS Code's File > Preferences > Settings. SPEC
@@ -201,7 +201,6 @@ const MENUS: Menu[] = [
       {
         id: 'settings.open',
         label: 'Settings…',
-        shortcut: 'Ctrl+,',
         enabled: true,
         separatorBefore: true,
       },
@@ -211,14 +210,13 @@ const MENUS: Menu[] = [
   {
     label: 'Edit',
     items: [
-      { id: 'edit.undo', label: 'Undo', shortcut: 'Ctrl+Z', enabled: true },
-      { id: 'edit.redo', label: 'Redo', shortcut: 'Ctrl+Y', enabled: true },
+      { id: 'edit.undo', label: 'Undo', enabled: true },
+      { id: 'edit.redo', label: 'Redo', enabled: true },
       // SPEC §7.3's stand-in for DOCX export. Copies the selection, or the whole
       // document when there is none; plain Ctrl+C stays the editor's copy.
       {
         id: 'edit.copyRich',
         label: 'Copy as Rich Text',
-        shortcut: 'Ctrl+Shift+C',
         enabled: true,
         separatorBefore: true,
       },
@@ -229,7 +227,7 @@ const MENUS: Menu[] = [
       // §6.14's "every shortcut reachable through a menu". What that rule is
       // really protecting is discoverability, and the replace controls are on
       // screen whenever the bar is.
-      { id: 'edit.find', label: 'Find and Replace…', shortcut: 'Ctrl+F', enabled: true },
+      { id: 'edit.find', label: 'Find and Replace…', enabled: true },
     ],
   },
   {
@@ -258,7 +256,6 @@ const MENUS: Menu[] = [
       {
         id: 'view.preview',
         label: 'Preview',
-        shortcut: 'Ctrl+Shift+P',
         enabled: true,
         toggle: 'check',
       },
@@ -286,7 +283,6 @@ const MENUS: Menu[] = [
       {
         id: 'view.outline',
         label: 'Outline',
-        shortcut: 'Ctrl+Shift+O',
         enabled: true,
         toggle: 'check',
       },
@@ -301,16 +297,14 @@ const MENUS: Menu[] = [
       {
         id: 'view.zoomIn',
         label: 'Zoom In',
-        shortcut: 'Ctrl+Plus',
         enabled: true,
         separatorBefore: true,
       },
-      { id: 'view.zoomOut', label: 'Zoom Out', shortcut: 'Ctrl+Minus', enabled: true },
-      { id: 'view.zoomReset', label: 'Reset Zoom', shortcut: 'Ctrl+0', enabled: true },
+      { id: 'view.zoomOut', label: 'Zoom Out', enabled: true },
+      { id: 'view.zoomReset', label: 'Reset Zoom', enabled: true },
       {
         id: 'view.fullscreen',
         label: 'Full Screen',
-        shortcut: 'F11',
         enabled: true,
         toggle: 'check',
       },
@@ -338,14 +332,14 @@ const MENUS: Menu[] = [
      */
     label: 'Tabs',
     items: [
-      { id: 'tab.next', label: 'Next Tab', shortcut: 'Ctrl+Tab', enabled: true },
-      { id: 'tab.previous', label: 'Previous Tab', shortcut: 'Ctrl+Shift+Tab', enabled: true },
+      { id: 'tab.next', label: 'Next Tab', enabled: true },
+      { id: 'tab.previous', label: 'Previous Tab', enabled: true },
       // Reordering is otherwise mouse-only: SPEC §6.2 asks for drag, but the
       // project's accessibility constraint asks for full keyboard navigability,
       // and a capability reachable only by dragging fails it. Ctrl+Shift with
       // the arrow keys is what Firefox and Chrome use for moving a tab.
-      { id: 'tab.moveLeft', label: 'Move Tab Left', shortcut: 'Ctrl+Shift+Left', enabled: true },
-      { id: 'tab.moveRight', label: 'Move Tab Right', shortcut: 'Ctrl+Shift+Right', enabled: true },
+      { id: 'tab.moveLeft', label: 'Move Tab Left', enabled: true },
+      { id: 'tab.moveRight', label: 'Move Tab Right', enabled: true },
       // SPEC §6.14 requires every shortcut to be reachable through a menu with
       // its shortcut displayed. Nine entries is more than this menu wants, but
       // the requirement is explicit and a single summary line would show the
@@ -353,7 +347,6 @@ const MENUS: Menu[] = [
       ...Array.from({ length: 9 }, (_, i) => ({
         id: `tab.goto${i + 1}`,
         label: `Go to Tab ${i + 1}`,
-        shortcut: `Ctrl+Alt+${i + 1}`,
         enabled: true,
         // A divider above the first of the nine, so four navigation commands do
         // not run straight into nine positional ones.
@@ -675,9 +668,13 @@ export function mountMenuBar(
       label.textContent = item.label;
       button.append(label);
 
-      if (item.shortcut !== undefined) {
+      // Looked up as the menu opens, so a shortcut changed in the shortcuts
+      // window shows here at once; every shortcut is discoverable here (SPEC
+      // §6.14).
+      const keys = shortcutFor(store.getState().shortcuts, item.id);
+      if (keys !== '') {
         const shortcut = document.createElement('kbd');
-        shortcut.textContent = item.shortcut;
+        shortcut.textContent = keys;
         button.append(shortcut);
       }
 

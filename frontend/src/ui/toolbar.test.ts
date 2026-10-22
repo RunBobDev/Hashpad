@@ -12,6 +12,7 @@ import {
 import { ICONS } from './icons';
 import { COMMANDS } from '../editor/commands';
 import { closePopupMenu, isPopupOpenFor } from './popupmenu';
+import { DEFAULT_SHORTCUTS } from '../settings/shortcuts';
 
 /** Listeners registered by captureCommands, torn down after each test. */
 const captured: ((event: Event) => void)[] = [];
@@ -94,9 +95,14 @@ describe('TOOLBAR_COMMANDS', () => {
     }
   });
 
-  it('shows a shortcut for every command', () => {
+  it('has a default shortcut for every command', () => {
     for (const command of TOOLBAR_COMMANDS) {
-      expect(command.shortcut, `missing shortcut for ${command.id}`).toBeTruthy();
+      const ids =
+        command.id === 'heading'
+          ? [1, 2, 3, 4, 5, 6].map((level) => `format.heading${level}`)
+          : [`format.${command.id}`];
+      for (const id of ids)
+        expect(DEFAULT_SHORTCUTS[id], `missing shortcut for ${id}`).toBeTruthy();
     }
   });
 
@@ -403,6 +409,38 @@ describe('the heading popup', () => {
     items[items.length - 1]!.click();
 
     expect(seen).toEqual([]);
+  });
+});
+
+/** The tooltips read the shortcut table (design §4.39) rather than carrying text. */
+describe('shortcuts in the tooltips', () => {
+  afterEach(() => store.setState((prev) => ({ ...prev, shortcuts: {} })));
+
+  function title(bar: HTMLElement, id: string): string | null {
+    return bar.querySelector(`[data-command="${id}"]`)?.getAttribute('title') ?? null;
+  }
+
+  it('shows the default, a changed one, and none for a cleared one', () => {
+    expect(title(buildToolbar(['bold'], ''), 'bold')).toBe('Bold (Ctrl+B)');
+    store.setState((prev) => ({ ...prev, shortcuts: { 'format.bold': 'Ctrl+Alt+B' } }));
+    expect(title(buildToolbar(['bold'], ''), 'bold')).toBe('Bold (Ctrl+Alt+B)');
+    store.setState((prev) => ({ ...prev, shortcuts: { 'format.bold': '' } }));
+    expect(title(buildToolbar(['bold'], ''), 'bold')).toBe('Bold');
+  });
+
+  it('shows Ctrl+1…6 on the heading button only while all six are defaults', () => {
+    expect(title(buildToolbar(['heading'], ''), 'heading')).toBe('Heading (Ctrl+1…6)');
+    store.setState((prev) => ({ ...prev, shortcuts: { 'format.heading2': 'Ctrl+Alt+2' } }));
+    expect(title(buildToolbar(['heading'], ''), 'heading')).toBe('Heading');
+  });
+
+  it('updates a mounted toolbar when a shortcut changes', () => {
+    const parent = document.createElement('div');
+    mountToolbar(parent, ['bold']);
+
+    store.setState((prev) => ({ ...prev, shortcuts: { 'format.bold': 'Ctrl+Alt+B' } }));
+
+    expect(title(parent, 'bold')).toBe('Bold (Ctrl+Alt+B)');
   });
 });
 

@@ -32,7 +32,7 @@ import { announcePopupOpening, POPUP_OPENING_EVENT } from './menubar';
 export interface PopupItem {
   id: string;
   label: string;
-  /** Displayed beside the label in a `<kbd>`, same convention as the menu bar. */
+  /** Displayed beside the label in a `<kbd>`, same convention as the menu bar; `''` shows none. */
   shortcut?: string;
   /**
    * `undefined` renders a plain `role="menuitem"`. Any boolean -- including
@@ -218,7 +218,7 @@ function buildItem(
   button.append(label);
   if (item.marker !== undefined) applyMarker(button, item.label, item.marker);
 
-  if (item.shortcut !== undefined) {
+  if (item.shortcut) {
     const shortcut = document.createElement('kbd');
     shortcut.textContent = item.shortcut;
     button.append(shortcut);

@@ -15,6 +15,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { COMMAND_EVENT, mountMenuBar, type MenuItem } from './menubar';
+import { store } from '../state/appcontext';
 
 let root: HTMLElement;
 
@@ -434,6 +435,23 @@ describe('the shape of the bar', () => {
         shortcut: `Ctrl+Alt+${i + 1}`,
       })),
     ]);
+  });
+
+  /** Read as the menu opens, so a change in the shortcuts window shows at once. */
+  it('shows a changed shortcut, and none for a cleared one', () => {
+    store.setState((prev) => ({
+      ...prev,
+      shortcuts: { 'tab.next': 'Ctrl+Alt+N', 'tab.previous': '' },
+    }));
+    try {
+      const popup = open('Tabs');
+      const keys = [...popup.querySelectorAll('button')].slice(0, 2).map((button) => {
+        return button.querySelector('kbd')?.textContent ?? null;
+      });
+      expect(keys).toEqual(['Ctrl+Alt+N', null]);
+    } finally {
+      store.setState((prev) => ({ ...prev, shortcuts: {} }));
+    }
   });
 
   /** The other half of the move: they are gone from where they were. */
