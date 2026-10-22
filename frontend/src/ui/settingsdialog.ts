@@ -41,6 +41,7 @@ import {
 import { store } from '../state/appcontext';
 import { isEncoding, type ViewModeSetting } from '../state/document';
 import { confirmReset } from './confirmdialog';
+import { openShortcuts } from './shortcutsdialog';
 import { emitCommand } from './menubar';
 
 /**
@@ -632,6 +633,19 @@ function filesGroup(settings: app.Settings, saves: Coalescer): HTMLElement {
 }
 
 /**
+ * The Keyboard group: one button, because the shortcuts are a list of their own
+ * (ui/shortcutsdialog.ts) and sixty rows here would bury everything else.
+ */
+function keyboardGroup(): HTMLElement {
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'settings-dialog__button';
+  open.textContent = 'Change…';
+  open.addEventListener('click', openShortcuts);
+  return group('Keyboard', [row('Keyboard shortcuts', open)]);
+}
+
+/**
  * The Advanced group.
  *
  * SPEC names four groups and the settings file has a `preview` block that fits
@@ -691,6 +705,7 @@ export function buildSettingsDialog(
     appearanceGroup(settings, saves, fonts),
     editorGroup(settings, saves, fonts),
     filesGroup(settings, saves),
+    keyboardGroup(),
     advancedGroup(settings, saves),
   );
 

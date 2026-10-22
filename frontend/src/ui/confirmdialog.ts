@@ -273,6 +273,31 @@ export function confirmReset(): Promise<boolean> {
 }
 
 /**
+ * The shortcuts window's Reset all (design §4.39). Cancel is the primary, as
+ * with Reset: the question is whether to throw away the user's own changes.
+ */
+export function buildResetShortcutsDialog(onChoice: (reset: boolean) => void): HTMLDialogElement {
+  return buildDialog(
+    'Reset every keyboard shortcut to its default?',
+    [
+      { choice: true, label: 'Reset' },
+      { choice: false, label: 'Cancel', primary: true },
+    ],
+    false,
+    onChoice,
+  );
+}
+
+export function confirmResetShortcuts(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialog = buildResetShortcutsDialog(resolve);
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>('.confirm-dialog__button--primary')?.focus();
+  });
+}
+
+/**
  * Saving over a file another program changed (SPEC §7.4, design §4.30).
  *
  * Cancel is the primary, as with Reset: the question is whether to throw away

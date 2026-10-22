@@ -511,14 +511,16 @@ describe('accessibility', () => {
   it('groups the controls under a named legend', () => {
     const dialog = mount();
 
-    // SPEC §6.13's four groups, in the order it names them. Asserted as a list
-    // rather than "the first fieldset is Appearance", which is what this said
-    // while Appearance was the only one and stopped meaning anything useful the
-    // moment a second was added below it.
+    // SPEC §6.13's four groups, in the order it names them, plus Keyboard
+    // (design §4.39) before Advanced. Asserted as a list rather than "the first
+    // fieldset is Appearance", which is what this said while Appearance was the
+    // only one and stopped meaning anything useful the moment a second was
+    // added below it.
     expect([...dialog.querySelectorAll('legend')].map((el) => el.textContent)).toEqual([
       'Appearance',
       'Editor',
       'Files',
+      'Keyboard',
       'Advanced',
     ]);
     // Every row is a label, and every group has at least one.
@@ -643,6 +645,15 @@ describe('the Editor group', () => {
   });
 
   /** The View menu is their one place (owner). */
+  /** The list itself is its own window (ui/shortcutsdialog.ts). */
+  it('has a Keyboard group whose one button opens the shortcuts', () => {
+    const keyboard = group(mount(), 'Keyboard');
+    expect(keyboard.querySelector('.settings-dialog__label')?.textContent).toBe(
+      'Keyboard shortcuts',
+    );
+    expect(keyboard.querySelector('button')?.textContent).toBe('Change…');
+  });
+
   it('leaves word wrap and line numbers to the View menu', () => {
     const labels = [...editor(mount()).querySelectorAll('.settings-dialog__label')].map(
       (label) => label.textContent,
